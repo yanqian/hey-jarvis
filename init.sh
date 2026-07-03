@@ -25,6 +25,7 @@ for path in \
   src/wake_word.py \
   tests/test_audio_input.py \
   tests/test_config.py \
+  tests/test_documentation.py \
   tests/test_openai_client.py \
   tests/test_player.py \
   tests/test_recorder.py \

@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 import struct
 from typing import Any, Callable, Mapping, Protocol
+from urllib.request import urlretrieve
 
 
 OPENWAKEWORD_MODEL_NAME = "hey jarvis"
+OPENWAKEWORD_MODEL_KEY = "hey_jarvis"
+OPENWAKEWORD_INFERENCE_FRAMEWORK = "onnx"
 OPENWAKEWORD_SCORE_KEYS = (OPENWAKEWORD_MODEL_NAME, "hey_jarvis")
+PREPARE_WAKE_WORD_COMMAND = "python -m src.main --prepare-wake-word"
 WAKEWORD_RECOVERY_GUIDANCE = (
-    "Install requirements.txt in a Python 3.11 or 3.12 environment before running "
-    "real wake-word detection."
+    "Install requirements.txt, then run "
+    f"`{PREPARE_WAKE_WORD_COMMAND}` before real wake-word detection."
 )
 
 
@@ -82,7 +87,66 @@ class WakeWordDetector:
 def _load_openwakeword_model() -> WakeWordModel:
     from openwakeword.model import Model
 
-    return Model(wakeword_models=[OPENWAKEWORD_MODEL_NAME])
+    return Model(
+        wakeword_models=[OPENWAKEWORD_MODEL_NAME],
+        inference_framework=OPENWAKEWORD_INFERENCE_FRAMEWORK,
+    )
+
+
+def required_wake_word_model_paths() -> Mapping[str, Path]:
+    """Return the ONNX model files required by the built-in Hey Jarvis path."""
+
+    import openwakeword
+
+    paths: dict[str, Path] = {}
+    for name, metadata in openwakeword.FEATURE_MODELS.items():
+        paths[name] = _onnx_path(metadata["model_path"])
+    paths[OPENWAKEWORD_MODEL_KEY] = _onnx_path(openwakeword.MODELS[OPENWAKEWORD_MODEL_KEY]["model_path"])
+    return paths
+
+
+def missing_wake_word_model_paths() -> Mapping[str, Path]:
+    """Return required wake-word ONNX model paths that are not present."""
+
+    return {
+        name: path
+        for name, path in required_wake_word_model_paths().items()
+        if not path.is_file()
+    }
+
+
+def prepare_wake_word_models(logger: logging.Logger | None = None) -> Mapping[str, Path]:
+    """Download the ONNX model assets required for the Hey Jarvis wake word."""
+
+    import openwakeword
+
+    log = logger or logging.getLogger(__name__)
+    downloads: dict[str, tuple[str, Path]] = {}
+    for name, metadata in openwakeword.FEATURE_MODELS.items():
+        downloads[name] = (_onnx_url(metadata["download_url"]), _onnx_path(metadata["model_path"]))
+    downloads[OPENWAKEWORD_MODEL_KEY] = (
+        _onnx_url(openwakeword.MODELS[OPENWAKEWORD_MODEL_KEY]["download_url"]),
+        _onnx_path(openwakeword.MODELS[OPENWAKEWORD_MODEL_KEY]["model_path"]),
+    )
+
+    prepared: dict[str, Path] = {}
+    for name, (url, path) in downloads.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_file():
+            log.info("Wake-word ONNX model already present: %s", path)
+        else:
+            log.info("Downloading wake-word ONNX model %s", path.name)
+            urlretrieve(url, path)
+        prepared[name] = path
+    return prepared
+
+
+def _onnx_path(path: str | Path) -> Path:
+    return Path(str(path).replace(".tflite", ".onnx"))
+
+
+def _onnx_url(url: str) -> str:
+    return url.replace(".tflite", ".onnx")
 
 
 def _pcm_bytes_to_model_frame(pcm_chunk: bytes) -> Any:

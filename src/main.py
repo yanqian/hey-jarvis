@@ -13,7 +13,7 @@ from .openai_client import build_openai_client
 from .player import MacOSPlayer
 from .recorder import RecordingResult
 from .state_machine import AssistantState, VoiceAssistantStateMachine
-from .wake_word import WakeWordDetector
+from .wake_word import WakeWordDetector, prepare_wake_word_models
 
 
 LOGGER_NAME = "hey_jarvis"
@@ -47,6 +47,17 @@ def run_fake_backend_smoke() -> int:
     print(f"Fake backend answered: {result.answer}")
     print(f"Returned to {result.final_state.value}")
     return 0 if result.final_state == AssistantState.WAIT_WAKE else 1
+
+
+def run_prepare_wake_word() -> int:
+    """Download the ONNX model files required for real wake-word detection."""
+
+    logger = logging.getLogger(LOGGER_NAME)
+    prepared = prepare_wake_word_models(logger=logger)
+    print("Prepared wake-word ONNX models:")
+    for name, path in sorted(prepared.items()):
+        print(f"- {name}: {path}")
+    return 0
 
 
 def run_assistant_forever() -> int:
@@ -94,6 +105,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run the full state-machine smoke path with deterministic fakes",
     )
+    mode.add_argument(
+        "--prepare-wake-word",
+        action="store_true",
+        help="download the ONNX wake-word models required by the real assistant",
+    )
     return parser
 
 
@@ -108,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if report.has_errors else 0
     if args.fake_backend:
         return run_fake_backend_smoke()
+    if args.prepare_wake_word:
+        return run_prepare_wake_word()
 
     return run_assistant_forever()
 

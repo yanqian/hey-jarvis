@@ -134,13 +134,35 @@
         "README lists post-MVP TODOs for interrupting playback, six-second follow-up conversation, and custom wake-word model loading.",
         "Root ./init.sh or tests verify that documented commands and module entrypoints stay in sync where practical."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [
         "F006"
+      ]
+    },
+    {
+      "id": "F008",
+      "title": "Fix recoverable wake-word model setup",
+      "description": "Fix the real Hey Jarvis wake-word path so macOS Python 3.11/3.12 users use the openWakeWord ONNX runtime path, can prepare the required ONNX models explicitly, and see diagnostic errors before starting the assistant.",
+      "acceptance": [
+        "WakeWordDetector loads the built-in Hey Jarvis openWakeWord model with the ONNX inference framework on macOS.",
+        "A CLI command prepares the required openWakeWord Hey Jarvis and feature extractor model files without starting microphone capture.",
+        "Runtime diagnostics report missing onnxruntime or missing openWakeWord model files with an actionable preparation command.",
+        "README setup and troubleshooting document the ONNX wake-word preparation step.",
+        "Tests cover ONNX model loading arguments, wake-word preparation, diagnostics for missing model files, and documented CLI flags without downloading real models."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F004",
+        "F006",
+        "F007"
       ]
     }
   ]

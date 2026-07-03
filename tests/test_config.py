@@ -124,6 +124,39 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("add it to .env or export it", messages["OPENAI_API_KEY"])
         self.assertIn("Grant macOS microphone permission", messages["microphone_permission"])
 
+    def test_diagnostics_report_missing_wake_word_model_files(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_path = Path(tmp_dir) / "hey_jarvis_v0.1.onnx"
+            report = collect_diagnostics(
+                env={"OPENAI_API_KEY": "sk-test"},
+                env_file=None,
+                python_version=(3, 12),
+                afplay_path="/usr/bin/afplay",
+                dependency_modules={"json": "json"},
+                wake_word_model_paths={"hey_jarvis": missing_path},
+            )
+
+        messages = {check.name: check.message for check in report.checks}
+        statuses = {check.name: check.status for check in report.checks}
+        self.assertEqual(statuses["wake_word_models"], "error")
+        self.assertIn("prepare-wake-word", messages["wake_word_models"])
+
+    def test_diagnostics_accept_present_wake_word_model_files(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model_path = Path(tmp_dir) / "hey_jarvis_v0.1.onnx"
+            model_path.write_bytes(b"onnx")
+            report = collect_diagnostics(
+                env={"OPENAI_API_KEY": "sk-test"},
+                env_file=None,
+                python_version=(3, 12),
+                afplay_path="/usr/bin/afplay",
+                dependency_modules={"json": "json"},
+                wake_word_model_paths={"hey_jarvis": model_path},
+            )
+
+        statuses = {check.name: check.status for check in report.checks}
+        self.assertEqual(statuses["wake_word_models"], "ok")
+
 
 if __name__ == "__main__":
     unittest.main()

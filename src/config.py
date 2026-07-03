@@ -30,6 +30,7 @@ DEPENDENCY_MODULES: Mapping[str, str] = {
     "scipy": "scipy",
     "openai": "openai",
     "openwakeword": "openwakeword",
+    "onnxruntime": "onnxruntime",
     "python-dotenv": "dotenv",
 }
 
@@ -155,6 +156,7 @@ def collect_diagnostics(
     python_version: tuple[int, int] | None = None,
     afplay_path: str | None = None,
     dependency_modules: Mapping[str, str] | None = None,
+    wake_word_model_paths: Mapping[str, str | Path] | None = None,
 ) -> DiagnosticReport:
     """Collect runtime diagnostics without requiring optional imports."""
 
@@ -215,6 +217,8 @@ def collect_diagnostics(
         else:
             checks.append(DiagnosticCheck(f"dependency:{package_name}", "ok", f"{package_name} is importable"))
 
+    checks.extend(_wake_word_model_checks(wake_word_model_paths, modules_to_check))
+
     checks.append(
         DiagnosticCheck(
             "microphone_permission",
@@ -224,6 +228,54 @@ def collect_diagnostics(
     )
 
     return DiagnosticReport(tuple(checks))
+
+
+def _wake_word_model_checks(
+    wake_word_model_paths: Mapping[str, str | Path] | None,
+    dependency_modules: Mapping[str, str],
+) -> list[DiagnosticCheck]:
+    if wake_word_model_paths is None and "openwakeword" in dependency_modules:
+        if importlib.util.find_spec("openwakeword") is None:
+            return []
+        try:
+            from .wake_word import required_wake_word_model_paths
+
+            wake_word_model_paths = required_wake_word_model_paths()
+        except Exception as exc:
+            return [
+                DiagnosticCheck(
+                    "wake_word_models",
+                    "error",
+                    f"Unable to inspect openWakeWord ONNX model files: {exc}",
+                )
+            ]
+
+    if wake_word_model_paths is None:
+        return []
+
+    missing = {
+        name: Path(path)
+        for name, path in wake_word_model_paths.items()
+        if not Path(path).is_file()
+    }
+    if missing:
+        missing_names = ", ".join(sorted(missing))
+        return [
+            DiagnosticCheck(
+                "wake_word_models",
+                "error",
+                "Missing openWakeWord ONNX model files for "
+                f"{missing_names}; run python -m src.main --prepare-wake-word",
+            )
+        ]
+
+    return [
+        DiagnosticCheck(
+            "wake_word_models",
+            "ok",
+            "Required openWakeWord ONNX model files are present",
+        )
+    ]
 
 
 def format_diagnostics(report: DiagnosticReport) -> str:

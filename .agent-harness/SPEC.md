@@ -231,6 +231,26 @@ The template keeps automated checks in explicit layers:
 - Harness tests are reserved for project-level workflow behavior and are optional in the minimal template.
 - Smoke tests run the template's main user-facing verification commands end to end.
 
+### Hey Jarvis Wake-Word Runtime Recovery
+
+Goal: make the real Hey Jarvis wake-word path recoverable on supported macOS Python 3.11/3.12 environments by using openWakeWord's ONNX runtime path and explicit ONNX model preparation before microphone capture starts.
+
+Included scope: project-owned wake-word model loading, explicit wake-word model preparation, diagnostics, setup documentation, troubleshooting, unit tests, and harness state for the bugfix.
+
+Excluded scope: changing the accepted wake phrase, adding custom wake-word models, replacing openWakeWord, making live OpenAI calls in automated tests, or automatically granting microphone permissions.
+
+Core flows: a user installs requirements, runs a preparation command to download the required openWakeWord ONNX model assets, runs `python -m src.main --diagnose` and sees wake-word readiness, starts `python -m src.main`, says `Hey Jarvis`, and the assistant can proceed past wake-word model loading.
+
+Constraints: the MVP remains macOS-focused, supports Python 3.11 or 3.12, uses dependency-free fake-backend tests for recovery, avoids real microphone/OpenAI/speaker use in automated tests, and does not hide network/model download requirements behind local-only setup.
+
+Ambiguities or assumptions: openWakeWord 0.6.0 exposes official ONNX assets corresponding to the built-in `hey_jarvis` model, and `onnxruntime` is the portable runtime for this macOS MVP. If model download is blocked by network policy, diagnostics must report the missing files and the preparation command rather than treating the app as ready.
+
+Required capabilities: installed `openwakeword` and `onnxruntime`, network access during explicit model preparation, write access to the active virtualenv package model directory, an OpenAI API key for the later real assistant stages, and macOS microphone permission for live capture.
+
+Implementation paths: `src/wake_word.py`, `src/config.py`, `src/main.py`, `README.md`, `requirements.txt` if needed, `tests/`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: unit tests for wake-word ONNX loading and diagnostics, parser/documentation tests for the preparation command, dependency-free `./init.sh`, and optional manual `python -m src.main --prepare-wake-word` followed by `python -m src.main --diagnose` in a real venv.
+
 ## 4. Acceptance Criteria
 
 - `./init.sh` validates harness state and runs the tiny example tests.

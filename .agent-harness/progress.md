@@ -16,13 +16,17 @@ F005 has been implemented by manual Coding Agent fallback and evaluator-approved
 
 F006 has been implemented by manual Coding Agent fallback and evaluator-approved. The code now includes macOS `afplay` playback, a WAIT_WAKE -> RECORDING -> TRANSCRIBE -> ASK_OPENAI -> TTS -> PLAYING -> WAIT_WAKE state machine, `python -m src.main` real runtime wiring, a dependency-free `--fake-backend` full-loop smoke path, focused unit tests, README real-demo instructions, and durable evaluator evidence in `runs/F006-evaluation.md`.
 
+F007 has been implemented by manual Coding Agent fallback and evaluator-approved. The README now documents setup, virtualenv dependency installation, `.env` creation, `OPENAI_API_KEY`, macOS microphone permission, `afplay`, real-demo operation, troubleshooting, and post-MVP iterations; `tests/test_documentation.py` verifies documented CLI modes, `.env.example` keys, runtime requirements, and post-MVP TODOs stay in sync, with durable evaluator evidence in `runs/F007-evaluation.md`.
+
+F008 has been implemented by manual Coding Agent fallback and evaluator-approved. The real wake-word path now explicitly uses openWakeWord ONNX models through `onnxruntime`, includes `python -m src.main --prepare-wake-word` to download the required ONNX model files, reports missing `onnxruntime` or model files through `--diagnose`, documents the preparation step, and includes regression tests plus durable evidence in `runs/F008-manual-coding.md`.
+
 ## Last Completed Feature
 
-F006 - Wire playback and main voice-assistant state machine.
+F008 - Fix recoverable wake-word model setup.
 
 ## Next Feature
 
-F007 - Document setup, permissions, and post-MVP iterations.
+None - all planned features are complete.
 
 ## Known Issues
 
@@ -35,3 +39,5 @@ F007 - Document setup, permissions, and post-MVP iterations.
 - F004 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F004` in `runs/F004-evaluation.md`.
 - F005 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F005` in `runs/F005-evaluation.md`.
 - F006 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F006` in `runs/F006-evaluation.md`.
+- F007 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F007` in `runs/F007-evaluation.md`.
+- F008 fixed a real-demo capability gap discovered by manual testing: the wake-word path had relied on openWakeWord defaults that were not recoverable on macOS Python 3.12 without extra model/runtime setup. Evaluator review recorded `EVAL_PASS: F008` in `runs/F008-manual-coding.md`.

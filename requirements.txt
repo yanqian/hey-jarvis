@@ -3,4 +3,5 @@ numpy
 scipy
 openai
 openwakeword
+onnxruntime
 python-dotenv
