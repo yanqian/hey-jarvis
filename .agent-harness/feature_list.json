@@ -1,0 +1,130 @@
+{
+  "features": [
+    {
+      "id": "F001",
+      "title": "Create Python project skeleton and recovery init",
+      "description": "Create the project-owned Python package, tests directory, environment template, dependency manifest, README scaffold, tmp placeholder, and update root ./init.sh so a fresh checkout can verify the harness plus basic project recovery without requiring microphone or OpenAI credentials.",
+      "acceptance": [
+        "Project-owned paths exist for src/, tests/, README.md, .env.example, requirements.txt, and tmp/.gitkeep.",
+        "Root ./init.sh still runs .agent-harness/scripts/init.sh and also verifies the Python project can be imported or compiled.",
+        "The project recovery check is idempotent, emits clear setup and verification logs, and exits non-zero on failure.",
+        "A fake or dry-run smoke command exists so recovery can verify a core application path without microphone, speaker, or OpenAI access.",
+        "Documentation states that Python 3.11 or 3.12 is the supported MVP runtime."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": []
+    },
+    {
+      "id": "F002",
+      "title": "Implement configuration loading and runtime diagnostics",
+      "description": "Load .env-backed settings for OpenAI, audio, wake-word, recording, and model defaults, and provide diagnostics that clearly report missing credentials, unsupported Python versions, missing afplay, and microphone-permission guidance.",
+      "acceptance": [
+        "src/config.py loads documented environment variables with typed defaults and validation errors.",
+        ".env.example includes OpenAI, wake threshold, silence, max recording, sample rate, and model configuration.",
+        "A diagnostic command or function reports whether Python version, afplay, dependency imports, and required environment variables are available.",
+        "Missing OPENAI_API_KEY is reported as an actionable configuration error without crashing import-time code.",
+        "Unit tests cover defaults, environment overrides, and invalid configuration values."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F001"]
+    },
+    {
+      "id": "F003",
+      "title": "Implement audio stream, silence detection, and WAV recording",
+      "description": "Add reusable audio input, RMS silence detection, and recorder modules that handle 16 kHz mono int16 PCM chunks, stop recording on silence or max duration, and save tmp/input.wav.",
+      "acceptance": [
+        "src/audio_input.py opens one reusable microphone stream configured for 16 kHz mono int16 PCM.",
+        "src/silence.py exposes is_silence(pcm_chunk: bytes, threshold: float = 500) using deterministic RMS logic.",
+        "src/recorder.py collects PCM chunks, stops on SILENCE_SECONDS or MAX_RECORD_SECONDS, and writes a valid WAV file.",
+        "Tests verify silence detection and WAV writing using synthetic PCM without requiring a real microphone.",
+        "Runtime errors from unavailable audio devices are logged with clear recovery guidance."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F001", "F002"]
+    },
+    {
+      "id": "F004",
+      "title": "Implement Hey Jarvis wake-word detector",
+      "description": "Wrap openWakeWord behind a small WakeWordDetector interface that accepts PCM chunks and returns true when the built-in hey jarvis wake-word score crosses the configured threshold.",
+      "acceptance": [
+        "src/wake_word.py defines WakeWordDetector with __init__(threshold: float) and detect(pcm_chunk: bytes) -> bool.",
+        "The MVP default uses an openWakeWord built-in hey jarvis model and does not require a custom model file.",
+        "The detector keeps model loading separate from the main state machine and logs load or inference failures clearly.",
+        "Tests cover threshold behavior with a fake model without requiring real microphone input.",
+        "README notes that custom wake words are deferred to a later iteration."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F001", "F002"]
+    },
+    {
+      "id": "F005",
+      "title": "Implement OpenAI transcription, chat, and TTS client",
+      "description": "Add an OpenAI client boundary for speech-to-text, short chat responses with in-memory history, and text-to-speech output to tmp/output.mp3, with configurable model names and testable SDK interactions.",
+      "acceptance": [
+        "src/openai_client.py exposes transcribe_audio(path: str) -> str, ask_chatgpt(text: str, history: list[dict]) -> str, and text_to_speech(text: str, output_path: str) -> None.",
+        "Model names for transcription, chat, and TTS are configurable with documented defaults.",
+        "The client keeps a short in-memory conversation history boundary suitable for the MVP.",
+        "Errors from missing credentials, API failures, or empty transcriptions are surfaced with clear messages.",
+        "Tests mock OpenAI SDK calls and verify request shape, returned text handling, and output file writing behavior without live API access."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F001", "F002"]
+    },
+    {
+      "id": "F006",
+      "title": "Wire playback and main voice-assistant state machine",
+      "description": "Implement macOS playback, the WAIT_WAKE to PLAYING state machine, and the python -m src.main entrypoint so the MVP can complete one Hey Jarvis question-answer loop and return to wake listening.",
+      "acceptance": [
+        "src/player.py plays an audio file through afplay and reports playback failures clearly.",
+        "src/state_machine.py implements WAIT_WAKE, RECORDING, TRANSCRIBE, ASK_OPENAI, TTS, and PLAYING transitions with explicit logs.",
+        "src/main.py wires configuration, microphone stream, wake-word detection, recording, OpenAI client, TTS, playback, and return-to-WAIT_WAKE behavior.",
+        "A fake-backend smoke test proves the full state-machine path without microphone, OpenAI, or speaker access.",
+        "Manual README instructions describe how to run the real demo: user says Hey Jarvis, asks what two plus two is, hears the answer, and the app returns to wake listening."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F003", "F004", "F005"]
+    },
+    {
+      "id": "F007",
+      "title": "Document setup, permissions, and post-MVP iterations",
+      "description": "Finish user-facing documentation for local setup, macOS microphone permission, environment configuration, real-demo operation, troubleshooting, and deferred iterations for interruption, follow-up conversation, and custom wake words.",
+      "acceptance": [
+        "README includes venv setup, dependency installation, .env creation, OPENAI_API_KEY configuration, and python -m src.main run instructions.",
+        "README explains macOS microphone permission and afplay requirements.",
+        "README documents the accepted MVP wake phrase Hey Jarvis and the first demo question.",
+        "README lists post-MVP TODOs for interrupting playback, six-second follow-up conversation, and custom wake-word model loading.",
+        "Root ./init.sh or tests verify that documented commands and module entrypoints stay in sync where practical."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": ["F006"]
+    }
+  ]
+}

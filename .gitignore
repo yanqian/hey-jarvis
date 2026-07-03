@@ -1,0 +1,7 @@
+.agent-harness/agent-provider.json
+.env
+.venv/
+__pycache__/
+*.pyc
+tmp/input.wav
+tmp/output.mp3
