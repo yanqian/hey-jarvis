@@ -1,5 +1,11 @@
 import logging
+import struct
+import tempfile
 import unittest
+import wave
+from contextlib import redirect_stderr
+from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 from src.config import (
@@ -14,7 +20,7 @@ from src.config import (
     DEFAULT_WAKE_THRESHOLD,
     Settings,
 )
-from src.main import run_assistant_forever
+from src.main import build_parser, main, run_assistant_forever, run_wake_debug, run_wake_file_debug
 
 
 def make_settings():
@@ -47,6 +53,35 @@ class FakeMicrophone:
 
     def __exit__(self, exc_type, exc, traceback):
         EVENTS.append("close_microphone")
+
+
+class FakeDebugSource:
+    def __init__(self, chunks=None):
+        self.chunks = list(
+            chunks
+            or [
+                struct.pack("<hh", 100, -100),
+                struct.pack("<hh", 1000, -1000),
+            ]
+        )
+        self.last_overflowed = False
+
+    def read_chunk(self):
+        chunk = self.chunks.pop(0)
+        self.last_overflowed = not self.last_overflowed
+        return chunk
+
+
+class FakeDebugDetector:
+    def __init__(self, scores):
+        self.scores = list(scores)
+        self.preloaded = False
+
+    def preload(self):
+        self.preloaded = True
+
+    def score(self, pcm_chunk):
+        return self.scores.pop(0)
 
 
 class FakeStateMachine:
@@ -85,6 +120,138 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertEqual(result, 130)
         self.assertLess(EVENTS.index("preload"), EVENTS.index("open_microphone"))
         self.assertEqual(EVENTS, ["preload", "open_microphone", "build_machine", "run_once", "close_microphone"])
+
+    def test_parser_exposes_wake_debug_flags(self):
+        help_text = build_parser().format_help()
+
+        self.assertIn("--wake-debug", help_text)
+        self.assertIn("--wake-file", help_text)
+        self.assertIn("--wake-debug-output", help_text)
+
+    def test_live_wake_debug_prints_levels_overflow_score_and_threshold(self):
+        output = StringIO()
+        detector = FakeDebugDetector([0.1, 0.9])
+
+        result = run_wake_debug(
+            max_frames=2,
+            settings=make_settings(),
+            audio_source=FakeDebugSource(),
+            wake_detector=detector,
+            output=output,
+        )
+
+        lines = output.getvalue().splitlines()
+        self.assertEqual(result, 0)
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(detector.preloaded)
+        self.assertIn("wake_debug frame=1", lines[0])
+        self.assertIn("rms=100.0", lines[0])
+        self.assertIn("peak=100", lines[0])
+        self.assertIn("overflow=true", lines[0])
+        self.assertIn("score=0.100000000", lines[0])
+        self.assertIn("threshold=0.800000000", lines[0])
+        self.assertIn("detected=false", lines[0])
+        self.assertIn("score=0.900000000", lines[1])
+        self.assertIn("detected=true", lines[1])
+        self.assertEqual(
+            lines[2],
+            "wake_debug summary frames=2 max_score=0.900000000 threshold=0.800000000 detected_frames=1",
+        )
+
+    def test_live_wake_debug_writes_requested_wav_with_scored_chunks(self):
+        output = StringIO()
+        first_chunk = struct.pack("<hh", 1, -1)
+        second_chunk = struct.pack("<hh", 2, -2)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            wav_path = Path(tmp_dir) / "capture" / "wake-debug.wav"
+            result = run_wake_debug(
+                max_frames=2,
+                debug_output_path=wav_path,
+                settings=make_settings(),
+                audio_source=FakeDebugSource([first_chunk, second_chunk]),
+                wake_detector=FakeDebugDetector([0.000000123, 0.81]),
+                output=output,
+            )
+
+            with wave.open(str(wav_path), "rb") as wav_file:
+                self.assertEqual(wav_file.getnchannels(), 1)
+                self.assertEqual(wav_file.getsampwidth(), 2)
+                self.assertEqual(wav_file.getframerate(), DEFAULT_SAMPLE_RATE)
+                self.assertEqual(wav_file.readframes(4), first_chunk + second_chunk)
+
+        self.assertEqual(result, 0)
+        lines = output.getvalue().splitlines()
+        self.assertIn("score=0.000000123", lines[0])
+        self.assertEqual(
+            lines[-1],
+            "wake_debug summary frames=2 max_score=0.810000000 threshold=0.800000000 detected_frames=1",
+        )
+
+    def test_wake_debug_output_requires_live_debug_mode(self):
+        with redirect_stderr(StringIO()):
+            with self.assertRaises(SystemExit):
+                main(["--wake-debug-output", "tmp/wake-debug.wav"])
+
+    def test_wake_file_debug_scores_generated_wav_fixture(self):
+        output = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            wav_path = Path(tmp_dir) / "wake.wav"
+            with wave.open(str(wav_path), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(DEFAULT_SAMPLE_RATE)
+                wav_file.writeframes(struct.pack("<hhhh", 0, 500, -500, 0))
+
+            result = run_wake_file_debug(
+                wav_path,
+                settings=make_settings(),
+                wake_detector=FakeDebugDetector([0.55]),
+                output=output,
+            )
+
+        lines = output.getvalue().splitlines()
+        self.assertEqual(result, 0)
+        self.assertIn("wake_file frame=1", lines[0])
+        self.assertIn("rms=353.6", lines[0])
+        self.assertIn("peak=500", lines[0])
+        self.assertIn("overflow=false", lines[0])
+        self.assertIn("score=0.550000000", lines[0])
+        self.assertEqual(
+            lines[1],
+            "wake_file summary frames=1 max_score=0.550000000 threshold=0.800000000 detected_frames=0",
+        )
+
+    def test_wake_file_debug_scores_short_final_chunk(self):
+        output = StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            wav_path = Path(tmp_dir) / "short-final.wav"
+            with wave.open(str(wav_path), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(DEFAULT_SAMPLE_RATE)
+                wav_file.writeframes(b"\x00\x00" * 1280)
+                wav_file.writeframes(struct.pack("<h", 777))
+
+            result = run_wake_file_debug(
+                wav_path,
+                settings=make_settings(),
+                wake_detector=FakeDebugDetector([0.0, 0.000001234]),
+                output=output,
+            )
+
+        lines = output.getvalue().splitlines()
+        self.assertEqual(result, 0)
+        self.assertEqual(len(lines), 3)
+        self.assertIn("wake_file frame=2", lines[1])
+        self.assertIn("peak=777", lines[1])
+        self.assertIn("score=0.000001234", lines[1])
+        self.assertEqual(
+            lines[2],
+            "wake_file summary frames=2 max_score=0.000001234 threshold=0.800000000 detected_frames=0",
+        )
 
 
 if __name__ == "__main__":

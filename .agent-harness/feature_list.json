@@ -184,6 +184,46 @@
       "depends_on": [
         "F008"
       ]
+    },
+    {
+      "id": "F010",
+      "title": "Add wake-word debug probes",
+      "description": "Add observable wake-word debugging paths so users can distinguish microphone input problems, low PCM levels, openWakeWord score issues, and threshold issues when the assistant remains in WAIT_WAKE.",
+      "acceptance": [
+        "A CLI debug mode prints live microphone rms, peak, overflow, wake score, and threshold fields without invoking OpenAI or playback.",
+        "A CLI file-debug mode accepts a WAV file and reports wake-word scores for the saved audio without requiring a microphone.",
+        "WAKE_DEBUG=1 enables wake-score logging during normal WAIT_WAKE listening.",
+        "README documents how to use the debug probes and how to interpret common score and RMS outcomes.",
+        "Tests cover debug output shape, WAV-file scoring with generated fixtures, CLI parser flags, and WAKE_DEBUG behavior without requiring a physical microphone."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F009"
+      ]
+    },
+    {
+      "id": "F011",
+      "title": "Add wake debug capture replay",
+      "description": "Add a reproducible wake-word debug workflow that saves live microphone PCM to a WAV file, reports higher-precision wake scores, and summarizes maximum observed scores so users can replay the exact audio that failed detection.",
+      "acceptance": [
+        "Live wake debug supports an explicit output flag that writes the scored microphone chunks to a mono 16 kHz 16-bit WAV file without invoking OpenAI or playback.",
+        "Live and file debug output report wake scores with enough precision to distinguish tiny non-zero values from true zeros and include a summary with frame count, max score, threshold, and detected frame count.",
+        "Wake-file replay handles short or final partial chunks deterministically instead of silently dropping them.",
+        "README documents the record-and-replay workflow and warns that tmp/input.wav is not created by wake-debug unless the user requests a debug output file.",
+        "Tests cover the parser flag, saved debug WAV shape, precise score formatting, summary metrics, and short WAV replay using fakes or generated fixtures."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F010"
+      ]
     }
   ]
 }

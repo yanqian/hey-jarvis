@@ -15,7 +15,14 @@ class DocumentationTests(unittest.TestCase):
         readme = README.read_text(encoding="utf-8")
         help_text = build_parser().format_help()
 
-        for flag in ("--dry-run", "--diagnose", "--fake-backend", "--prepare-wake-word"):
+        for flag in (
+            "--dry-run",
+            "--diagnose",
+            "--fake-backend",
+            "--prepare-wake-word",
+            "--wake-debug",
+            "--wake-file",
+        ):
             self.assertIn(flag, help_text)
             self.assertIn(f"python -m src.main {flag}", readme)
 
@@ -37,6 +44,15 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("Python 3.11 or Python 3.12", readme)
         self.assertIn("macOS microphone permission", readme)
         self.assertIn("Microphone input overflows", readme)
+        self.assertIn("Wake-Word Debugging", readme)
+        self.assertIn("--wake-debug-output", readme)
+        self.assertIn("tmp/input.wav", readme)
+        self.assertIn("frame count", readme)
+        self.assertIn("maximum observed score", readme)
+        self.assertIn("rms", readme)
+        self.assertIn("peak", readme)
+        self.assertIn("score", readme)
+        self.assertIn("threshold", readme)
         self.assertIn("WAIT_WAKE", readme)
         self.assertIn("audio processing may have fallen behind", readme)
         self.assertIn("afplay", readme)

@@ -10,6 +10,7 @@ from src.config import (
     DEFAULT_TRANSCRIBE_MODEL,
     DEFAULT_TTS_MODEL,
     DEFAULT_TTS_VOICE,
+    DEFAULT_WAKE_DEBUG,
     DEFAULT_WAKE_PHRASE,
     DEFAULT_WAKE_THRESHOLD,
     ConfigError,
@@ -32,6 +33,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.chat_model, DEFAULT_CHAT_MODEL)
         self.assertEqual(settings.tts_model, DEFAULT_TTS_MODEL)
         self.assertEqual(settings.tts_voice, DEFAULT_TTS_VOICE)
+        self.assertEqual(settings.wake_debug, DEFAULT_WAKE_DEBUG)
 
     def test_environment_overrides_are_typed(self):
         settings = load_settings(
@@ -46,6 +48,7 @@ class ConfigTests(unittest.TestCase):
                 "CHAT_MODEL": "chat-test",
                 "TTS_MODEL": "tts-test",
                 "TTS_VOICE": "verse",
+                "WAKE_DEBUG": "1",
             },
             env_file=None,
         )
@@ -60,6 +63,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.chat_model, "chat-test")
         self.assertEqual(settings.tts_model, "tts-test")
         self.assertEqual(settings.tts_voice, "verse")
+        self.assertTrue(settings.wake_debug)
 
     def test_env_file_values_are_loaded_and_environment_wins(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -90,6 +94,7 @@ class ConfigTests(unittest.TestCase):
                     "MAX_RECORD_SECONDS": "5",
                     "SAMPLE_RATE": "not-an-int",
                     "CHAT_MODEL": "",
+                    "WAKE_DEBUG": "maybe",
                 },
                 env_file=None,
             )
@@ -98,6 +103,7 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("WAKE_THRESHOLD must be at most 1.0", message)
         self.assertIn("SAMPLE_RATE must be an integer", message)
         self.assertIn("CHAT_MODEL must not be empty", message)
+        self.assertIn("WAKE_DEBUG must be a boolean value", message)
         self.assertIn("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS", message)
 
     def test_required_openai_key_has_actionable_error(self):

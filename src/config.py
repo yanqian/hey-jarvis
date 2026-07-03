@@ -20,6 +20,7 @@ DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
 DEFAULT_TTS_MODEL = "gpt-4o-mini-tts"
 DEFAULT_TTS_VOICE = "alloy"
+DEFAULT_WAKE_DEBUG = False
 
 SUPPORTED_PYTHON_VERSIONS = {(3, 11), (3, 12)}
 PLACEHOLDER_API_KEYS = {"", "your_api_key_here", "replace_me", "changeme"}
@@ -55,6 +56,7 @@ class Settings:
     chat_model: str
     tts_model: str
     tts_voice: str
+    wake_debug: bool = DEFAULT_WAKE_DEBUG
 
 
 @dataclass(frozen=True)
@@ -128,6 +130,7 @@ def load_settings(
     chat_model = _text_value(raw_env, "CHAT_MODEL", DEFAULT_CHAT_MODEL, errors)
     tts_model = _text_value(raw_env, "TTS_MODEL", DEFAULT_TTS_MODEL, errors)
     tts_voice = _text_value(raw_env, "TTS_VOICE", DEFAULT_TTS_VOICE, errors)
+    wake_debug = _bool_value(raw_env, "WAKE_DEBUG", DEFAULT_WAKE_DEBUG, errors)
 
     if max_record_seconds <= silence_seconds:
         errors.append("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS")
@@ -146,6 +149,7 @@ def load_settings(
         chat_model=chat_model,
         tts_model=tts_model,
         tts_voice=tts_voice,
+        wake_debug=wake_debug,
     )
 
 
@@ -317,6 +321,21 @@ def _optional_secret(value: str | None) -> str | None:
     if stripped.lower() in PLACEHOLDER_API_KEYS:
         return None
     return stripped
+
+
+def _bool_value(raw_env: Mapping[str, str], key: str, default: bool, errors: list[str]) -> bool:
+    raw = raw_env.get(key)
+    if raw is None or raw.strip() == "":
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    errors.append(f"{key} must be a boolean value such as 1, true, 0, or false")
+    return default
 
 
 def _text_value(env: Mapping[str, str], name: str, default: str, errors: list[str]) -> str:

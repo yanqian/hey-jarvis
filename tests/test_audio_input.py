@@ -20,7 +20,7 @@ class FakeRawInputStream:
 
     def read(self, frames):
         self.read_calls += 1
-        return struct.pack("<hh", 1, -1), False
+        return struct.pack("<hh", 1, -1), self.read_calls == 2
 
     def close(self):
         self.closed = True
@@ -50,6 +50,8 @@ class AudioInputTests(unittest.TestCase):
         stream.open()
         stream.open()
         chunk = stream.read_chunk()
+        self.assertFalse(stream.last_overflowed)
+        stream.read_chunk()
         stream.close()
 
         self.assertEqual(len(FakeRawInputStream.instances), 1)
@@ -61,6 +63,7 @@ class AudioInputTests(unittest.TestCase):
         self.assertEqual(raw_stream.kwargs["dtype"], "int16")
         self.assertEqual(raw_stream.kwargs["blocksize"], 512)
         self.assertEqual(chunk, struct.pack("<hh", 1, -1))
+        self.assertTrue(stream.last_overflowed)
 
     def test_default_block_frames_matches_openwakeword_prediction_frame(self):
         stream = MicrophoneStream(sounddevice_module=FakeSoundDevice)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 import struct
 from typing import Any, Callable, Mapping, Protocol
@@ -52,6 +53,11 @@ class WakeWordDetector:
     def detect(self, pcm_chunk: bytes) -> bool:
         """Return true when the Hey Jarvis score crosses the configured threshold."""
 
+        return self.score(pcm_chunk) >= self.threshold
+
+    def score(self, pcm_chunk: bytes) -> float:
+        """Return the Hey Jarvis score for one int16 PCM chunk."""
+
         if len(pcm_chunk) % 2 != 0:
             raise ValueError("PCM chunks must contain complete int16 samples")
 
@@ -65,7 +71,7 @@ class WakeWordDetector:
             self._logger.error("Wake-word inference failed for the Hey Jarvis model: %s", exc)
             raise WakeWordError(f"Wake-word inference failed: {exc}") from exc
 
-        return score >= self.threshold
+        return score
 
     def preload(self) -> None:
         """Load and warm the wake-word model before microphone capture starts."""
@@ -167,6 +173,20 @@ def _pcm_bytes_to_model_frame(pcm_chunk: bytes) -> Any:
         return tuple(sample for (sample,) in struct.iter_unpack("<h", pcm_chunk))
 
     return np.frombuffer(pcm_chunk, dtype=np.int16)
+
+
+def pcm_rms_and_peak(pcm_chunk: bytes) -> tuple[float, int]:
+    """Return RMS and absolute peak for little-endian int16 PCM bytes."""
+
+    if len(pcm_chunk) % 2 != 0:
+        raise ValueError("PCM chunks must contain complete int16 samples")
+    if not pcm_chunk:
+        return 0.0, 0
+
+    samples = [sample for (sample,) in struct.iter_unpack("<h", pcm_chunk)]
+    peak = max(abs(sample) for sample in samples)
+    mean_square = sum(sample * sample for sample in samples) / len(samples)
+    return math.sqrt(mean_square), peak
 
 
 def _silent_model_frame() -> Any:

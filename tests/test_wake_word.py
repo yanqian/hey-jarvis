@@ -14,6 +14,7 @@ from src.wake_word import (
     OPENWAKEWORD_MODEL_NAME,
     WakeWordDetector,
     WakeWordError,
+    pcm_rms_and_peak,
     prepare_wake_word_models,
 )
 
@@ -45,6 +46,17 @@ class WakeWordDetectorTests(unittest.TestCase):
         self.assertFalse(detector.detect(pcm_samples(1, 2, 3)))
         self.assertTrue(detector.detect(pcm_samples(4, 5, 6)))
         self.assertEqual(len(model.frames), 2)
+
+    def test_score_returns_raw_wake_word_score(self):
+        detector = WakeWordDetector(0.8, model=FakeWakeWordModel([{"hey jarvis": 0.42}]))
+
+        self.assertEqual(detector.score(pcm_samples(1, 2, 3)), 0.42)
+
+    def test_pcm_rms_and_peak_reports_int16_levels(self):
+        rms, peak = pcm_rms_and_peak(pcm_samples(3, -4))
+
+        self.assertAlmostEqual(rms, 3.5355, places=3)
+        self.assertEqual(peak, 4)
 
     def test_detect_accepts_openwakeword_underscore_score_key(self):
         detector = WakeWordDetector(0.6, model=FakeWakeWordModel([{"hey_jarvis": 0.7}]))

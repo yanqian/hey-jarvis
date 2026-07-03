@@ -42,6 +42,7 @@ class MicrophoneStream:
         self._sounddevice_module = sounddevice_module
         self._stream: Any | None = None
         self._logger = logger or logging.getLogger(__name__)
+        self.last_overflowed = False
 
     def open(self) -> "MicrophoneStream":
         """Open the underlying sounddevice RawInputStream if needed."""
@@ -80,6 +81,7 @@ class MicrophoneStream:
 
         if overflowed:
             self._logger.warning("Microphone input overflowed; the current audio chunk may be incomplete")
+        self.last_overflowed = bool(overflowed)
 
         return bytes(data)
 

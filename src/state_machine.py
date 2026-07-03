@@ -10,6 +10,7 @@ from typing import Any, MutableSequence, Protocol
 
 from .config import Settings
 from .recorder import DEFAULT_INPUT_WAV, RecordingResult, record_to_wav
+from .wake_word import pcm_rms_and_peak
 
 
 DEFAULT_OUTPUT_MP3 = Path("tmp/output.mp3")
@@ -32,6 +33,9 @@ class ChunkSource(Protocol):
 class WakeDetector(Protocol):
     def detect(self, pcm_chunk: bytes) -> bool:
         """Return true when the wake word is detected."""
+
+    def score(self, pcm_chunk: bytes) -> float:
+        """Return a wake-word score for debug logging."""
 
 
 class AssistantClient(Protocol):
@@ -133,9 +137,38 @@ class VoiceAssistantStateMachine:
     def _wait_for_wake_word(self) -> None:
         while True:
             chunk = self.audio_source.read_chunk()
-            if self.wake_detector.detect(chunk):
+            if self._debug_or_detect_wake_word(chunk):
                 self._logger.info("State WAIT_WAKE: wake word detected")
                 return
+
+    def _debug_or_detect_wake_word(self, chunk: bytes) -> bool:
+        if not self.settings.wake_debug:
+            return self.wake_detector.detect(chunk)
+
+        score_method = getattr(self.wake_detector, "score", None)
+        if score_method is None:
+            detected = self.wake_detector.detect(chunk)
+            self._logger.info(
+                "Wake debug: rms=unavailable peak=unavailable overflow=%s score=unavailable threshold=%.3f detected=%s",
+                _overflow_value(self.audio_source),
+                self.settings.wake_threshold,
+                _bool_text(detected),
+            )
+            return detected
+
+        score = float(score_method(chunk))
+        rms, peak = pcm_rms_and_peak(chunk)
+        detected = score >= self.settings.wake_threshold
+        self._logger.info(
+            "Wake debug: rms=%.1f peak=%s overflow=%s score=%.9f threshold=%.9f detected=%s",
+            rms,
+            peak,
+            _overflow_value(self.audio_source),
+            score,
+            self.settings.wake_threshold,
+            _bool_text(detected),
+        )
+        return detected
 
     def _record_question(self) -> RecordingResult:
         return self.record_audio(
@@ -152,3 +185,11 @@ class VoiceAssistantStateMachine:
             return
         self._logger.info("Transition %s -> %s", self.state.value, next_state.value)
         self.state = next_state
+
+
+def _overflow_value(audio_source: object) -> str:
+    return _bool_text(bool(getattr(audio_source, "last_overflowed", False)))
+
+
+def _bool_text(value: bool) -> str:
+    return "true" if value else "false"

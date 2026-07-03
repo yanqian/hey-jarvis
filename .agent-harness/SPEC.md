@@ -271,6 +271,46 @@ Implementation paths: `src/audio_input.py`, `src/wake_word.py`, `src/main.py`, `
 
 Verification surface: unit tests for microphone defaults and preload ordering, full `./init.sh`, and optional manual real-demo observation that the model-preload log appears before WAIT_WAKE listening.
 
+### Hey Jarvis Wake Debug Probes
+
+Goal: make wake-word failures observable so a user can tell whether the assistant is blocked by microphone input, PCM levels, openWakeWord scores, threshold selection, or a state-machine path.
+
+Included scope: CLI debug commands for live microphone wake-word scoring and WAV-file wake-word scoring, environment-backed wake debug logging, documented output fields, and tests that verify output shape without requiring a real microphone or live model.
+
+Excluded scope: changing the wake-word model, adding a custom wake phrase, automatically tuning thresholds, making OpenAI calls, recording long-term audio logs, or requiring automated tests to access a physical microphone.
+
+Core flows: a user runs `python -m src.main --wake-debug` and sees repeated `rms`, `peak`, `overflow`, `score`, and `threshold` values while speaking; a user runs `python -m src.main --wake-file path.wav` and sees per-frame or summary wake scores for a saved clip; a user sets `WAKE_DEBUG=1` and sees wake-score logs during normal `WAIT_WAKE` listening.
+
+Constraints: debug output must avoid printing audio samples or transcriptions, tests must use fakes or generated WAV fixtures, normal assistant behavior must remain unchanged unless debug mode is requested, and the existing fake-backend recovery path must remain dependency-free.
+
+Ambiguities or assumptions: live microphone debugging is inherently manual because physical devices and macOS permissions vary. The project can still provide deterministic tests for formatting, score extraction, and CLI routing.
+
+Required capabilities: existing microphone stream, openWakeWord ONNX detector, WAV fixture handling, CLI parser support, and deterministic fake detector/model tests.
+
+Implementation paths: `src/config.py`, `src/main.py`, `src/wake_word.py`, `README.md`, `tests/`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: focused unit tests for debug CLI modes and output fields, generated WAV fixture tests, full `./init.sh`, and manual execution of `python -m src.main --wake-debug` when microphone access is available.
+
+### Hey Jarvis Wake Debug Capture Replay
+
+Goal: make live wake-word debug sessions reproducible by saving the exact microphone PCM chunks that were scored, reporting enough score precision to distinguish tiny non-zero outputs from true zeros, and summarizing the maximum observed score.
+
+Included scope: a live wake-debug save flag that writes a mono 16 kHz 16-bit WAV file, higher-precision wake score output, summary metrics for live and file debug modes, graceful interruption handling for live debug capture, README guidance for record-and-replay debugging, and deterministic tests.
+
+Excluded scope: changing the wake-word model, replacing openWakeWord, adding custom wake phrases, automatically tuning `WAKE_THRESHOLD`, storing long-term audio logs, transcribing debug audio, or requiring automated tests to use a physical microphone.
+
+Core flows: a user runs `python -m src.main --wake-debug --wake-debug-output tmp/wake-debug.wav`, says `Hey Jarvis`, stops the command, and receives a saved WAV plus a max-score summary; the user then runs `python -m src.main --wake-file tmp/wake-debug.wav` to replay the exact captured audio and compare scores; short or final partial WAV chunks are handled without being silently ignored.
+
+Constraints: saved debug audio is an explicit user-requested artifact only, uses the configured sample rate and mono int16 PCM, keeps OpenAI and playback disabled, remains dependency-light, and preserves the existing fake-backend recovery path.
+
+Ambiguities or assumptions: local microphone behavior cannot be fully automated; tests will verify capture/replay mechanics using fake chunk sources and generated WAV files. Very low openWakeWord scores may still indicate model mismatch, pronunciation mismatch, input-device quality issues, or a need for a future custom wake model.
+
+Required capabilities: existing microphone stream abstraction, wake detector scoring, WAV writing and reading, CLI parser support, README documentation, and fake audio fixtures for automated verification.
+
+Implementation paths: `src/main.py`, `src/wake_word.py`, `README.md`, `tests/`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: unit tests for saved live debug WAV output, precise score formatting, summary metrics, file replay of short chunks, parser flags, full `./init.sh`, and optional manual execution of live capture followed by wake-file replay.
+
 ## 4. Acceptance Criteria
 
 - `./init.sh` validates harness state and runs the tiny example tests.

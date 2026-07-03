@@ -62,6 +62,26 @@ For the dependency-free full-loop smoke path, run:
 python -m src.main --fake-backend
 ```
 
+To inspect wake-word behavior without OpenAI or playback, run a wake debug
+probe:
+
+```bash
+python -m src.main --wake-debug
+```
+
+To save the exact live microphone audio that was scored, pass an explicit debug
+output path:
+
+```bash
+python -m src.main --wake-debug --wake-debug-output tmp/wake-debug.wav
+```
+
+To score an existing 16-bit mono WAV file without microphone access, run:
+
+```bash
+python -m src.main --wake-file tmp/wake-debug.wav
+```
+
 To start the real assistant, run:
 
 ```bash
@@ -117,9 +137,53 @@ TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 CHAT_MODEL=gpt-4o-mini
 TTS_MODEL=gpt-4o-mini-tts
 TTS_VOICE=alloy
+WAKE_DEBUG=0
 ```
 
 The automated recovery check uses fakes and dry-run paths, so it does not make live OpenAI API calls.
+
+## Wake-Word Debugging
+
+Use `python -m src.main --wake-debug` when the assistant remains in `WAIT_WAKE`
+and you need to see live microphone levels and wake-word scores without making
+OpenAI requests or playing audio. Each line includes `rms`, `peak`, `overflow`,
+`score`, `threshold`, and `detected`. Scores are printed with enough precision
+to tell true zeros from tiny non-zero model outputs, followed by a summary with
+the frame count, maximum observed score, threshold, and detected frame count.
+
+Use an explicit output file when you need a reproducible record-and-replay
+workflow:
+
+```bash
+python -m src.main --wake-debug --wake-debug-output tmp/wake-debug.wav
+python -m src.main --wake-file tmp/wake-debug.wav
+```
+
+Wake debug does not create or overwrite `tmp/input.wav` unless you explicitly
+choose that path with `--wake-debug-output`; normal question recording still owns
+`tmp/input.wav`.
+
+Use `python -m src.main --wake-file tmp/wake-debug.wav` to score a saved WAV
+clip without microphone access. The file must be mono 16-bit PCM. Short final
+chunks are scored and included in the summary instead of being silently ignored.
+This is useful when you want to compare a recorded phrase against the configured
+`WAKE_THRESHOLD`.
+
+Set `WAKE_DEBUG=1` in `.env` to log the same wake-word score fields during
+normal `WAIT_WAKE` listening.
+
+Common outcomes:
+
+- `rms` and `peak` stay near `0`: the app is receiving silence; check macOS
+  microphone permission, input device selection, and physical input level.
+- `overflow=true`: microphone capture or wake-word processing fell behind; close
+  CPU-heavy processes and confirm the wake-word model is prepared before
+  listening.
+- `score` rises but stays below `threshold`: lower `WAKE_THRESHOLD` cautiously or
+  speak the accepted `Hey Jarvis` phrase more clearly.
+- `score` stays low while `rms` and `peak` move: the microphone is working, but
+  openWakeWord is not matching the phrase; check pronunciation, distance, and
+  background noise.
 
 ## Troubleshooting
 
@@ -141,7 +205,9 @@ The automated recovery check uses fakes and dry-run paths, so it does not make l
 - Playback fails: run `python -m src.main --diagnose` and confirm `afplay` is
   available. The MVP is macOS-only for playback.
 - Wake-word detection does not trigger: use the accepted phrase `Hey Jarvis`,
-  speak clearly near the microphone, and confirm the app is still in `WAIT_WAKE`.
+  speak clearly near the microphone, confirm the app is still in `WAIT_WAKE`,
+  then run `python -m src.main --wake-debug` or set `WAKE_DEBUG=1` to inspect
+  microphone levels and wake scores.
 
 ## Recovery Check
 

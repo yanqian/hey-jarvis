@@ -20,7 +20,7 @@ from src.recorder import RecordingResult
 from src.state_machine import AssistantState, VoiceAssistantStateMachine
 
 
-def make_settings():
+def make_settings(*, wake_debug=False):
     return Settings(
         openai_api_key="sk-test",
         wake_phrase=DEFAULT_WAKE_PHRASE,
@@ -32,6 +32,7 @@ def make_settings():
         chat_model=DEFAULT_CHAT_MODEL,
         tts_model=DEFAULT_TTS_MODEL,
         tts_voice=DEFAULT_TTS_VOICE,
+        wake_debug=wake_debug,
     )
 
 
@@ -50,6 +51,10 @@ class FakeWakeDetector:
     def detect(self, pcm_chunk):
         self.detected_chunks.append(pcm_chunk)
         return pcm_chunk == b"\x01\x00"
+
+    def score(self, pcm_chunk):
+        self.detected_chunks.append(pcm_chunk)
+        return 1.0 if pcm_chunk == b"\x01\x00" else 0.0
 
 
 class FakeOpenAIClient:
@@ -132,6 +137,35 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("State WAIT_WAKE: wake word detected", log_output)
         self.assertIn("Transition WAIT_WAKE -> RECORDING", log_output)
         self.assertIn("Transition PLAYING -> WAIT_WAKE", log_output)
+
+    def test_wake_debug_logs_scores_during_wait_wake(self):
+        logger = logging.getLogger("tests.state_machine.debug")
+        audio_source = FakeAudioSource()
+        wake_detector = FakeWakeDetector()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(wake_debug=True),
+                audio_source=audio_source,
+                wake_detector=wake_detector,
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                machine.run_once()
+
+        log_output = "\n".join(logs.output)
+        self.assertIn("Wake debug:", log_output)
+        self.assertIn("rms=", log_output)
+        self.assertIn("peak=", log_output)
+        self.assertIn("overflow=false", log_output)
+        self.assertIn("score=1.000000000", log_output)
+        self.assertIn("threshold=0.800000000", log_output)
 
 
 if __name__ == "__main__":

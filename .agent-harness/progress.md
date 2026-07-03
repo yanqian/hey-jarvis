@@ -22,13 +22,17 @@ F008 has been implemented by manual Coding Agent fallback and evaluator-approved
 
 F009 has been implemented through orchestrator Coding Agent and evaluator-approved. The real assistant now constructs, loads, and warms the `WakeWordDetector` before opening the microphone stream; the default microphone chunk size is 1280 frames; preload logs are visible before listening begins; troubleshooting documents `WAIT_WAKE` microphone overflow; focused tests cover startup ordering, chunk sizing, documentation, and warmup without real microphone access; and durable evaluator evidence is recorded in `runs/F009-evaluation.md`.
 
+F010 has been completed through the orchestrator entrypoint, with the Coding Agent run recorded as an interactive manual fallback and the Evaluator Agent approving it. The code now includes live microphone wake debug output, WAV-file wake scoring, `WAKE_DEBUG=1` WAIT_WAKE score logging, PCM RMS/peak metrics, overflow surfacing from the microphone wrapper, README troubleshooting guidance, deterministic tests that do not require physical microphone access, and durable evaluator evidence in `runs/F010-evaluation.md`.
+
+F011 has been implemented by manual fallback after the orchestrator Coding Agent adapter hung waiting for a child process, and evaluator-approved. The wake debug workflow now supports explicit live PCM capture to a mono 16 kHz 16-bit WAV file, high-precision score and threshold output, live and file replay summary metrics, deterministic short final chunk replay, README record-and-replay guidance, focused tests using generated fixtures and fakes without physical microphone access, and durable evaluator evidence in `runs/F011-evaluation.md`.
+
 ## Last Completed Feature
 
-F009 - Prevent wake-listening microphone overflow during model startup.
+F011 - Add wake debug capture replay.
 
 ## Next Feature
 
-None - all planned features are complete.
+None currently selected.
 
 ## Known Issues
 
@@ -44,3 +48,5 @@ None - all planned features are complete.
 - F007 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F007` in `runs/F007-evaluation.md`.
 - F008 fixed a real-demo capability gap discovered by manual testing: the wake-word path had relied on openWakeWord defaults that were not recoverable on macOS Python 3.12 without extra model/runtime setup. Evaluator review recorded `EVAL_PASS: F008` in `runs/F008-manual-coding.md`.
 - F009 was completed through orchestrator-first work after approving the Codex provider runtime permission gap. Evaluator Agent review recorded `EVAL_PASS: F009` in `runs/F009-evaluation.md`.
+- F010 was completed through the orchestrator entrypoint after F009; implementation evidence is in `runs/F010-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F010` in `runs/F010-evaluation.md`.
+- F011 orchestrator execution was attempted through `make work`, but the Coding Agent adapter hung inside `subprocess.communicate()` and was interrupted. Manual fallback preserved evaluator gating; implementation evidence is in `runs/F011-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F011` in `runs/F011-evaluation.md`.
