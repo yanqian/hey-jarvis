@@ -20,9 +20,11 @@ F007 has been implemented by manual Coding Agent fallback and evaluator-approved
 
 F008 has been implemented by manual Coding Agent fallback and evaluator-approved. The real wake-word path now explicitly uses openWakeWord ONNX models through `onnxruntime`, includes `python -m src.main --prepare-wake-word` to download the required ONNX model files, reports missing `onnxruntime` or model files through `--diagnose`, documents the preparation step, and includes regression tests plus durable evidence in `runs/F008-manual-coding.md`.
 
+F009 has been implemented through orchestrator Coding Agent and evaluator-approved. The real assistant now constructs, loads, and warms the `WakeWordDetector` before opening the microphone stream; the default microphone chunk size is 1280 frames; preload logs are visible before listening begins; troubleshooting documents `WAIT_WAKE` microphone overflow; focused tests cover startup ordering, chunk sizing, documentation, and warmup without real microphone access; and durable evaluator evidence is recorded in `runs/F009-evaluation.md`.
+
 ## Last Completed Feature
 
-F008 - Fix recoverable wake-word model setup.
+F009 - Prevent wake-listening microphone overflow during model startup.
 
 ## Next Feature
 
@@ -41,3 +43,4 @@ None - all planned features are complete.
 - F006 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F006` in `runs/F006-evaluation.md`.
 - F007 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F007` in `runs/F007-evaluation.md`.
 - F008 fixed a real-demo capability gap discovered by manual testing: the wake-word path had relied on openWakeWord defaults that were not recoverable on macOS Python 3.12 without extra model/runtime setup. Evaluator review recorded `EVAL_PASS: F008` in `runs/F008-manual-coding.md`.
+- F009 was completed through orchestrator-first work after approving the Codex provider runtime permission gap. Evaluator Agent review recorded `EVAL_PASS: F009` in `runs/F009-evaluation.md`.

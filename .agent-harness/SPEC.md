@@ -251,6 +251,26 @@ Implementation paths: `src/wake_word.py`, `src/config.py`, `src/main.py`, `READM
 
 Verification surface: unit tests for wake-word ONNX loading and diagnostics, parser/documentation tests for the preparation command, dependency-free `./init.sh`, and optional manual `python -m src.main --prepare-wake-word` followed by `python -m src.main --diagnose` in a real venv.
 
+### Hey Jarvis Wake-Listening Overflow Recovery
+
+Goal: reduce real wake-listening failures where the assistant logs microphone input overflow during `WAIT_WAKE` and misses the user's wake phrase.
+
+Included scope: wake-word model preload order, microphone chunk sizing, runtime logs, troubleshooting documentation, tests, and harness state for the bugfix.
+
+Excluded scope: changing the wake-word model, adding custom wake words, tuning OpenAI request behavior, implementing a full audio latency profiler, or guaranteeing reliable recognition across every microphone and room condition.
+
+Core flows: a user starts `python -m src.main`; the assistant prepares the wake-word detector before opening the microphone stream; microphone capture starts only after the model is ready; WAIT_WAKE reads 1280-frame chunks aligned with openWakeWord's prediction frame; if overflow still occurs, documentation points the user toward processing-lag and microphone/device recovery steps.
+
+Constraints: automated tests must not require a real microphone, live OpenAI calls, or speaker playback; the project remains Python 3.11/3.12 and macOS-focused; fake-backend recovery must stay dependency-free.
+
+Ambiguities or assumptions: the observed overflow is most likely caused by doing ONNX model initialization/warmup while the microphone stream is already active, and aligning chunks to openWakeWord's 1280-sample frame is a safer default than the previous 1024-frame block. Some host-specific device overflows may still need future tuning.
+
+Required capabilities: prepared ONNX wake-word model files, installed `onnxruntime`, a microphone with macOS permission, deterministic tests that can verify operation ordering through fakes, and root recovery tests.
+
+Implementation paths: `src/audio_input.py`, `src/wake_word.py`, `src/main.py`, `README.md`, `tests/`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: unit tests for microphone defaults and preload ordering, full `./init.sh`, and optional manual real-demo observation that the model-preload log appears before WAIT_WAKE listening.
+
 ## 4. Acceptance Criteria
 
 - `./init.sh` validates harness state and runs the tiny example tests.

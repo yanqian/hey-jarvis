@@ -36,6 +36,9 @@ class DocumentationTests(unittest.TestCase):
 
         self.assertIn("Python 3.11 or Python 3.12", readme)
         self.assertIn("macOS microphone permission", readme)
+        self.assertIn("Microphone input overflows", readme)
+        self.assertIn("WAIT_WAKE", readme)
+        self.assertIn("audio processing may have fallen behind", readme)
         self.assertIn("afplay", readme)
         self.assertIn("Hey Jarvis", readme)
         self.assertIn("what is two plus two?", readme)

@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.wake_word import (
+    OPENWAKEWORD_FRAME_SAMPLES,
     OPENWAKEWORD_INFERENCE_FRAMEWORK,
     OPENWAKEWORD_MODEL_KEY,
     OPENWAKEWORD_MODEL_NAME,
@@ -49,6 +50,15 @@ class WakeWordDetectorTests(unittest.TestCase):
         detector = WakeWordDetector(0.6, model=FakeWakeWordModel([{"hey_jarvis": 0.7}]))
 
         self.assertTrue(detector.detect(pcm_samples(10, -10)))
+
+    def test_preload_warms_model_with_openwakeword_prediction_frame(self):
+        model = FakeWakeWordModel([{"hey jarvis": 0.0}])
+        detector = WakeWordDetector(0.8, model=model)
+
+        detector.preload()
+
+        self.assertEqual(len(model.frames), 1)
+        self.assertEqual(len(model.frames[0]), OPENWAKEWORD_FRAME_SAMPLES)
 
     def test_default_loader_uses_builtin_hey_jarvis_model_name(self):
         constructed_with = []

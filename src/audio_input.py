@@ -8,7 +8,7 @@ from types import ModuleType
 from typing import Any
 
 
-DEFAULT_BLOCK_FRAMES = 1024
+DEFAULT_BLOCK_FRAMES = 1280
 MICROPHONE_RECOVERY_GUIDANCE = (
     "Install requirements.txt, connect a microphone, and grant macOS microphone "
     "permission to the terminal or agent surface running Hey Jarvis."

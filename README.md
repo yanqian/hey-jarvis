@@ -134,6 +134,10 @@ The automated recovery check uses fakes and dry-run paths, so it does not make l
   requirements.txt`; the MVP wake-word path uses ONNX models.
 - Microphone capture fails or records silence: confirm the launching terminal has
   macOS microphone permission, then restart that terminal.
+- Microphone input overflows while the app is in `WAIT_WAKE`: the wake-word
+  model may still be starting up or audio processing may have fallen behind.
+  Run `python -m src.main --prepare-wake-word`, restart the app, and close other
+  CPU-heavy audio or ML processes before trying the wake phrase again.
 - Playback fails: run `python -m src.main --diagnose` and confirm `afplay` is
   available. The MVP is macOS-only for playback.
 - Wake-word detection does not trigger: use the accepted phrase `Hey Jarvis`,

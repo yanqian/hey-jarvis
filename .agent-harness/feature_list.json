@@ -164,6 +164,26 @@
         "F006",
         "F007"
       ]
+    },
+    {
+      "id": "F009",
+      "title": "Prevent wake-listening microphone overflow during model startup",
+      "description": "Fix the real wake-listening path so the ONNX wake-word model is loaded and warmed before microphone capture starts, and align microphone chunks with openWakeWord's 1280-sample prediction frame to reduce overflow and missed wake phrases.",
+      "acceptance": [
+        "The real assistant preloads the WakeWordDetector model before opening the microphone stream.",
+        "The default microphone stream block size is 1280 frames to match openWakeWord's 80ms prediction frame at 16 kHz.",
+        "Runtime logs make the wake-word model preload phase visible before listening starts.",
+        "README troubleshooting explains that microphone overflow during WAIT_WAKE can mean wake-word model startup or audio processing fell behind.",
+        "Tests verify the preload-before-microphone order and the 1280-frame microphone default without requiring a real microphone."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F008"
+      ]
     }
   ]
 }

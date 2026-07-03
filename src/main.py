@@ -70,11 +70,15 @@ def run_assistant_forever() -> int:
     logger.info("Assistant started")
     logger.info("Say Hey Jarvis, ask a question, and wait for playback")
     try:
+        wake_detector = WakeWordDetector(settings.wake_threshold, logger=logger)
+        logger.info("Preparing Hey Jarvis wake-word detector")
+        wake_detector.preload()
+        logger.info("Hey Jarvis wake-word detector ready")
         with open_microphone_stream(sample_rate=settings.sample_rate, logger=logger) as microphone:
             machine = VoiceAssistantStateMachine(
                 settings=settings,
                 audio_source=microphone,
-                wake_detector=WakeWordDetector(settings.wake_threshold, logger=logger),
+                wake_detector=wake_detector,
                 openai_client=build_openai_client(settings=settings),
                 player=MacOSPlayer(logger=logger),
                 history=history,

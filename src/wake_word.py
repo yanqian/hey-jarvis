@@ -12,6 +12,7 @@ from urllib.request import urlretrieve
 OPENWAKEWORD_MODEL_NAME = "hey jarvis"
 OPENWAKEWORD_MODEL_KEY = "hey_jarvis"
 OPENWAKEWORD_INFERENCE_FRAMEWORK = "onnx"
+OPENWAKEWORD_FRAME_SAMPLES = 1280
 OPENWAKEWORD_SCORE_KEYS = (OPENWAKEWORD_MODEL_NAME, "hey_jarvis")
 PREPARE_WAKE_WORD_COMMAND = "python -m src.main --prepare-wake-word"
 WAKEWORD_RECOVERY_GUIDANCE = (
@@ -65,6 +66,16 @@ class WakeWordDetector:
             raise WakeWordError(f"Wake-word inference failed: {exc}") from exc
 
         return score >= self.threshold
+
+    def preload(self) -> None:
+        """Load and warm the wake-word model before microphone capture starts."""
+
+        model = self._get_model()
+        try:
+            model.predict(_silent_model_frame())
+        except Exception as exc:
+            self._logger.error("Wake-word model warmup failed for the Hey Jarvis model: %s", exc)
+            raise WakeWordError(f"Wake-word model warmup failed: {exc}") from exc
 
     def _get_model(self) -> WakeWordModel:
         if self._model is not None:
@@ -156,6 +167,11 @@ def _pcm_bytes_to_model_frame(pcm_chunk: bytes) -> Any:
         return tuple(sample for (sample,) in struct.iter_unpack("<h", pcm_chunk))
 
     return np.frombuffer(pcm_chunk, dtype=np.int16)
+
+
+def _silent_model_frame() -> Any:
+    pcm_chunk = b"\x00\x00" * OPENWAKEWORD_FRAME_SAMPLES
+    return _pcm_bytes_to_model_frame(pcm_chunk)
 
 
 def _hey_jarvis_score(predictions: Mapping[str, float]) -> float:
