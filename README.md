@@ -52,5 +52,6 @@ The recovery check runs the AI Agent Harness verification, compiles project Pyth
 ## Notes
 
 - The first MVP wake phrase is `Hey Jarvis`.
+- Custom wake words are deferred to a later iteration; the MVP uses the built-in openWakeWord Hey Jarvis model.
 - macOS microphone permission must be granted to the terminal or agent surface that launches the assistant before the real demo can run.
 - Playback will use macOS `afplay` in the MVP.

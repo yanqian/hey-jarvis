@@ -10,13 +10,15 @@ F002 has been implemented and evaluator-approved. The code now includes dependen
 
 F003 has been implemented by manual Coding Agent fallback and evaluator-approved. The code now includes a reusable `sounddevice` microphone stream wrapper, deterministic int16 PCM RMS silence detection, WAV recording to `tmp/input.wav`, synthetic-PCM tests that do not require real microphone access, and durable evaluator evidence in `runs/F003-evaluation.md`.
 
+F004 has been implemented by manual Coding Agent fallback and evaluator-approved. The code now includes a lazy-loading openWakeWord `WakeWordDetector` boundary for the built-in Hey Jarvis model, threshold-based detection from PCM chunks, clear load and inference error logging, fake-model tests that do not require microphone input or installed ML dependencies, and durable evaluator evidence in `runs/F004-evaluation.md`.
+
 ## Last Completed Feature
 
-F003 - Implement audio stream, silence detection, and WAV recording.
+F004 - Implement Hey Jarvis wake-word detector.
 
 ## Next Feature
 
-F004 - Implement Hey Jarvis wake-word detector.
+F005 - Implement OpenAI transcription, chat, and TTS client.
 
 ## Known Issues
 
@@ -26,3 +28,4 @@ F004 - Implement Hey Jarvis wake-word detector.
 - Real microphone, speaker, and OpenAI integration cannot be fully verified by default automated checks; use fakes for recovery tests and document manual integration steps.
 - macOS microphone permission must be granted to the launching terminal or agent surface before the real demo can run.
 - F003 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F003` in `runs/F003-evaluation.md`.
+- F004 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F004` in `runs/F004-evaluation.md`.

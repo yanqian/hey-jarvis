@@ -19,11 +19,13 @@ for path in \
   src/main.py \
   src/recorder.py \
   src/silence.py \
+  src/wake_word.py \
   tests/test_audio_input.py \
   tests/test_config.py \
   tests/test_recorder.py \
   tests/test_silence.py \
   tests/test_skeleton.py \
+  tests/test_wake_word.py \
   tmp/.gitkeep
 do
   test -f "$path"

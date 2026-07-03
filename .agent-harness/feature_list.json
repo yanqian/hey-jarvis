@@ -70,9 +70,9 @@
         "Tests cover threshold behavior with a fake model without requiring real microphone input.",
         "README notes that custom wake words are deferred to a later iteration."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
