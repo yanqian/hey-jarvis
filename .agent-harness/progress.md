@@ -14,13 +14,15 @@ F004 has been implemented by manual Coding Agent fallback and evaluator-approved
 
 F005 has been implemented by manual Coding Agent fallback and evaluator-approved. The code now includes a lazy-loading OpenAI client boundary for transcription, chat completions with bounded in-memory history, and text-to-speech MP3 output; tests verify request shape, response handling, output file writing, and actionable missing-credential errors without live API access, with durable evaluator evidence in `runs/F005-evaluation.md`.
 
+F006 has been implemented by manual Coding Agent fallback and evaluator-approved. The code now includes macOS `afplay` playback, a WAIT_WAKE -> RECORDING -> TRANSCRIBE -> ASK_OPENAI -> TTS -> PLAYING -> WAIT_WAKE state machine, `python -m src.main` real runtime wiring, a dependency-free `--fake-backend` full-loop smoke path, focused unit tests, README real-demo instructions, and durable evaluator evidence in `runs/F006-evaluation.md`.
+
 ## Last Completed Feature
 
-F005 - Implement OpenAI transcription, chat, and TTS client.
+F006 - Wire playback and main voice-assistant state machine.
 
 ## Next Feature
 
-F006 - Wire playback and main voice-assistant state machine.
+F007 - Document setup, permissions, and post-MVP iterations.
 
 ## Known Issues
 
@@ -32,3 +34,4 @@ F006 - Wire playback and main voice-assistant state machine.
 - F003 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F003` in `runs/F003-evaluation.md`.
 - F004 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F004` in `runs/F004-evaluation.md`.
 - F005 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F005` in `runs/F005-evaluation.md`.
+- F006 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F006` in `runs/F006-evaluation.md`.

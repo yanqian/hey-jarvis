@@ -112,9 +112,9 @@
         "A fake-backend smoke test proves the full state-machine path without microphone, OpenAI, or speaker access.",
         "Manual README instructions describe how to run the real demo: user says Hey Jarvis, asks what two plus two is, hears the answer, and the app returns to wake listening."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

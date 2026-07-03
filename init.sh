@@ -18,15 +18,19 @@ for path in \
   src/config.py \
   src/main.py \
   src/openai_client.py \
+  src/player.py \
   src/recorder.py \
   src/silence.py \
+  src/state_machine.py \
   src/wake_word.py \
   tests/test_audio_input.py \
   tests/test_config.py \
   tests/test_openai_client.py \
+  tests/test_player.py \
   tests/test_recorder.py \
   tests/test_silence.py \
   tests/test_skeleton.py \
+  tests/test_state_machine.py \
   tests/test_wake_word.py \
   tmp/.gitkeep
 do
@@ -41,5 +45,8 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "== Project dry-run smoke =="
 python3 -m src.main --dry-run
+
+echo "== Project fake-backend smoke =="
+python3 -m src.main --fake-backend
 
 echo "project recovery verification passed"
