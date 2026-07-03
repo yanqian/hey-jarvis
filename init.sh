@@ -14,9 +14,15 @@ for path in \
   .env.example \
   requirements.txt \
   src/__init__.py \
+  src/audio_input.py \
   src/config.py \
   src/main.py \
+  src/recorder.py \
+  src/silence.py \
+  tests/test_audio_input.py \
   tests/test_config.py \
+  tests/test_recorder.py \
+  tests/test_silence.py \
   tests/test_skeleton.py \
   tmp/.gitkeep
 do

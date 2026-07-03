@@ -49,9 +49,9 @@
         "Tests verify silence detection and WAV writing using synthetic PCM without requiring a real microphone.",
         "Runtime errors from unavailable audio devices are logged with clear recovery guidance."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
