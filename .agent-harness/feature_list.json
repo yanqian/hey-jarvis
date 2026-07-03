@@ -29,12 +29,14 @@
         "Missing OPENAI_API_KEY is reported as an actionable configuration error without crashing import-time code.",
         "Unit tests cover defaults, environment overrides, and invalid configuration values."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F001"]
+      "depends_on": [
+        "F001"
+      ]
     },
     {
       "id": "F003",
@@ -52,7 +54,10 @@
       "attempts": 0,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F001", "F002"]
+      "depends_on": [
+        "F001",
+        "F002"
+      ]
     },
     {
       "id": "F004",
@@ -70,7 +75,10 @@
       "attempts": 0,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F001", "F002"]
+      "depends_on": [
+        "F001",
+        "F002"
+      ]
     },
     {
       "id": "F005",
@@ -88,7 +96,10 @@
       "attempts": 0,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F001", "F002"]
+      "depends_on": [
+        "F001",
+        "F002"
+      ]
     },
     {
       "id": "F006",
@@ -106,7 +117,11 @@
       "attempts": 0,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F003", "F004", "F005"]
+      "depends_on": [
+        "F003",
+        "F004",
+        "F005"
+      ]
     },
     {
       "id": "F007",
@@ -124,7 +139,9 @@
       "attempts": 0,
       "last_error": "",
       "priority": "P1",
-      "depends_on": ["F006"]
+      "depends_on": [
+        "F006"
+      ]
     }
   ]
 }

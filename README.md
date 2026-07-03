@@ -27,6 +27,12 @@ cp .env.example .env
 python -m src.main --dry-run
 ```
 
+To inspect local runtime readiness without starting the assistant:
+
+```bash
+python -m src.main --diagnose
+```
+
 When the full MVP is implemented, run:
 
 ```bash

@@ -14,7 +14,9 @@ for path in \
   .env.example \
   requirements.txt \
   src/__init__.py \
+  src/config.py \
   src/main.py \
+  tests/test_config.py \
   tests/test_skeleton.py \
   tmp/.gitkeep
 do
