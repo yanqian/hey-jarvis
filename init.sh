@@ -17,11 +17,13 @@ for path in \
   src/audio_input.py \
   src/config.py \
   src/main.py \
+  src/openai_client.py \
   src/recorder.py \
   src/silence.py \
   src/wake_word.py \
   tests/test_audio_input.py \
   tests/test_config.py \
+  tests/test_openai_client.py \
   tests/test_recorder.py \
   tests/test_silence.py \
   tests/test_skeleton.py \

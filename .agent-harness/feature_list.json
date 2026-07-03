@@ -91,9 +91,9 @@
         "Errors from missing credentials, API failures, or empty transcriptions are surfaced with clear messages.",
         "Tests mock OpenAI SDK calls and verify request shape, returned text handling, and output file writing behavior without live API access."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

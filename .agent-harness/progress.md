@@ -12,13 +12,15 @@ F003 has been implemented by manual Coding Agent fallback and evaluator-approved
 
 F004 has been implemented by manual Coding Agent fallback and evaluator-approved. The code now includes a lazy-loading openWakeWord `WakeWordDetector` boundary for the built-in Hey Jarvis model, threshold-based detection from PCM chunks, clear load and inference error logging, fake-model tests that do not require microphone input or installed ML dependencies, and durable evaluator evidence in `runs/F004-evaluation.md`.
 
+F005 has been implemented by manual Coding Agent fallback and evaluator-approved. The code now includes a lazy-loading OpenAI client boundary for transcription, chat completions with bounded in-memory history, and text-to-speech MP3 output; tests verify request shape, response handling, output file writing, and actionable missing-credential errors without live API access, with durable evaluator evidence in `runs/F005-evaluation.md`.
+
 ## Last Completed Feature
 
-F004 - Implement Hey Jarvis wake-word detector.
+F005 - Implement OpenAI transcription, chat, and TTS client.
 
 ## Next Feature
 
-F005 - Implement OpenAI transcription, chat, and TTS client.
+F006 - Wire playback and main voice-assistant state machine.
 
 ## Known Issues
 
@@ -29,3 +31,4 @@ F005 - Implement OpenAI transcription, chat, and TTS client.
 - macOS microphone permission must be granted to the launching terminal or agent surface before the real demo can run.
 - F003 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F003` in `runs/F003-evaluation.md`.
 - F004 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F004` in `runs/F004-evaluation.md`.
+- F005 implementation was completed by manual Coding Agent fallback because this prompt was run interactively for a selected feature. Evaluator Agent review recorded `EVAL_PASS: F005` in `runs/F005-evaluation.md`.

@@ -11,7 +11,7 @@ Assistant: "Two plus two is four."
 
 ## Status
 
-This project is currently at the runnable skeleton stage. The checked-in code proves the Python package, tests, and recovery entrypoint work without requiring a microphone, speakers, or OpenAI credentials. Real audio capture, wake-word detection, OpenAI calls, and playback are planned in the harness feature list.
+This project is currently at the runnable skeleton stage. The checked-in code proves the Python package, tests, and recovery entrypoint work without requiring a microphone, speakers, or OpenAI credentials. Audio capture, wake-word detection, and OpenAI client boundaries are implemented behind testable modules; the full assistant state machine and playback wiring are planned in the harness feature list.
 
 ## Runtime
 
@@ -38,6 +38,19 @@ When the full MVP is implemented, run:
 ```bash
 python -m src.main
 ```
+
+## OpenAI Configuration
+
+Set `OPENAI_API_KEY` in `.env` before running any real transcription, chat, or speech synthesis path. The MVP defaults are:
+
+```text
+TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+CHAT_MODEL=gpt-4o-mini
+TTS_MODEL=gpt-4o-mini-tts
+TTS_VOICE=alloy
+```
+
+The automated recovery check uses fakes and dry-run paths, so it does not make live OpenAI API calls.
 
 ## Recovery Check
 
