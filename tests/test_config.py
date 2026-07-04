@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.config import (
     DEFAULT_CHAT_MODEL,
@@ -11,6 +12,9 @@ from src.config import (
     DEFAULT_TTS_MODEL,
     DEFAULT_TTS_VOICE,
     DEFAULT_WAKE_DEBUG,
+    DEFAULT_WAKE_BACKEND,
+    DEFAULT_WAKE_INFERENCE_FRAMEWORK,
+    DEFAULT_WAKE_MODEL,
     DEFAULT_WAKE_PHRASE,
     DEFAULT_WAKE_THRESHOLD,
     ConfigError,
@@ -24,6 +28,12 @@ class ConfigTests(unittest.TestCase):
         settings = load_settings(env={}, env_file=None)
 
         self.assertIsNone(settings.openai_api_key)
+        self.assertEqual(settings.wake_backend, "openwakeword")
+        self.assertEqual(settings.wake_model, "alexa")
+        self.assertEqual(settings.wake_inference_framework, "tflite")
+        self.assertEqual(settings.wake_backend, DEFAULT_WAKE_BACKEND)
+        self.assertEqual(settings.wake_model, DEFAULT_WAKE_MODEL)
+        self.assertEqual(settings.wake_inference_framework, DEFAULT_WAKE_INFERENCE_FRAMEWORK)
         self.assertEqual(DEFAULT_WAKE_PHRASE, "alexa")
         self.assertEqual(settings.wake_phrase, DEFAULT_WAKE_PHRASE)
         self.assertEqual(settings.wake_threshold, DEFAULT_WAKE_THRESHOLD)
@@ -40,6 +50,9 @@ class ConfigTests(unittest.TestCase):
         settings = load_settings(
             env={
                 "OPENAI_API_KEY": "sk-test",
+                "WAKE_BACKEND": "openwakeword",
+                "WAKE_MODEL": "alexa",
+                "WAKE_INFERENCE_FRAMEWORK": "tflite",
                 "WAKE_PHRASE": "computer",
                 "WAKE_THRESHOLD": "0.65",
                 "SILENCE_SECONDS": "2.25",
@@ -55,6 +68,9 @@ class ConfigTests(unittest.TestCase):
         )
 
         self.assertEqual(settings.openai_api_key, "sk-test")
+        self.assertEqual(settings.wake_backend, "openwakeword")
+        self.assertEqual(settings.wake_model, "alexa")
+        self.assertEqual(settings.wake_inference_framework, "tflite")
         self.assertEqual(settings.wake_phrase, "computer")
         self.assertEqual(settings.wake_threshold, 0.65)
         self.assertEqual(settings.silence_seconds, 2.25)
@@ -91,6 +107,8 @@ class ConfigTests(unittest.TestCase):
             load_settings(
                 env={
                     "WAKE_THRESHOLD": "2",
+                    "WAKE_BACKEND": "unsupported",
+                    "WAKE_INFERENCE_FRAMEWORK": "bad-framework",
                     "SILENCE_SECONDS": "10",
                     "MAX_RECORD_SECONDS": "5",
                     "SAMPLE_RATE": "not-an-int",
@@ -102,6 +120,8 @@ class ConfigTests(unittest.TestCase):
 
         message = str(caught.exception)
         self.assertIn("WAKE_THRESHOLD must be at most 1.0", message)
+        self.assertIn("WAKE_BACKEND must be one of openwakeword", message)
+        self.assertIn("WAKE_INFERENCE_FRAMEWORK must be one of tflite, onnx", message)
         self.assertIn("SAMPLE_RATE must be an integer", message)
         self.assertIn("CHAT_MODEL must not be empty", message)
         self.assertIn("WAKE_DEBUG must be a boolean value", message)
@@ -112,6 +132,14 @@ class ConfigTests(unittest.TestCase):
             load_settings(env={}, env_file=None, require_openai_api_key=True)
 
         self.assertIn("OPENAI_API_KEY is required", str(caught.exception))
+
+    def test_macos_arm64_onnx_selection_fails_fast(self):
+        with patch("src.wake_word.platform.system", return_value="Darwin"):
+            with patch("src.wake_word.platform.machine", return_value="arm64"):
+                with self.assertRaises(ConfigError) as caught:
+                    load_settings(env={"WAKE_INFERENCE_FRAMEWORK": "onnx"}, env_file=None)
+
+        self.assertIn("WAKE_INFERENCE_FRAMEWORK=onnx is disabled on macOS ARM64", str(caught.exception))
 
     def test_diagnostics_report_missing_key_without_import_time_crash(self):
         report = collect_diagnostics(
@@ -133,7 +161,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_diagnostics_report_missing_wake_word_model_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            missing_path = Path(tmp_dir) / "alexa_v0.1.onnx"
+            missing_path = Path(tmp_dir) / "alexa_v0.1.tflite"
             report = collect_diagnostics(
                 env={"OPENAI_API_KEY": "sk-test"},
                 env_file=None,
@@ -150,8 +178,8 @@ class ConfigTests(unittest.TestCase):
 
     def test_diagnostics_accept_present_wake_word_model_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model_path = Path(tmp_dir) / "alexa_v0.1.onnx"
-            model_path.write_bytes(b"onnx")
+            model_path = Path(tmp_dir) / "alexa_v0.1.tflite"
+            model_path.write_bytes(b"tflite")
             report = collect_diagnostics(
                 env={"OPENAI_API_KEY": "sk-test"},
                 env_file=None,

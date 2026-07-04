@@ -12,6 +12,7 @@ from src.wake_word import (
     OPENWAKEWORD_INFERENCE_FRAMEWORK,
     OPENWAKEWORD_MODEL_KEY,
     OPENWAKEWORD_MODEL_NAME,
+    MACOS_ARM64_ONNX_ERROR,
     WakeWordDetector,
     WakeWordError,
     pad_pcm_chunk,
@@ -74,7 +75,12 @@ class WakeWordDetectorTests(unittest.TestCase):
         self.assertEqual(len(model.frames[0]), OPENWAKEWORD_FRAME_SAMPLES)
         self.assertEqual(detector.frame_length, OPENWAKEWORD_FRAME_SAMPLES)
 
-    def test_default_loader_uses_builtin_alexa_model_name_and_onnx(self):
+    def test_score_returns_safe_fallback_for_single_prediction_key(self):
+        detector = WakeWordDetector(0.5, model=FakeWakeWordModel([{"alexa_v0.1": 0.61}]))
+
+        self.assertEqual(detector.score(pcm_samples(1, 2, 3)), 0.61)
+
+    def test_default_loader_uses_builtin_alexa_model_name_and_tflite(self):
         constructed_with = []
 
         class FakeOpenWakeWordModel:
@@ -99,8 +105,45 @@ class WakeWordDetectorTests(unittest.TestCase):
             self.assertTrue(detector.detect(pcm_samples(0, 0, 0)))
 
         self.assertEqual(constructed_with, [([OPENWAKEWORD_MODEL_NAME], OPENWAKEWORD_INFERENCE_FRAMEWORK)])
+        self.assertEqual(OPENWAKEWORD_INFERENCE_FRAMEWORK, "tflite")
 
-    def test_prepare_wake_word_models_downloads_only_onnx_assets(self):
+    def test_loader_accepts_explicit_onnx_on_non_macos_arm64(self):
+        constructed_with = []
+
+        class FakeOpenWakeWordModel:
+            def __init__(self, wakeword_models, inference_framework):
+                constructed_with.append((wakeword_models, inference_framework))
+
+            def predict(self, frame):
+                return {"alexa": 0.9}
+
+        openwakeword_module = types.ModuleType("openwakeword")
+        model_module = types.ModuleType("openwakeword.model")
+        model_module.Model = FakeOpenWakeWordModel
+
+        with patch("src.wake_word.platform.system", return_value="Linux"):
+            with patch("src.wake_word.platform.machine", return_value="x86_64"):
+                with patch.dict(
+                    sys.modules,
+                    {
+                        "openwakeword": openwakeword_module,
+                        "openwakeword.model": model_module,
+                    },
+                ):
+                    detector = WakeWordDetector(0.5, inference_framework="onnx")
+                    self.assertTrue(detector.detect(pcm_samples(0, 0, 0)))
+
+        self.assertEqual(constructed_with, [([OPENWAKEWORD_MODEL_NAME], "onnx")])
+
+    def test_onnx_is_rejected_on_macos_arm64(self):
+        with patch("src.wake_word.platform.system", return_value="Darwin"):
+            with patch("src.wake_word.platform.machine", return_value="arm64"):
+                with self.assertRaises(WakeWordError) as caught:
+                    WakeWordDetector(0.5, inference_framework="onnx")
+
+        self.assertIn(MACOS_ARM64_ONNX_ERROR, str(caught.exception))
+
+    def test_prepare_wake_word_models_downloads_tflite_assets_by_default(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model_dir = Path(tmp_dir) / "models"
             openwakeword_module = types.ModuleType("openwakeword")
@@ -124,17 +167,48 @@ class WakeWordDetectorTests(unittest.TestCase):
 
             def fake_urlretrieve(url, filename):
                 downloaded_urls.append(url)
-                Path(filename).write_bytes(b"onnx")
+                Path(filename).write_bytes(b"tflite")
 
             with patch.dict(sys.modules, {"openwakeword": openwakeword_module}):
                 with patch("src.wake_word.urlretrieve", side_effect=fake_urlretrieve):
                     prepared = prepare_wake_word_models()
 
             self.assertEqual(set(prepared), {"melspectrogram", "embedding", OPENWAKEWORD_MODEL_KEY})
-            self.assertTrue(all(str(path).endswith(".onnx") for path in prepared.values()))
+            self.assertTrue(all(str(path).endswith(".tflite") for path in prepared.values()))
             self.assertTrue(all(path.is_file() for path in prepared.values()))
+            self.assertTrue(all(url.endswith(".tflite") for url in downloaded_urls))
+            self.assertFalse(any(url.endswith(".onnx") for url in downloaded_urls))
+
+    def test_prepare_wake_word_models_can_download_explicit_onnx_assets(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model_dir = Path(tmp_dir) / "models"
+            openwakeword_module = types.ModuleType("openwakeword")
+            openwakeword_module.FEATURE_MODELS = {
+                "melspectrogram": {
+                    "model_path": str(model_dir / "melspectrogram.tflite"),
+                    "download_url": "https://example.test/melspectrogram.tflite",
+                },
+            }
+            openwakeword_module.MODELS = {
+                OPENWAKEWORD_MODEL_KEY: {
+                    "model_path": str(model_dir / "alexa_v0.1.tflite"),
+                    "download_url": "https://example.test/alexa_v0.1.tflite",
+                }
+            }
+            downloaded_urls = []
+
+            def fake_urlretrieve(url, filename):
+                downloaded_urls.append(url)
+                Path(filename).write_bytes(b"onnx")
+
+            with patch("src.wake_word.platform.system", return_value="Linux"):
+                with patch("src.wake_word.platform.machine", return_value="x86_64"):
+                    with patch.dict(sys.modules, {"openwakeword": openwakeword_module}):
+                        with patch("src.wake_word.urlretrieve", side_effect=fake_urlretrieve):
+                            prepared = prepare_wake_word_models(inference_framework="onnx")
+
+            self.assertTrue(all(str(path).endswith(".onnx") for path in prepared.values()))
             self.assertTrue(all(url.endswith(".onnx") for url in downloaded_urls))
-            self.assertFalse(any(url.endswith(".tflite") for url in downloaded_urls))
 
     def test_load_failure_logs_recovery_guidance(self):
         logger = logging.getLogger("tests.wake_word.load")

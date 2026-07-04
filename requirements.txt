@@ -3,5 +3,5 @@ numpy
 scipy
 openai
 openwakeword
-onnxruntime
+ai-edge-litert>=2.0.2,<3; platform_system == "Darwin"
 python-dotenv

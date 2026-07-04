@@ -511,6 +511,28 @@ Verification surface: focused unit tests for Alexa loader arguments, ONNX model 
 
 Decomposition decision: this is one rollback feature because the runtime, diagnostics, dependencies, docs, and tests must move together to avoid a half-Porcupine half-openWakeWord configuration.
 
+### Alexa openWakeWord TFLite Runtime Switch
+
+Goal: make the active Alexa/openWakeWord wake-word path usable on macOS ARM64 by switching the configured inference framework from ONNX to TFLite and making the selected framework visible across runtime, diagnostics, preparation, and debug output.
+
+Included scope: add environment-backed wake backend, model, inference framework, and threshold settings; pass the configured `WAKE_INFERENCE_FRAMEWORK` into `WakeWordDetector`; prepare and diagnose framework-specific openWakeWord model assets; make live/file wake debug and the standalone openWakeWord debug script print requested model, inference framework, loaded models, and max scores; add a macOS ARM64 guard that rejects ONNX with clear recovery guidance; update requirements, `.env.example`, README, tests, and harness state.
+
+Excluded scope: replacing openWakeWord with another wake-word provider, training custom wake-word models, changing OpenAI transcription/chat/TTS behavior, requiring automated tests to download real models or use a physical microphone, resolving upstream ONNX numeric behavior, or deleting local debug audio artifacts.
+
+Core flows: a user copies `.env.example`, keeps `WAKE_BACKEND=openwakeword`, `WAKE_MODEL=alexa`, and `WAKE_INFERENCE_FRAMEWORK=tflite`, runs `python -m src.main --prepare-wake-word` to prepare TFLite assets, runs `python -m src.main --diagnose` and sees TFLite readiness, starts `python -m src.main`, says `Alexa`, and the assistant proceeds when the TFLite score crosses `WAKE_THRESHOLD`. A user can run wake debug or wake-file replay and see which model and inference framework produced the reported scores, so ONNX and TFLite cannot be confused during troubleshooting.
+
+Constraints: macOS ARM64 must not silently use openWakeWord ONNX because local evidence and upstream issue evidence show near-zero scores there; TFLite support must remain explicit and configurable; automated tests must use fakes and generated fixtures rather than live microphone, OpenAI, network model download, or live openWakeWord inference; the project remains macOS and Python 3.11/3.12 focused.
+
+Ambiguities or assumptions: `ai-edge-litert` is the preferred TFLite runtime dependency for this project because local debug notes showed it working with openWakeWord on the user's machine. If openWakeWord requires a `tflite_runtime` module import path in a given environment, diagnostics should report that runtime capability clearly instead of marking the assistant ready. ONNX may remain configurable on non-macOS-ARM64 platforms for investigation, but it is not the default active path.
+
+Required capabilities: installed `openwakeword`, a working TFLite interpreter path such as `ai-edge-litert` or an openWakeWord-compatible `tflite_runtime`, network access only during explicit model preparation, write access to the active openWakeWord model directory, deterministic fake-model tests, and local debug evidence from `debug/openwakeword-alexa-debug.md` for the ONNX-vs-TFLite decision.
+
+Implementation paths: `src/config.py`, `src/wake_word.py`, `src/main.py`, `scripts/debug_oww_file.py`, `requirements.txt`, `.env.example`, `README.md`, `tests/`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: focused unit tests for configuration defaults and overrides, macOS ARM64 ONNX rejection, framework-specific model loading and preparation paths, diagnostics dependency/model checks, wake debug output metadata, standalone debug script framework output, documentation assertions, full `./init.sh`, and optional manual `python -m src.main --prepare-wake-word`, `--diagnose`, and `--wake-file tmp/alexa-debug.wav` in a real virtualenv.
+
+Decomposition decision: this remains one feature because configuration, detector construction, model preparation, diagnostics, debug observability, documentation, and tests are one coherent runtime switch. Splitting them would leave the wake path in a misleading partial state where the detector might use TFLite but setup or debug still claims ONNX.
+
 ## 5. Verification Plan
 
 Run:

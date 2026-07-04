@@ -10,7 +10,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from .wake_word import (
+    MACOS_ARM64_ONNX_ERROR,
+    OPENWAKEWORD_BACKEND,
+    OPENWAKEWORD_INFERENCE_FRAMEWORK,
+    OPENWAKEWORD_MODEL_NAME,
+    SUPPORTED_OPENWAKEWORD_INFERENCE_FRAMEWORKS,
+    SUPPORTED_WAKE_BACKENDS,
+    is_macos_arm64,
+    normalize_inference_framework,
+    normalize_wake_backend,
+    normalize_wake_model,
+)
 
+DEFAULT_WAKE_BACKEND = OPENWAKEWORD_BACKEND
+DEFAULT_WAKE_MODEL = OPENWAKEWORD_MODEL_NAME
+DEFAULT_WAKE_INFERENCE_FRAMEWORK = OPENWAKEWORD_INFERENCE_FRAMEWORK
 DEFAULT_WAKE_PHRASE = "alexa"
 DEFAULT_WAKE_THRESHOLD = 0.5
 DEFAULT_SILENCE_SECONDS = 1.5
@@ -31,7 +46,6 @@ DEPENDENCY_MODULES: Mapping[str, str] = {
     "scipy": "scipy",
     "openai": "openai",
     "openwakeword": "openwakeword",
-    "onnxruntime": "onnxruntime",
     "python-dotenv": "dotenv",
 }
 
@@ -47,6 +61,9 @@ class ConfigError(ValueError):
 @dataclass(frozen=True)
 class Settings:
     openai_api_key: str | None
+    wake_backend: str
+    wake_model: str
+    wake_inference_framework: str
     wake_phrase: str
     wake_threshold: float
     silence_seconds: float
@@ -102,6 +119,26 @@ def load_settings(
     if require_openai_api_key and openai_api_key is None:
         errors.append("OPENAI_API_KEY is required; set it in .env or the environment")
 
+    wake_backend = _choice_value(
+        raw_env,
+        "WAKE_BACKEND",
+        DEFAULT_WAKE_BACKEND,
+        SUPPORTED_WAKE_BACKENDS,
+        errors,
+        normalizer=normalize_wake_backend,
+    )
+    wake_model = _text_value(raw_env, "WAKE_MODEL", DEFAULT_WAKE_MODEL, errors, normalizer=normalize_wake_model)
+    wake_inference_framework = _choice_value(
+        raw_env,
+        "WAKE_INFERENCE_FRAMEWORK",
+        DEFAULT_WAKE_INFERENCE_FRAMEWORK,
+        SUPPORTED_OPENWAKEWORD_INFERENCE_FRAMEWORKS,
+        errors,
+        normalizer=normalize_inference_framework,
+    )
+    if wake_inference_framework == "onnx" and is_macos_arm64():
+        errors.append(MACOS_ARM64_ONNX_ERROR)
+
     wake_phrase = _text_value(raw_env, "WAKE_PHRASE", DEFAULT_WAKE_PHRASE, errors)
     wake_threshold = _float_value(
         raw_env,
@@ -140,6 +177,9 @@ def load_settings(
 
     return Settings(
         openai_api_key=openai_api_key,
+        wake_backend=wake_backend,
+        wake_model=wake_model,
+        wake_inference_framework=wake_inference_framework,
         wake_phrase=wake_phrase,
         wake_threshold=wake_threshold,
         silence_seconds=silence_seconds,
@@ -221,7 +261,10 @@ def collect_diagnostics(
         else:
             checks.append(DiagnosticCheck(f"dependency:{package_name}", "ok", f"{package_name} is importable"))
 
-    checks.extend(_wake_word_model_checks(wake_word_model_paths, modules_to_check))
+    if settings is not None and dependency_modules is None:
+        checks.extend(_wake_runtime_dependency_checks(settings))
+
+    checks.extend(_wake_word_model_checks(wake_word_model_paths, modules_to_check, settings))
     checks.append(
         DiagnosticCheck(
             "microphone_permission",
@@ -236,20 +279,30 @@ def collect_diagnostics(
 def _wake_word_model_checks(
     wake_word_model_paths: Mapping[str, str | Path] | None,
     dependency_modules: Mapping[str, str],
+    settings: Settings | None,
 ) -> list[DiagnosticCheck]:
+    if settings is not None and settings.wake_backend != OPENWAKEWORD_BACKEND:
+        return []
+
     if wake_word_model_paths is None and "openwakeword" in dependency_modules:
         if importlib.util.find_spec("openwakeword") is None:
             return []
         try:
             from .wake_word import required_wake_word_model_paths
 
-            wake_word_model_paths = required_wake_word_model_paths()
+            wake_word_model_paths = required_wake_word_model_paths(
+                model_name=settings.wake_model if settings is not None else DEFAULT_WAKE_MODEL,
+                inference_framework=(
+                    settings.wake_inference_framework if settings is not None else DEFAULT_WAKE_INFERENCE_FRAMEWORK
+                ),
+            )
         except Exception as exc:
+            framework = settings.wake_inference_framework if settings is not None else DEFAULT_WAKE_INFERENCE_FRAMEWORK
             return [
                 DiagnosticCheck(
                     "wake_word_models",
                     "error",
-                    f"Unable to inspect openWakeWord ONNX model files: {exc}",
+                    f"Unable to inspect openWakeWord {framework} model files: {exc}",
                 )
             ]
 
@@ -263,20 +316,47 @@ def _wake_word_model_checks(
     }
     if missing:
         missing_names = ", ".join(sorted(missing))
+        framework = settings.wake_inference_framework if settings is not None else DEFAULT_WAKE_INFERENCE_FRAMEWORK
         return [
             DiagnosticCheck(
                 "wake_word_models",
                 "error",
-                "Missing openWakeWord ONNX model files for "
+                f"Missing openWakeWord {framework} model files for "
                 f"{missing_names}; run python -m src.main --prepare-wake-word",
             )
         ]
 
+    framework = settings.wake_inference_framework if settings is not None else DEFAULT_WAKE_INFERENCE_FRAMEWORK
     return [
         DiagnosticCheck(
             "wake_word_models",
             "ok",
-            "Required openWakeWord ONNX model files are present",
+            f"Required openWakeWord {framework} model files are present",
+        )
+    ]
+
+
+def _wake_runtime_dependency_checks(settings: Settings) -> list[DiagnosticCheck]:
+    if settings.wake_backend != OPENWAKEWORD_BACKEND:
+        return []
+    if settings.wake_inference_framework == "onnx":
+        if importlib.util.find_spec("onnxruntime") is None:
+            return [
+                DiagnosticCheck(
+                    "dependency:onnxruntime",
+                    "error",
+                    "onnxruntime is required only when WAKE_INFERENCE_FRAMEWORK=onnx; install it explicitly",
+                )
+            ]
+        return [DiagnosticCheck("dependency:onnxruntime", "ok", "onnxruntime is importable")]
+
+    if _has_any_module("ai_edge_litert", "tflite_runtime"):
+        return [DiagnosticCheck("dependency:litert", "ok", "LiteRT/TFLite runtime is importable")]
+    return [
+        DiagnosticCheck(
+            "dependency:litert",
+            "error",
+            "LiteRT/TFLite runtime is required for WAKE_INFERENCE_FRAMEWORK=tflite; install ai-edge-litert",
         )
     ]
 
@@ -337,11 +417,38 @@ def _bool_value(raw_env: Mapping[str, str], key: str, default: bool, errors: lis
     return default
 
 
-def _text_value(env: Mapping[str, str], name: str, default: str, errors: list[str]) -> str:
+def _has_any_module(*module_names: str) -> bool:
+    return any(importlib.util.find_spec(module_name) is not None for module_name in module_names)
+
+
+def _choice_value(
+    env: Mapping[str, str],
+    name: str,
+    default: str,
+    supported_values: Sequence[str],
+    errors: list[str],
+    *,
+    normalizer,
+) -> str:
+    raw_value = env.get(name, default)
+    try:
+        return normalizer(raw_value)
+    except ValueError:
+        errors.append(f"{name} must be one of {', '.join(supported_values)}")
+        return default
+
+
+def _text_value(env: Mapping[str, str], name: str, default: str, errors: list[str], *, normalizer=None) -> str:
     value = env.get(name, default).strip()
     if not value:
         errors.append(f"{name} must not be empty")
         return default
+    if normalizer is not None:
+        try:
+            return normalizer(value)
+        except ValueError as exc:
+            errors.append(str(exc))
+            return default
     return value
 
 

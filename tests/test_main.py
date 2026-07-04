@@ -16,6 +16,9 @@ from src.config import (
     DEFAULT_TRANSCRIBE_MODEL,
     DEFAULT_TTS_MODEL,
     DEFAULT_TTS_VOICE,
+    DEFAULT_WAKE_BACKEND,
+    DEFAULT_WAKE_INFERENCE_FRAMEWORK,
+    DEFAULT_WAKE_MODEL,
     DEFAULT_WAKE_PHRASE,
     DEFAULT_WAKE_THRESHOLD,
     Settings,
@@ -26,6 +29,9 @@ from src.main import build_parser, main, run_assistant_forever, run_wake_debug, 
 def make_settings():
     return Settings(
         openai_api_key="sk-test",
+        wake_backend=DEFAULT_WAKE_BACKEND,
+        wake_model=DEFAULT_WAKE_MODEL,
+        wake_inference_framework=DEFAULT_WAKE_INFERENCE_FRAMEWORK,
         wake_phrase=DEFAULT_WAKE_PHRASE,
         wake_threshold=DEFAULT_WAKE_THRESHOLD,
         silence_seconds=DEFAULT_SILENCE_SECONDS,
@@ -42,8 +48,10 @@ class FakeWakeWordDetector:
     frame_length = 1280
     sample_rate = DEFAULT_SAMPLE_RATE
 
-    def __init__(self, threshold, logger=None):
+    def __init__(self, threshold, model_name=None, inference_framework=None, logger=None):
         self.threshold = threshold
+        self.model_name = model_name
+        self.inference_framework = inference_framework
         self.logger = logger
 
     def preload(self):
@@ -78,6 +86,9 @@ class FakeDebugSource:
 class FakeDebugDetector:
     frame_length = 1280
     sample_rate = DEFAULT_SAMPLE_RATE
+    model_name = DEFAULT_WAKE_MODEL
+    model_key = DEFAULT_WAKE_MODEL
+    inference_framework = DEFAULT_WAKE_INFERENCE_FRAMEWORK
 
     def __init__(self, scores):
         self.scores = list(scores)
@@ -88,6 +99,9 @@ class FakeDebugDetector:
 
     def score(self, pcm_chunk):
         return self.scores.pop(0)
+
+    def loaded_model_keys(self):
+        return (self.model_key,)
 
 
 class FakeStateMachine:
@@ -148,20 +162,22 @@ class MainRuntimeTests(unittest.TestCase):
 
         lines = output.getvalue().splitlines()
         self.assertEqual(result, 0)
-        self.assertEqual(len(lines), 3)
+        self.assertEqual(len(lines), 4)
         self.assertTrue(detector.preloaded)
-        self.assertIn("wake_debug frame=1", lines[0])
-        self.assertIn("rms=100.0", lines[0])
-        self.assertIn("peak=100", lines[0])
-        self.assertIn("overflow=true", lines[0])
-        self.assertIn("score=0.100000000", lines[0])
-        self.assertIn("threshold=0.500000000", lines[0])
-        self.assertIn("detected=false", lines[0])
-        self.assertIn("score=0.900000000", lines[1])
-        self.assertIn("detected=true", lines[1])
+        self.assertEqual(lines[0], "wake_debug metadata model=alexa framework=tflite loaded_models=alexa")
+        self.assertIn("wake_debug frame=1", lines[1])
+        self.assertIn("rms=100.0", lines[1])
+        self.assertIn("peak=100", lines[1])
+        self.assertIn("overflow=true", lines[1])
+        self.assertIn("score=0.100000000", lines[1])
+        self.assertIn("threshold=0.500000000", lines[1])
+        self.assertIn("detected=false", lines[1])
+        self.assertIn("score=0.900000000", lines[2])
+        self.assertIn("detected=true", lines[2])
         self.assertEqual(
-            lines[2],
-            "wake_debug summary frames=2 max_score=0.900000000 threshold=0.500000000 detected_frames=1",
+            lines[3],
+            "wake_debug summary frames=2 max_score=0.900000000 "
+            "max_scores={alexa:0.900000000} threshold=0.500000000 detected_frames=1",
         )
 
     def test_live_wake_debug_writes_requested_wav_with_scored_chunks(self):
@@ -188,10 +204,11 @@ class MainRuntimeTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         lines = output.getvalue().splitlines()
-        self.assertIn("score=0.000000123", lines[0])
+        self.assertIn("score=0.000000123", lines[1])
         self.assertEqual(
             lines[-1],
-            "wake_debug summary frames=2 max_score=0.810000000 threshold=0.500000000 detected_frames=1",
+            "wake_debug summary frames=2 max_score=0.810000000 "
+            "max_scores={alexa:0.810000000} threshold=0.500000000 detected_frames=1",
         )
 
     def test_wake_debug_output_requires_live_debug_mode(self):
@@ -219,14 +236,16 @@ class MainRuntimeTests(unittest.TestCase):
 
         lines = output.getvalue().splitlines()
         self.assertEqual(result, 0)
-        self.assertIn("wake_file frame=1", lines[0])
-        self.assertIn("rms=353.6", lines[0])
-        self.assertIn("peak=500", lines[0])
-        self.assertIn("overflow=false", lines[0])
-        self.assertIn("score=0.450000000", lines[0])
+        self.assertEqual(lines[0], "wake_file metadata model=alexa framework=tflite loaded_models=alexa")
+        self.assertIn("wake_file frame=1", lines[1])
+        self.assertIn("rms=353.6", lines[1])
+        self.assertIn("peak=500", lines[1])
+        self.assertIn("overflow=false", lines[1])
+        self.assertIn("score=0.450000000", lines[1])
         self.assertEqual(
-            lines[1],
-            "wake_file summary frames=1 max_score=0.450000000 threshold=0.500000000 detected_frames=0",
+            lines[2],
+            "wake_file summary frames=1 max_score=0.450000000 "
+            "max_scores={alexa:0.450000000} threshold=0.500000000 detected_frames=0",
         )
 
     def test_wake_file_debug_scores_short_final_chunk(self):
@@ -250,13 +269,15 @@ class MainRuntimeTests(unittest.TestCase):
 
         lines = output.getvalue().splitlines()
         self.assertEqual(result, 0)
-        self.assertEqual(len(lines), 3)
-        self.assertIn("wake_file frame=2", lines[1])
-        self.assertIn("peak=777", lines[1])
-        self.assertIn("score=0.000001234", lines[1])
+        self.assertEqual(len(lines), 4)
+        self.assertEqual(lines[0], "wake_file metadata model=alexa framework=tflite loaded_models=alexa")
+        self.assertIn("wake_file frame=2", lines[2])
+        self.assertIn("peak=777", lines[2])
+        self.assertIn("score=0.000001234", lines[2])
         self.assertEqual(
-            lines[2],
-            "wake_file summary frames=2 max_score=0.000001234 threshold=0.500000000 detected_frames=0",
+            lines[3],
+            "wake_file summary frames=2 max_score=0.000001234 "
+            "max_scores={alexa:0.000001234} threshold=0.500000000 detected_frames=0",
         )
 
 

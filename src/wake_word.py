@@ -4,22 +4,31 @@ from __future__ import annotations
 
 import logging
 import math
+import platform
 from pathlib import Path
 import struct
+import sys
+import types
 from typing import Any, Callable, Mapping, Protocol
 from urllib.request import urlretrieve
 
 
+OPENWAKEWORD_BACKEND = "openwakeword"
 OPENWAKEWORD_MODEL_NAME = "alexa"
 OPENWAKEWORD_MODEL_KEY = "alexa"
-OPENWAKEWORD_INFERENCE_FRAMEWORK = "onnx"
+OPENWAKEWORD_INFERENCE_FRAMEWORK = "tflite"
+SUPPORTED_WAKE_BACKENDS = (OPENWAKEWORD_BACKEND,)
+SUPPORTED_OPENWAKEWORD_INFERENCE_FRAMEWORKS = ("tflite", "onnx")
 OPENWAKEWORD_FRAME_SAMPLES = 1280
 OPENWAKEWORD_SAMPLE_RATE = 16000
-OPENWAKEWORD_SCORE_KEYS = (OPENWAKEWORD_MODEL_KEY, OPENWAKEWORD_MODEL_NAME)
 PREPARE_WAKE_WORD_COMMAND = "python -m src.main --prepare-wake-word"
 WAKEWORD_RECOVERY_GUIDANCE = (
     "Install requirements.txt, then run "
     f"`{PREPARE_WAKE_WORD_COMMAND}` before real wake-word detection."
+)
+MACOS_ARM64_ONNX_ERROR = (
+    "WAKE_INFERENCE_FRAMEWORK=onnx is disabled on macOS ARM64 because openWakeWord ONNX "
+    "has produced near-zero Alexa scores on Apple Silicon; use WAKE_INFERENCE_FRAMEWORK=tflite."
 )
 
 
@@ -42,6 +51,8 @@ class WakeWordDetector:
         self,
         threshold: float,
         *,
+        model_name: str = OPENWAKEWORD_MODEL_NAME,
+        inference_framework: str = OPENWAKEWORD_INFERENCE_FRAMEWORK,
         model: WakeWordModel | None = None,
         model_factory: Callable[[], WakeWordModel] | None = None,
         logger: logging.Logger | None = None,
@@ -50,9 +61,19 @@ class WakeWordDetector:
             raise ValueError("threshold must be between 0.0 and 1.0")
 
         self.threshold = threshold
+        self.model_name = normalize_wake_model(model_name)
+        self.model_key = wake_model_key(self.model_name)
+        self.inference_framework = normalize_inference_framework(inference_framework)
+        reject_macos_arm64_onnx(self.inference_framework)
         self._model = model
-        self._model_factory = model_factory or _load_openwakeword_model
+        self._model_factory = model_factory or (
+            lambda: _load_openwakeword_model(
+                model_name=self.model_name,
+                inference_framework=self.inference_framework,
+            )
+        )
         self._logger = logger or logging.getLogger(__name__)
+        self._last_scores: dict[str, float] = {}
 
     def detect(self, pcm_chunk: bytes) -> bool:
         """Return true when the Alexa score crosses the configured threshold."""
@@ -70,12 +91,19 @@ class WakeWordDetector:
 
         try:
             predictions = model.predict(frame)
-            score = _alexa_score(predictions)
+            self._last_scores = _float_scores(predictions)
+            score = score_from_predictions(self._last_scores, model_key=self.model_key, model_name=self.model_name)
         except Exception as exc:
-            self._logger.error("Wake-word inference failed for the Alexa model: %s", exc)
+            self._logger.error("Wake-word inference failed for the %s model: %s", self.model_name, exc)
             raise WakeWordError(f"Wake-word inference failed: {exc}") from exc
 
         return score
+
+    def score_details(self, pcm_chunk: bytes) -> Mapping[str, float]:
+        """Return all model prediction scores for one int16 PCM chunk."""
+
+        self.score(pcm_chunk)
+        return dict(self._last_scores)
 
     def preload(self) -> None:
         """Load and warm the wake-word model before microphone capture starts."""
@@ -84,11 +112,20 @@ class WakeWordDetector:
         try:
             model.predict(_silent_model_frame())
         except Exception as exc:
-            self._logger.error("Wake-word model warmup failed for the Alexa model: %s", exc)
+            self._logger.error("Wake-word model warmup failed for the %s model: %s", self.model_name, exc)
             raise WakeWordError(f"Wake-word model warmup failed: {exc}") from exc
 
     def close(self) -> None:
         """Keep a common detector cleanup hook for callers that support it."""
+
+    def loaded_model_keys(self) -> tuple[str, ...]:
+        """Return loaded openWakeWord model keys when the underlying model exposes them."""
+
+        model = self._get_model()
+        models = getattr(model, "models", None)
+        if isinstance(models, Mapping):
+            return tuple(str(key) for key in models.keys())
+        return ()
 
     def _get_model(self) -> WakeWordModel:
         if self._model is not None:
@@ -97,69 +134,106 @@ class WakeWordDetector:
         try:
             model = self._model_factory()
         except Exception as exc:
-            self._logger.error("Unable to load the openWakeWord Alexa model. %s", WAKEWORD_RECOVERY_GUIDANCE)
+            self._logger.error(
+                "Unable to load the openWakeWord %s model with %s inference. %s",
+                self.model_name,
+                self.inference_framework,
+                WAKEWORD_RECOVERY_GUIDANCE,
+            )
             raise WakeWordError(f"Unable to load wake-word model: {exc}") from exc
 
         if model is None:
-            self._logger.error("Unable to load the openWakeWord Alexa model. Model factory returned None.")
+            self._logger.error("Unable to load the openWakeWord %s model. Model factory returned None.", self.model_name)
             raise WakeWordError("Unable to load wake-word model: model factory returned None")
 
         self._model = model
         return model
 
 
-def _load_openwakeword_model() -> WakeWordModel:
+def _load_openwakeword_model(
+    *,
+    model_name: str = OPENWAKEWORD_MODEL_NAME,
+    inference_framework: str = OPENWAKEWORD_INFERENCE_FRAMEWORK,
+) -> WakeWordModel:
+    inference_framework = normalize_inference_framework(inference_framework)
+    reject_macos_arm64_onnx(inference_framework)
+    if inference_framework == "tflite":
+        _install_litert_compat_alias()
+
     from openwakeword.model import Model
 
     return Model(
-        wakeword_models=[OPENWAKEWORD_MODEL_NAME],
-        inference_framework=OPENWAKEWORD_INFERENCE_FRAMEWORK,
+        wakeword_models=[normalize_wake_model(model_name)],
+        inference_framework=inference_framework,
     )
 
 
-def required_wake_word_model_paths() -> Mapping[str, Path]:
-    """Return the ONNX model files required by the built-in Alexa path."""
+def required_wake_word_model_paths(
+    *,
+    model_name: str = OPENWAKEWORD_MODEL_NAME,
+    inference_framework: str = OPENWAKEWORD_INFERENCE_FRAMEWORK,
+) -> Mapping[str, Path]:
+    """Return the model files required by the configured openWakeWord path."""
 
     import openwakeword
 
+    model_key = wake_model_key(model_name)
+    suffix = _framework_suffix(inference_framework)
     paths: dict[str, Path] = {}
     for name, metadata in openwakeword.FEATURE_MODELS.items():
-        paths[name] = _onnx_path(metadata["model_path"])
-    paths[OPENWAKEWORD_MODEL_KEY] = _onnx_path(openwakeword.MODELS[OPENWAKEWORD_MODEL_KEY]["model_path"])
+        paths[name] = _model_asset_path(metadata["model_path"], suffix=suffix)
+    paths[model_key] = _model_asset_path(openwakeword.MODELS[model_key]["model_path"], suffix=suffix)
     return paths
 
 
-def missing_wake_word_model_paths() -> Mapping[str, Path]:
-    """Return required wake-word ONNX model paths that are not present."""
+def missing_wake_word_model_paths(
+    *,
+    model_name: str = OPENWAKEWORD_MODEL_NAME,
+    inference_framework: str = OPENWAKEWORD_INFERENCE_FRAMEWORK,
+) -> Mapping[str, Path]:
+    """Return required wake-word model paths that are not present."""
 
     return {
         name: path
-        for name, path in required_wake_word_model_paths().items()
+        for name, path in required_wake_word_model_paths(
+            model_name=model_name,
+            inference_framework=inference_framework,
+        ).items()
         if not path.is_file()
     }
 
 
-def prepare_wake_word_models(logger: logging.Logger | None = None) -> Mapping[str, Path]:
-    """Download the ONNX model assets required for the Alexa wake word."""
+def prepare_wake_word_models(
+    *,
+    model_name: str = OPENWAKEWORD_MODEL_NAME,
+    inference_framework: str = OPENWAKEWORD_INFERENCE_FRAMEWORK,
+    logger: logging.Logger | None = None,
+) -> Mapping[str, Path]:
+    """Download the model assets required for the configured wake word."""
 
     import openwakeword
 
     log = logger or logging.getLogger(__name__)
+    model_key = wake_model_key(model_name)
+    suffix = _framework_suffix(inference_framework)
     downloads: dict[str, tuple[str, Path]] = {}
     for name, metadata in openwakeword.FEATURE_MODELS.items():
-        downloads[name] = (_onnx_url(metadata["download_url"]), _onnx_path(metadata["model_path"]))
-    downloads[OPENWAKEWORD_MODEL_KEY] = (
-        _onnx_url(openwakeword.MODELS[OPENWAKEWORD_MODEL_KEY]["download_url"]),
-        _onnx_path(openwakeword.MODELS[OPENWAKEWORD_MODEL_KEY]["model_path"]),
+        downloads[name] = (
+            _model_asset_url(metadata["download_url"], suffix=suffix),
+            _model_asset_path(metadata["model_path"], suffix=suffix),
+        )
+    downloads[model_key] = (
+        _model_asset_url(openwakeword.MODELS[model_key]["download_url"], suffix=suffix),
+        _model_asset_path(openwakeword.MODELS[model_key]["model_path"], suffix=suffix),
     )
 
     prepared: dict[str, Path] = {}
     for name, (url, path) in downloads.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.is_file():
-            log.info("Wake-word ONNX model already present: %s", path)
+            log.info("Wake-word %s model already present: %s", inference_framework, path)
         else:
-            log.info("Downloading wake-word ONNX model %s", path.name)
+            log.info("Downloading wake-word %s model %s", inference_framework, path.name)
             urlretrieve(url, path)
         prepared[name] = path
     return prepared
@@ -176,12 +250,74 @@ def pad_pcm_chunk(pcm_chunk: bytes, *, frame_length: int = OPENWAKEWORD_FRAME_SA
     return pcm_chunk + (b"\x00" * (frame_bytes - len(pcm_chunk)))
 
 
-def _onnx_path(path: str | Path) -> Path:
-    return Path(str(path).replace(".tflite", ".onnx"))
+def normalize_wake_backend(value: str) -> str:
+    backend = value.strip().lower()
+    if backend not in SUPPORTED_WAKE_BACKENDS:
+        raise ValueError(f"unsupported wake backend {value!r}; supported values: {', '.join(SUPPORTED_WAKE_BACKENDS)}")
+    return backend
 
 
-def _onnx_url(url: str) -> str:
-    return url.replace(".tflite", ".onnx")
+def normalize_wake_model(value: str) -> str:
+    model_name = value.strip().lower().replace(" ", "_")
+    if not model_name:
+        raise ValueError("wake model must not be empty")
+    return model_name
+
+
+def wake_model_key(model_name: str) -> str:
+    return normalize_wake_model(model_name)
+
+
+def normalize_inference_framework(value: str) -> str:
+    framework = value.strip().lower()
+    if framework not in SUPPORTED_OPENWAKEWORD_INFERENCE_FRAMEWORKS:
+        supported = ", ".join(SUPPORTED_OPENWAKEWORD_INFERENCE_FRAMEWORKS)
+        raise ValueError(f"unsupported wake inference framework {value!r}; supported values: {supported}")
+    return framework
+
+
+def reject_macos_arm64_onnx(inference_framework: str) -> None:
+    if normalize_inference_framework(inference_framework) == "onnx" and is_macos_arm64():
+        raise WakeWordError(MACOS_ARM64_ONNX_ERROR)
+
+
+def is_macos_arm64() -> bool:
+    return platform.system() == "Darwin" and platform.machine().lower() in {"arm64", "aarch64"}
+
+
+def _framework_suffix(inference_framework: str) -> str:
+    return "." + normalize_inference_framework(inference_framework)
+
+
+def _model_asset_path(path: str | Path, *, suffix: str) -> Path:
+    return Path(str(path)).with_suffix(suffix)
+
+
+def _model_asset_url(url: str, *, suffix: str) -> str:
+    if url.endswith(".tflite") or url.endswith(".onnx"):
+        return url.rsplit(".", 1)[0] + suffix
+    return url
+
+
+def _install_litert_compat_alias() -> None:
+    if "tflite_runtime.interpreter" in sys.modules:
+        return
+    try:
+        import tflite_runtime.interpreter  # noqa: F401
+
+        return
+    except ImportError:
+        pass
+
+    try:
+        import ai_edge_litert.interpreter as interpreter
+    except ImportError:
+        return
+
+    package = types.ModuleType("tflite_runtime")
+    package.interpreter = interpreter
+    sys.modules.setdefault("tflite_runtime", package)
+    sys.modules.setdefault("tflite_runtime.interpreter", interpreter)
 
 
 def _pcm_bytes_to_model_frame(pcm_chunk: bytes) -> Any:
@@ -212,8 +348,18 @@ def _silent_model_frame() -> Any:
     return _pcm_bytes_to_model_frame(pcm_chunk)
 
 
-def _alexa_score(predictions: Mapping[str, float]) -> float:
-    for key in OPENWAKEWORD_SCORE_KEYS:
+def _float_scores(predictions: Mapping[str, float]) -> dict[str, float]:
+    return {str(key): float(value) for key, value in predictions.items()}
+
+
+def score_from_predictions(
+    predictions: Mapping[str, float],
+    *,
+    model_key: str = OPENWAKEWORD_MODEL_KEY,
+    model_name: str = OPENWAKEWORD_MODEL_NAME,
+) -> float:
+    score_keys = (wake_model_key(model_key), normalize_wake_model(model_name), model_name)
+    for key in score_keys:
         if key in predictions:
             return float(predictions[key])
 
@@ -221,4 +367,4 @@ def _alexa_score(predictions: Mapping[str, float]) -> float:
         return float(next(iter(predictions.values())))
 
     keys = ", ".join(sorted(str(key) for key in predictions))
-    raise KeyError(f"Alexa score missing from wake-word predictions: {keys}")
+    raise KeyError(f"{model_name} score missing from wake-word predictions: {keys}")

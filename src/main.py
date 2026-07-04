@@ -35,12 +35,18 @@ class WakeDebugSummary:
     max_score: float = 0.0
     detected_frame_count: int = 0
     interrupted: bool = False
+    max_scores_by_key: dict[str, float] | None = None
 
-    def add(self, score: float, threshold: float) -> None:
+    def add(self, score: float, threshold: float, scores_by_key: dict[str, float] | None = None) -> None:
         self.frame_count += 1
         self.max_score = max(self.max_score, score)
         if score >= threshold:
             self.detected_frame_count += 1
+        if scores_by_key:
+            if self.max_scores_by_key is None:
+                self.max_scores_by_key = {}
+            for key, value in scores_by_key.items():
+                self.max_scores_by_key[key] = max(self.max_scores_by_key.get(key, 0.0), value)
 
 
 def run_dry_run() -> int:
@@ -74,11 +80,16 @@ def run_fake_backend_smoke() -> int:
 
 
 def run_prepare_wake_word() -> int:
-    """Download the ONNX model files required for real wake-word detection."""
+    """Download the model files required for real wake-word detection."""
 
     logger = logging.getLogger(LOGGER_NAME)
-    prepared = prepare_wake_word_models(logger=logger)
-    print("Prepared wake-word ONNX models:")
+    settings = load_settings()
+    prepared = prepare_wake_word_models(
+        model_name=settings.wake_model,
+        inference_framework=settings.wake_inference_framework,
+        logger=logger,
+    )
+    print(f"Prepared wake-word {settings.wake_inference_framework} models:")
     for name, path in sorted(prepared.items()):
         print(f"- {name}: {path}")
     return 0
@@ -97,7 +108,7 @@ def run_wake_debug(
 
     logger = logging.getLogger(LOGGER_NAME)
     resolved_settings = settings or load_settings()
-    detector = wake_detector or WakeWordDetector(resolved_settings.wake_threshold, logger=logger)
+    detector = wake_detector or _build_wake_detector(resolved_settings, logger=logger)
     if hasattr(detector, "preload"):
         logger.info("Preparing Alexa wake-word detector")
         detector.preload()
@@ -141,7 +152,7 @@ def run_wake_file_debug(
 
     logger = logging.getLogger(LOGGER_NAME)
     resolved_settings = settings or load_settings()
-    detector = wake_detector or WakeWordDetector(resolved_settings.wake_threshold, logger=logger)
+    detector = wake_detector or _build_wake_detector(resolved_settings, logger=logger)
     if hasattr(detector, "preload"):
         logger.info("Preparing Alexa wake-word detector")
         detector.preload()
@@ -149,6 +160,10 @@ def run_wake_file_debug(
 
     summary = WakeDebugSummary()
     target = output or None
+    print(
+        _format_wake_debug_metadata("wake_file", resolved_settings, detector),
+        file=target,
+    )
     with wave.open(str(wav_path), "rb") as wav_file:
         if wav_file.getnchannels() != 1:
             raise ValueError("wake-file debug requires a mono WAV file")
@@ -159,8 +174,9 @@ def run_wake_file_debug(
             chunk = wav_file.readframes(_detector_frame_length(detector))
             if not chunk:
                 break
-            score = _wake_score(detector, pad_pcm_chunk(chunk, frame_length=_detector_frame_length(detector)))
-            summary.add(score, resolved_settings.wake_threshold)
+            scores_by_key = _wake_scores(detector, pad_pcm_chunk(chunk, frame_length=_detector_frame_length(detector)))
+            score = _selected_wake_score(detector, scores_by_key)
+            summary.add(score, resolved_settings.wake_threshold, scores_by_key)
             print(
                 _format_wake_debug_line(
                     mode="wake_file",
@@ -188,7 +204,7 @@ def run_assistant_forever() -> int:
     logger.info("Say %s, ask a question, and wait for playback", settings.wake_phrase)
     wake_detector: object | None = None
     try:
-        wake_detector = WakeWordDetector(settings.wake_threshold, logger=logger)
+        wake_detector = _build_wake_detector(settings, logger=logger)
         logger.info("Preparing Alexa wake-word detector")
         wake_detector.preload()
         logger.info("Alexa wake-word detector ready")
@@ -239,7 +255,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--prepare-wake-word",
         action="store_true",
-        help="download the ONNX wake-word models required by the real assistant",
+        help="download the configured wake-word models required by the real assistant",
     )
     mode.add_argument(
         "--wake-debug",
@@ -368,12 +384,14 @@ def _print_live_wake_debug(
     summary = WakeDebugSummary()
     wav_file: wave.Wave_write | None = None
     try:
+        print(_format_wake_debug_metadata("wake_debug", settings, detector), file=output)
         if debug_output_path is not None:
             wav_file = _open_debug_output_wav(debug_output_path, settings.sample_rate)
         while max_frames is None or summary.frame_count < max_frames:
             chunk = audio_source.read_chunk()
-            score = _wake_score(detector, chunk)
-            summary.add(score, settings.wake_threshold)
+            scores_by_key = _wake_scores(detector, chunk)
+            score = _selected_wake_score(detector, scores_by_key)
+            summary.add(score, settings.wake_threshold, scores_by_key)
             print(
                 _format_wake_debug_line(
                     mode="wake_debug",
@@ -425,23 +443,78 @@ def _format_wake_debug_line(
 
 
 def _format_wake_debug_summary(mode: str, summary: WakeDebugSummary, threshold: float) -> str:
+    max_scores = _format_score_map(summary.max_scores_by_key or {})
     return (
         f"{mode} summary frames={summary.frame_count} "
         f"max_score={summary.max_score:.{WAKE_SCORE_PRECISION}f} "
+        f"max_scores={max_scores} "
         f"threshold={threshold:.{WAKE_SCORE_PRECISION}f} "
         f"detected_frames={summary.detected_frame_count}"
     )
 
 
+def _format_wake_debug_metadata(mode: str, settings: Settings, detector: object) -> str:
+    loaded_model_keys = _loaded_model_keys(detector)
+    return (
+        f"{mode} metadata model={settings.wake_model} "
+        f"framework={settings.wake_inference_framework} "
+        f"loaded_models={','.join(loaded_model_keys) if loaded_model_keys else 'unknown'}"
+    )
+
+
 def _wake_score(detector: object, pcm_chunk: bytes) -> float:
+    return _selected_wake_score(detector, _wake_scores(detector, pcm_chunk))
+
+
+def _wake_scores(detector: object, pcm_chunk: bytes) -> dict[str, float]:
+    score_details = getattr(detector, "score_details", None)
+    if score_details is not None:
+        return {str(key): float(value) for key, value in score_details(pcm_chunk).items()}
+
     score_method = getattr(detector, "score", None)
     if score_method is not None:
-        return float(score_method(pcm_chunk))
-    return 1.0 if detector.detect(pcm_chunk) else 0.0
+        model_key = str(getattr(detector, "model_key", getattr(detector, "model_name", "score")))
+        return {model_key: float(score_method(pcm_chunk))}
+    model_key = str(getattr(detector, "model_key", getattr(detector, "model_name", "detected")))
+    return {model_key: 1.0 if detector.detect(pcm_chunk) else 0.0}
+
+
+def _selected_wake_score(detector: object, scores: dict[str, float]) -> float:
+    for key in (
+        str(getattr(detector, "model_key", "")),
+        str(getattr(detector, "model_name", "")),
+    ):
+        if key and key in scores:
+            return scores[key]
+    if len(scores) == 1:
+        return next(iter(scores.values()))
+    return max(scores.values(), default=0.0)
+
+
+def _format_score_map(scores: dict[str, float]) -> str:
+    if not scores:
+        return "{}"
+    return "{" + ",".join(f"{key}:{value:.{WAKE_SCORE_PRECISION}f}" for key, value in sorted(scores.items())) + "}"
+
+
+def _loaded_model_keys(detector: object) -> tuple[str, ...]:
+    loaded_model_keys = getattr(detector, "loaded_model_keys", None)
+    if loaded_model_keys is not None:
+        return tuple(str(key) for key in loaded_model_keys())
+    return ()
 
 
 def _detector_frame_length(detector: object) -> int:
     return int(getattr(detector, "frame_length", OPENWAKEWORD_FRAME_SAMPLES))
+
+
+def _build_wake_detector(settings: Settings, *, logger: logging.Logger) -> WakeWordDetector:
+    return WakeWordDetector(
+        settings.wake_threshold,
+        model_name=settings.wake_model,
+        inference_framework=settings.wake_inference_framework,
+        logger=logger,
+    )
 
 
 def _bool_text(value: bool) -> str:

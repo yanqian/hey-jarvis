@@ -40,11 +40,13 @@ OPENAI_API_KEY=sk-...
 The real assistant requires the packages in `requirements.txt`, an
 `OPENAI_API_KEY`, macOS microphone permission, and macOS `afplay` playback.
 The runtime dependency set is `sounddevice`, `numpy`, `scipy`, `openai`,
-`openwakeword`, `onnxruntime`, and `python-dotenv`.
+`openwakeword`, `ai-edge-litert`, and `python-dotenv`.
 
-Wake-word detection uses the openWakeWord Alexa ONNX model through
-`onnxruntime`. The model files are prepared explicitly so setup failures are
-visible before microphone capture starts:
+Wake-word detection uses the openWakeWord Alexa TFLite model through LiteRT.
+The default `.env` settings are `WAKE_BACKEND=openwakeword`,
+`WAKE_MODEL=alexa`, `WAKE_INFERENCE_FRAMEWORK=tflite`, and
+`WAKE_THRESHOLD=0.5`. The model files are prepared explicitly so setup failures
+are visible before microphone capture starts:
 
 ```bash
 python -m src.main --prepare-wake-word
@@ -129,6 +131,9 @@ Set `OPENAI_API_KEY` in `.env` before running any real transcription, chat, or s
 
 ```text
 WAKE_PHRASE=alexa
+WAKE_BACKEND=openwakeword
+WAKE_MODEL=alexa
+WAKE_INFERENCE_FRAMEWORK=tflite
 WAKE_THRESHOLD=0.5
 SILENCE_SECONDS=1.5
 MAX_RECORD_SECONDS=20
@@ -146,10 +151,12 @@ The automated recovery check uses fakes and dry-run paths, so it does not make l
 
 Use `python -m src.main --wake-debug` when the assistant remains in `WAIT_WAKE`
 and you need to see live microphone levels and wake-word scores without making
-OpenAI requests or playing audio. Each line includes `rms`, `peak`, `overflow`,
-`score`, `threshold`, and `detected`. Scores are printed with enough precision
-to tell true zeros from tiny non-zero model outputs, followed by a summary with
-the frame count, maximum observed score, threshold, and detected frame count.
+OpenAI requests or playing audio. Debug output includes the requested wake
+model, selected inference framework, loaded model keys, `rms`, `peak`,
+`overflow`, `score`, `threshold`, and `detected`. Scores are printed with enough
+precision to tell true zeros from tiny non-zero model outputs, followed by a
+summary with the frame count, maximum observed score, per-key maximum scores,
+threshold, and detected frame count.
 
 Use an explicit output file when you need a reproducible record-and-replay
 workflow:
@@ -168,6 +175,16 @@ clip without microphone access. The file must be mono 16-bit PCM. Short final
 chunks are scored and included in the summary instead of being silently ignored.
 This is useful when you want to compare a recorded phrase against the configured
 `WAKE_THRESHOLD`.
+
+For lower-level openWakeWord comparison, `scripts/debug_oww_file.py` accepts an
+optional wake model and inference framework:
+
+```bash
+python scripts/debug_oww_file.py tmp/wake-debug.wav alexa tflite
+```
+
+The script prints the requested model, selected inference framework, loaded
+model keys, and per-key maximum scores.
 
 Set `WAKE_DEBUG=1` in `.env` to log the same wake-word score fields during
 normal `WAIT_WAKE` listening.
@@ -194,8 +211,15 @@ Common outcomes:
   requirements.txt`.
 - `wake_word_models` reports missing files: activate `.venv` and run `python -m
   src.main --prepare-wake-word`, then run `python -m src.main --diagnose` again.
-- `onnxruntime is not importable`: activate `.venv` and run `pip install -r
-  requirements.txt`; the MVP wake-word path uses ONNX models.
+- `LiteRT/TFLite runtime is not importable`: activate `.venv` and run `pip
+  install -r requirements.txt`; the MVP wake-word path uses TFLite models.
+- `WAKE_INFERENCE_FRAMEWORK=onnx` on macOS ARM64: use
+  `WAKE_INFERENCE_FRAMEWORK=tflite`. Local debugging and upstream issue evidence
+  showed near-zero openWakeWord Alexa scores with ONNX on Apple Silicon while
+  TFLite produced usable scores.
+- `onnxruntime is not importable`: this only applies if you explicitly choose
+  `WAKE_INFERENCE_FRAMEWORK=onnx`; install `onnxruntime` separately and do not
+  use ONNX on macOS ARM64.
 - Microphone capture fails or records silence: confirm the launching terminal has
   macOS microphone permission, then restart that terminal.
 - Microphone input overflows while the app is in `WAIT_WAKE`: the wake-word

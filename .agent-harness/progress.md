@@ -34,9 +34,11 @@ F013 has been completed through the orchestrator entrypoint, with Coding Agent i
 
 F014 has been completed through the orchestrator entrypoint, with Coding Agent implementation and Evaluator Agent approval recorded. The active wake-word runtime has been restored to the previously accepted F012 Alexa/openWakeWord ONNX path after the user reported they cannot obtain a Picovoice AccessKey. The restored path includes ONNX model preparation, diagnostics, documentation, 1280-frame wake debug/replay behavior, and focused regression tests. This is a usability rollback that removes the Picovoice account capability gap from the active path; it does not fix the known Alexa low-score recognition behavior. Durable evaluator evidence is recorded in `runs/F014-evaluation.md`.
 
+F015 has been completed through the orchestrator entrypoint, with Coding Agent implementation and Evaluator Agent approval recorded. The active Alexa/openWakeWord path now defaults to configurable TFLite inference with `WAKE_BACKEND=openwakeword`, `WAKE_MODEL=alexa`, `WAKE_INFERENCE_FRAMEWORK=tflite`, and `WAKE_THRESHOLD=0.5`; detector construction, model preparation, diagnostics, live/file wake debug output, `scripts/debug_oww_file.py`, README, `.env.example`, requirements, and focused tests are framework-aware. The implementation adds a macOS ARM64 guard that rejects explicit ONNX selection with guidance to use TFLite, and records durable TFLite runtime capability through `ai-edge-litert` requirements and diagnostics. Durable evaluator evidence is recorded in `runs/F015-evaluation.md`.
+
 ## Last Completed Feature
 
-F014 - Restore Alexa wake-word runtime.
+F015 - Switch Alexa openWakeWord runtime to TFLite.
 
 ## Next Feature
 
@@ -61,3 +63,5 @@ None currently selected.
 - F012 was completed through the orchestrator entrypoint after waiting for the Coding Agent adapter to return. Implementation evidence is in `runs/F012-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F012` in `runs/F012-evaluation.md`.
 - F013 replaced openWakeWord with Picovoice Porcupine because manual tests of both Hey Jarvis and Alexa did not produce a usable wake event. Porcupine introduces a new required user capability: `PICOVOICE_ACCESS_KEY` from Picovoice Console. Implementation evidence is in `runs/F013-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F013` in `runs/F013-evaluation.md`.
 - F014 was completed through the orchestrator entrypoint because `PICOVOICE_ACCESS_KEY` is not currently obtainable by the user. The Porcupine account requirement is recorded as a capability gap in the abandoned Porcupine direction; F014 resolves it for the active MVP path by restoring Alexa/openWakeWord setup through durable requirements, diagnostics, documentation, and tests. Implementation evidence is in `runs/F014-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F014` in `runs/F014-evaluation.md`.
+- F015 has been planned after local debug notes and upstream issue evidence showed openWakeWord ONNX produces near-zero Alexa scores on macOS ARM64 while TFLite produces usable scores. Planning intentionally keeps configuration, detector construction, preparation, diagnostics, debug observability, documentation, and tests in one feature so the active wake-word runtime cannot become half-TFLite and half-ONNX.
+- F015 was completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap. Implementation evidence is in `runs/F015-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F015` in `runs/F015-evaluation.md`.

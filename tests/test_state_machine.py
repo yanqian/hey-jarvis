@@ -12,6 +12,9 @@ from src.config import (
     DEFAULT_TRANSCRIBE_MODEL,
     DEFAULT_TTS_MODEL,
     DEFAULT_TTS_VOICE,
+    DEFAULT_WAKE_BACKEND,
+    DEFAULT_WAKE_INFERENCE_FRAMEWORK,
+    DEFAULT_WAKE_MODEL,
     DEFAULT_WAKE_PHRASE,
     DEFAULT_WAKE_THRESHOLD,
     Settings,
@@ -23,6 +26,9 @@ from src.state_machine import AssistantState, VoiceAssistantStateMachine
 def make_settings(*, wake_debug=False):
     return Settings(
         openai_api_key="sk-test",
+        wake_backend=DEFAULT_WAKE_BACKEND,
+        wake_model=DEFAULT_WAKE_MODEL,
+        wake_inference_framework=DEFAULT_WAKE_INFERENCE_FRAMEWORK,
         wake_phrase=DEFAULT_WAKE_PHRASE,
         wake_threshold=DEFAULT_WAKE_THRESHOLD,
         silence_seconds=DEFAULT_SILENCE_SECONDS,

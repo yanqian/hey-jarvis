@@ -284,6 +284,27 @@
       "depends_on": [
         "F013"
       ]
+    },
+    {
+      "id": "F015",
+      "title": "Switch Alexa openWakeWord runtime to TFLite",
+      "description": "Switch the active Alexa/openWakeWord wake-word path from ONNX to configurable TFLite inference on macOS, with framework-aware configuration, preparation, diagnostics, debug output, and a macOS ARM64 guard against silently using the known-broken ONNX path.",
+      "acceptance": [
+        "Configuration loads and documents WAKE_BACKEND=openwakeword, WAKE_MODEL=alexa, WAKE_INFERENCE_FRAMEWORK=tflite, and WAKE_THRESHOLD=0.5, with validation for supported wake backends and inference frameworks.",
+        "WakeWordDetector receives the configured model name, threshold, and inference framework, passes inference_framework through to openwakeword.model.Model, extracts scores from the configured model key or a safe fallback, and defaults to Alexa/TFLite for the active path.",
+        "Wake-word preparation and diagnostics are framework-aware: TFLite checks and prepares .tflite assets and TFLite runtime capability, while ONNX remains explicit and is not used by default.",
+        "Live/file wake debug and scripts/debug_oww_file.py print the requested model, selected inference framework, loaded model keys, and per-key maximum scores so ONNX and TFLite runs cannot be confused.",
+        "On macOS ARM64, selecting WAKE_INFERENCE_FRAMEWORK=onnx fails fast with an actionable error explaining the known near-zero openWakeWord ONNX scores and instructing the user to use TFLite.",
+        "README, .env.example, requirements, and focused tests cover the TFLite default, macOS ARM64 ONNX guard, framework-specific preparation/diagnostics, debug output metadata, and recovery checks without real microphone access or live model downloads."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F014"
+      ]
     }
   ]
 }
