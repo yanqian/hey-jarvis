@@ -10,11 +10,12 @@ from typing import Any, Callable, Mapping, Protocol
 from urllib.request import urlretrieve
 
 
-OPENWAKEWORD_MODEL_NAME = "hey jarvis"
-OPENWAKEWORD_MODEL_KEY = "hey_jarvis"
+OPENWAKEWORD_MODEL_NAME = "alexa"
+OPENWAKEWORD_MODEL_KEY = "alexa"
 OPENWAKEWORD_INFERENCE_FRAMEWORK = "onnx"
 OPENWAKEWORD_FRAME_SAMPLES = 1280
-OPENWAKEWORD_SCORE_KEYS = (OPENWAKEWORD_MODEL_NAME, "hey_jarvis")
+OPENWAKEWORD_SAMPLE_RATE = 16000
+OPENWAKEWORD_SCORE_KEYS = (OPENWAKEWORD_MODEL_KEY, OPENWAKEWORD_MODEL_NAME)
 PREPARE_WAKE_WORD_COMMAND = "python -m src.main --prepare-wake-word"
 WAKEWORD_RECOVERY_GUIDANCE = (
     "Install requirements.txt, then run "
@@ -32,7 +33,10 @@ class WakeWordModel(Protocol):
 
 
 class WakeWordDetector:
-    """Detect the built-in Hey Jarvis wake word from int16 PCM chunks."""
+    """Detect the built-in Alexa wake word from int16 PCM chunks."""
+
+    frame_length = OPENWAKEWORD_FRAME_SAMPLES
+    sample_rate = OPENWAKEWORD_SAMPLE_RATE
 
     def __init__(
         self,
@@ -51,12 +55,12 @@ class WakeWordDetector:
         self._logger = logger or logging.getLogger(__name__)
 
     def detect(self, pcm_chunk: bytes) -> bool:
-        """Return true when the Hey Jarvis score crosses the configured threshold."""
+        """Return true when the Alexa score crosses the configured threshold."""
 
         return self.score(pcm_chunk) >= self.threshold
 
     def score(self, pcm_chunk: bytes) -> float:
-        """Return the Hey Jarvis score for one int16 PCM chunk."""
+        """Return the Alexa score for one int16 PCM chunk."""
 
         if len(pcm_chunk) % 2 != 0:
             raise ValueError("PCM chunks must contain complete int16 samples")
@@ -66,9 +70,9 @@ class WakeWordDetector:
 
         try:
             predictions = model.predict(frame)
-            score = _hey_jarvis_score(predictions)
+            score = _alexa_score(predictions)
         except Exception as exc:
-            self._logger.error("Wake-word inference failed for the Hey Jarvis model: %s", exc)
+            self._logger.error("Wake-word inference failed for the Alexa model: %s", exc)
             raise WakeWordError(f"Wake-word inference failed: {exc}") from exc
 
         return score
@@ -80,8 +84,11 @@ class WakeWordDetector:
         try:
             model.predict(_silent_model_frame())
         except Exception as exc:
-            self._logger.error("Wake-word model warmup failed for the Hey Jarvis model: %s", exc)
+            self._logger.error("Wake-word model warmup failed for the Alexa model: %s", exc)
             raise WakeWordError(f"Wake-word model warmup failed: {exc}") from exc
+
+    def close(self) -> None:
+        """Keep a common detector cleanup hook for callers that support it."""
 
     def _get_model(self) -> WakeWordModel:
         if self._model is not None:
@@ -90,11 +97,11 @@ class WakeWordDetector:
         try:
             model = self._model_factory()
         except Exception as exc:
-            self._logger.error("Unable to load the openWakeWord Hey Jarvis model. %s", WAKEWORD_RECOVERY_GUIDANCE)
+            self._logger.error("Unable to load the openWakeWord Alexa model. %s", WAKEWORD_RECOVERY_GUIDANCE)
             raise WakeWordError(f"Unable to load wake-word model: {exc}") from exc
 
         if model is None:
-            self._logger.error("Unable to load the openWakeWord Hey Jarvis model. Model factory returned None.")
+            self._logger.error("Unable to load the openWakeWord Alexa model. Model factory returned None.")
             raise WakeWordError("Unable to load wake-word model: model factory returned None")
 
         self._model = model
@@ -111,7 +118,7 @@ def _load_openwakeword_model() -> WakeWordModel:
 
 
 def required_wake_word_model_paths() -> Mapping[str, Path]:
-    """Return the ONNX model files required by the built-in Hey Jarvis path."""
+    """Return the ONNX model files required by the built-in Alexa path."""
 
     import openwakeword
 
@@ -133,7 +140,7 @@ def missing_wake_word_model_paths() -> Mapping[str, Path]:
 
 
 def prepare_wake_word_models(logger: logging.Logger | None = None) -> Mapping[str, Path]:
-    """Download the ONNX model assets required for the Hey Jarvis wake word."""
+    """Download the ONNX model assets required for the Alexa wake word."""
 
     import openwakeword
 
@@ -156,6 +163,17 @@ def prepare_wake_word_models(logger: logging.Logger | None = None) -> Mapping[st
             urlretrieve(url, path)
         prepared[name] = path
     return prepared
+
+
+def pad_pcm_chunk(pcm_chunk: bytes, *, frame_length: int = OPENWAKEWORD_FRAME_SAMPLES) -> bytes:
+    """Pad a final short PCM chunk to a full openWakeWord frame with silence."""
+
+    if len(pcm_chunk) % 2 != 0:
+        raise ValueError("PCM chunks must contain complete int16 samples")
+    frame_bytes = frame_length * 2
+    if len(pcm_chunk) > frame_bytes:
+        raise ValueError(f"PCM chunk has more than {frame_length} int16 samples")
+    return pcm_chunk + (b"\x00" * (frame_bytes - len(pcm_chunk)))
 
 
 def _onnx_path(path: str | Path) -> Path:
@@ -194,7 +212,7 @@ def _silent_model_frame() -> Any:
     return _pcm_bytes_to_model_frame(pcm_chunk)
 
 
-def _hey_jarvis_score(predictions: Mapping[str, float]) -> float:
+def _alexa_score(predictions: Mapping[str, float]) -> float:
     for key in OPENWAKEWORD_SCORE_KEYS:
         if key in predictions:
             return float(predictions[key])
@@ -203,4 +221,4 @@ def _hey_jarvis_score(predictions: Mapping[str, float]) -> float:
         return float(next(iter(predictions.values())))
 
     keys = ", ".join(sorted(str(key) for key in predictions))
-    raise KeyError(f"Hey Jarvis score missing from wake-word predictions: {keys}")
+    raise KeyError(f"Alexa score missing from wake-word predictions: {keys}")

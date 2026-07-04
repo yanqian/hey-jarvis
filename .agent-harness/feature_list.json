@@ -224,6 +224,66 @@
       "depends_on": [
         "F010"
       ]
+    },
+    {
+      "id": "F012",
+      "title": "Switch wake word to Alexa",
+      "description": "Replace the unreliable built-in Hey Jarvis wake-word model with openWakeWord's built-in Alexa model as the MVP default wake phrase, including model preparation, diagnostics, documentation, and tests.",
+      "acceptance": [
+        "The default wake phrase and wake-word model constants use Alexa and the openWakeWord alexa model key.",
+        "WakeWordDetector loads the Alexa model with the ONNX inference framework and extracts scores from the Alexa prediction key.",
+        "Wake-word preparation and diagnostics prepare and check the Alexa ONNX model assets together with required feature models.",
+        "README and .env.example document Alexa as the accepted wake phrase and update wake-debug examples accordingly.",
+        "Tests cover loader arguments, score-key extraction, preparation paths, diagnostics, documentation, and recovery checks without requiring a physical microphone."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F011"
+      ]
+    },
+    {
+      "id": "F013",
+      "title": "Switch wake-word runtime to Porcupine",
+      "description": "Record the openWakeWord blocker discovered with both Hey Jarvis and Alexa, remove openWakeWord/ONNX as the active wake-word runtime, and replace it with a Picovoice Porcupine detector configured through a user-provided AccessKey and built-in keyword.",
+      "acceptance": [
+        "Progress or run evidence records that openWakeWord blocked the MVP after both Hey Jarvis and Alexa manual tests failed to wake reliably.",
+        "The active WakeWordDetector uses pvporcupine with a configured built-in keyword, sensitivity, AccessKey, engine frame_length, and engine sample_rate instead of openWakeWord ONNX models.",
+        "Runtime diagnostics and setup documentation require pvporcupine and PICOVOICE_ACCESS_KEY and no longer require openWakeWord, onnxruntime, or ONNX model preparation for the active path.",
+        "Wake debug and wake-file replay remain available with Porcupine-compatible frame sizing and deterministic detection output without invoking OpenAI or playback.",
+        "Focused tests cover Porcupine loader arguments, PCM conversion, frame-size validation, detector cleanup, config/diagnostics, documentation, and recovery checks without a real microphone or Picovoice AccessKey."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F012"
+      ]
+    },
+    {
+      "id": "F014",
+      "title": "Restore Alexa wake-word runtime",
+      "description": "Restore the active wake-word runtime to the F012 Alexa/openWakeWord ONNX path because Picovoice Porcupine requires a PICOVOICE_ACCESS_KEY that the user cannot currently obtain.",
+      "acceptance": [
+        "Progress or run evidence records the Porcupine AccessKey/account capability gap and the decision to restore Alexa.",
+        "The active WakeWordDetector again uses openWakeWord with the Alexa model, ONNX inference framework, Alexa score key extraction, and 1280-sample prediction frames.",
+        "Runtime diagnostics, requirements, README, and .env.example no longer require pvporcupine or PICOVOICE_ACCESS_KEY for the active path and again document openWakeWord, onnxruntime, and prepare-wake-word.",
+        "Wake debug and wake-file replay use openWakeWord-compatible 1280-sample frame sizing and score/threshold output without invoking OpenAI or playback.",
+        "Focused tests cover Alexa loader arguments, ONNX preparation paths, diagnostics, documentation, frame sizing, and recovery checks without a real microphone or live model download."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F013"
+      ]
     }
   ]
 }

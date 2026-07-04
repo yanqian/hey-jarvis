@@ -39,6 +39,9 @@ def make_settings():
 
 
 class FakeWakeWordDetector:
+    frame_length = 1280
+    sample_rate = DEFAULT_SAMPLE_RATE
+
     def __init__(self, threshold, logger=None):
         self.threshold = threshold
         self.logger = logger
@@ -73,6 +76,9 @@ class FakeDebugSource:
 
 
 class FakeDebugDetector:
+    frame_length = 1280
+    sample_rate = DEFAULT_SAMPLE_RATE
+
     def __init__(self, scores):
         self.scores = list(scores)
         self.preloaded = False
@@ -149,13 +155,13 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertIn("peak=100", lines[0])
         self.assertIn("overflow=true", lines[0])
         self.assertIn("score=0.100000000", lines[0])
-        self.assertIn("threshold=0.800000000", lines[0])
+        self.assertIn("threshold=0.500000000", lines[0])
         self.assertIn("detected=false", lines[0])
         self.assertIn("score=0.900000000", lines[1])
         self.assertIn("detected=true", lines[1])
         self.assertEqual(
             lines[2],
-            "wake_debug summary frames=2 max_score=0.900000000 threshold=0.800000000 detected_frames=1",
+            "wake_debug summary frames=2 max_score=0.900000000 threshold=0.500000000 detected_frames=1",
         )
 
     def test_live_wake_debug_writes_requested_wav_with_scored_chunks(self):
@@ -185,7 +191,7 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertIn("score=0.000000123", lines[0])
         self.assertEqual(
             lines[-1],
-            "wake_debug summary frames=2 max_score=0.810000000 threshold=0.800000000 detected_frames=1",
+            "wake_debug summary frames=2 max_score=0.810000000 threshold=0.500000000 detected_frames=1",
         )
 
     def test_wake_debug_output_requires_live_debug_mode(self):
@@ -207,7 +213,7 @@ class MainRuntimeTests(unittest.TestCase):
             result = run_wake_file_debug(
                 wav_path,
                 settings=make_settings(),
-                wake_detector=FakeDebugDetector([0.55]),
+                wake_detector=FakeDebugDetector([0.45]),
                 output=output,
             )
 
@@ -217,10 +223,10 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertIn("rms=353.6", lines[0])
         self.assertIn("peak=500", lines[0])
         self.assertIn("overflow=false", lines[0])
-        self.assertIn("score=0.550000000", lines[0])
+        self.assertIn("score=0.450000000", lines[0])
         self.assertEqual(
             lines[1],
-            "wake_file summary frames=1 max_score=0.550000000 threshold=0.800000000 detected_frames=0",
+            "wake_file summary frames=1 max_score=0.450000000 threshold=0.500000000 detected_frames=0",
         )
 
     def test_wake_file_debug_scores_short_final_chunk(self):
@@ -250,7 +256,7 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertIn("score=0.000001234", lines[1])
         self.assertEqual(
             lines[2],
-            "wake_file summary frames=2 max_score=0.000001234 threshold=0.800000000 detected_frames=0",
+            "wake_file summary frames=2 max_score=0.000001234 threshold=0.500000000 detected_frames=0",
         )
 
 

@@ -96,7 +96,7 @@ class VoiceAssistantStateMachine:
         """Complete one question-answer loop and return to WAIT_WAKE."""
 
         self._set_state(AssistantState.WAIT_WAKE)
-        self._logger.info("State WAIT_WAKE: listening for the Hey Jarvis wake word")
+        self._logger.info("State WAIT_WAKE: listening for the %s wake word", self.settings.wake_phrase)
         self._wait_for_wake_word()
 
         self._set_state(AssistantState.RECORDING)

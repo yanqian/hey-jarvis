@@ -16,7 +16,13 @@ from .openai_client import build_openai_client
 from .player import MacOSPlayer
 from .recorder import RecordingResult
 from .state_machine import AssistantState, VoiceAssistantStateMachine
-from .wake_word import OPENWAKEWORD_FRAME_SAMPLES, WakeWordDetector, pcm_rms_and_peak, prepare_wake_word_models
+from .wake_word import (
+    OPENWAKEWORD_FRAME_SAMPLES,
+    WakeWordDetector,
+    pad_pcm_chunk,
+    pcm_rms_and_peak,
+    prepare_wake_word_models,
+)
 
 
 LOGGER_NAME = "hey_jarvis"
@@ -93,9 +99,9 @@ def run_wake_debug(
     resolved_settings = settings or load_settings()
     detector = wake_detector or WakeWordDetector(resolved_settings.wake_threshold, logger=logger)
     if hasattr(detector, "preload"):
-        logger.info("Preparing Hey Jarvis wake-word detector")
+        logger.info("Preparing Alexa wake-word detector")
         detector.preload()
-        logger.info("Hey Jarvis wake-word detector ready")
+        logger.info("Alexa wake-word detector ready")
 
     if audio_source is not None:
         summary = _print_live_wake_debug(
@@ -108,7 +114,11 @@ def run_wake_debug(
         )
         return 130 if summary.interrupted else 0
 
-    with open_microphone_stream(sample_rate=resolved_settings.sample_rate, logger=logger) as microphone:
+    with open_microphone_stream(
+        sample_rate=resolved_settings.sample_rate,
+        block_frames=_detector_frame_length(detector),
+        logger=logger,
+    ) as microphone:
         summary = _print_live_wake_debug(
             microphone,
             detector,
@@ -133,9 +143,9 @@ def run_wake_file_debug(
     resolved_settings = settings or load_settings()
     detector = wake_detector or WakeWordDetector(resolved_settings.wake_threshold, logger=logger)
     if hasattr(detector, "preload"):
-        logger.info("Preparing Hey Jarvis wake-word detector")
+        logger.info("Preparing Alexa wake-word detector")
         detector.preload()
-        logger.info("Hey Jarvis wake-word detector ready")
+        logger.info("Alexa wake-word detector ready")
 
     summary = WakeDebugSummary()
     target = output or None
@@ -146,10 +156,10 @@ def run_wake_file_debug(
             raise ValueError("wake-file debug requires 16-bit PCM WAV samples")
 
         while True:
-            chunk = wav_file.readframes(OPENWAKEWORD_FRAME_SAMPLES)
+            chunk = wav_file.readframes(_detector_frame_length(detector))
             if not chunk:
                 break
-            score = _wake_score(detector, chunk)
+            score = _wake_score(detector, pad_pcm_chunk(chunk, frame_length=_detector_frame_length(detector)))
             summary.add(score, resolved_settings.wake_threshold)
             print(
                 _format_wake_debug_line(
@@ -175,13 +185,18 @@ def run_assistant_forever() -> int:
     history: list[dict[str, str]] = []
 
     logger.info("Assistant started")
-    logger.info("Say Hey Jarvis, ask a question, and wait for playback")
+    logger.info("Say %s, ask a question, and wait for playback", settings.wake_phrase)
+    wake_detector: object | None = None
     try:
         wake_detector = WakeWordDetector(settings.wake_threshold, logger=logger)
-        logger.info("Preparing Hey Jarvis wake-word detector")
+        logger.info("Preparing Alexa wake-word detector")
         wake_detector.preload()
-        logger.info("Hey Jarvis wake-word detector ready")
-        with open_microphone_stream(sample_rate=settings.sample_rate, logger=logger) as microphone:
+        logger.info("Alexa wake-word detector ready")
+        with open_microphone_stream(
+            sample_rate=settings.sample_rate,
+            block_frames=_detector_frame_length(wake_detector),
+            logger=logger,
+        ) as microphone:
             machine = VoiceAssistantStateMachine(
                 settings=settings,
                 audio_source=microphone,
@@ -196,6 +211,11 @@ def run_assistant_forever() -> int:
     except KeyboardInterrupt:
         logger.info("Assistant stopped")
         return 130
+    finally:
+        if wake_detector is not None:
+            close = getattr(wake_detector, "close", None)
+            if close is not None:
+                close()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -418,6 +438,10 @@ def _wake_score(detector: object, pcm_chunk: bytes) -> float:
     if score_method is not None:
         return float(score_method(pcm_chunk))
     return 1.0 if detector.detect(pcm_chunk) else 0.0
+
+
+def _detector_frame_length(detector: object) -> int:
+    return int(getattr(detector, "frame_length", OPENWAKEWORD_FRAME_SAMPLES))
 
 
 def _bool_text(value: bool) -> str:

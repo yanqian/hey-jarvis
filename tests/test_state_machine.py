@@ -165,7 +165,7 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("peak=", log_output)
         self.assertIn("overflow=false", log_output)
         self.assertIn("score=1.000000000", log_output)
-        self.assertIn("threshold=0.800000000", log_output)
+        self.assertIn("threshold=0.500000000", log_output)
 
 
 if __name__ == "__main__":

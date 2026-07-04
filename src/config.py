@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 
-DEFAULT_WAKE_PHRASE = "hey jarvis"
-DEFAULT_WAKE_THRESHOLD = 0.8
+DEFAULT_WAKE_PHRASE = "alexa"
+DEFAULT_WAKE_THRESHOLD = 0.5
 DEFAULT_SILENCE_SECONDS = 1.5
 DEFAULT_MAX_RECORD_SECONDS = 20.0
 DEFAULT_SAMPLE_RATE = 16000
@@ -222,7 +222,6 @@ def collect_diagnostics(
             checks.append(DiagnosticCheck(f"dependency:{package_name}", "ok", f"{package_name} is importable"))
 
     checks.extend(_wake_word_model_checks(wake_word_model_paths, modules_to_check))
-
     checks.append(
         DiagnosticCheck(
             "microphone_permission",

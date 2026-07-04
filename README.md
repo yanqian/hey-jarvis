@@ -5,7 +5,7 @@ Hey Jarvis is a simple macOS voice assistant MVP.
 The accepted first demo flow is:
 
 ```text
-User: "Hey Jarvis, what is two plus two?"
+User: "Alexa, what is two plus two?"
 Assistant: "Two plus two is four."
 ```
 
@@ -42,7 +42,7 @@ The real assistant requires the packages in `requirements.txt`, an
 The runtime dependency set is `sounddevice`, `numpy`, `scipy`, `openai`,
 `openwakeword`, `onnxruntime`, and `python-dotenv`.
 
-Wake-word detection uses the openWakeWord Hey Jarvis ONNX model through
+Wake-word detection uses the openWakeWord Alexa ONNX model through
 `onnxruntime`. The model files are prepared explicitly so setup failures are
 visible before microphone capture starts:
 
@@ -101,9 +101,9 @@ Start the assistant:
 python -m src.main
 ```
 
-Say `Hey Jarvis`, then ask `what is two plus two?`. The app records the question, transcribes it, asks the configured chat model, writes `tmp/output.mp3`, plays it through `afplay`, and returns to `WAIT_WAKE` for the next wake phrase.
+Say `Alexa`, then ask `what is two plus two?`. The app records the question, transcribes it, asks the configured chat model, writes `tmp/output.mp3`, plays it through `afplay`, and returns to `WAIT_WAKE` for the next wake phrase.
 
-The accepted first MVP wake phrase is `Hey Jarvis`; custom wake-word model
+The accepted first MVP wake phrase is `Alexa`; custom wake-word model
 loading is deferred to a later iteration.
 
 ## macOS Permissions And Playback
@@ -128,8 +128,8 @@ playback.
 Set `OPENAI_API_KEY` in `.env` before running any real transcription, chat, or speech synthesis path. The MVP defaults are:
 
 ```text
-WAKE_PHRASE=hey jarvis
-WAKE_THRESHOLD=0.8
+WAKE_PHRASE=alexa
+WAKE_THRESHOLD=0.5
 SILENCE_SECONDS=1.5
 MAX_RECORD_SECONDS=20
 SAMPLE_RATE=16000
@@ -180,7 +180,7 @@ Common outcomes:
   CPU-heavy processes and confirm the wake-word model is prepared before
   listening.
 - `score` rises but stays below `threshold`: lower `WAKE_THRESHOLD` cautiously or
-  speak the accepted `Hey Jarvis` phrase more clearly.
+  speak the accepted `Alexa` phrase more clearly.
 - `score` stays low while `rms` and `peak` move: the microphone is working, but
   openWakeWord is not matching the phrase; check pronunciation, distance, and
   background noise.
@@ -204,7 +204,7 @@ Common outcomes:
   CPU-heavy audio or ML processes before trying the wake phrase again.
 - Playback fails: run `python -m src.main --diagnose` and confirm `afplay` is
   available. The MVP is macOS-only for playback.
-- Wake-word detection does not trigger: use the accepted phrase `Hey Jarvis`,
+- Wake-word detection does not trigger: use the accepted phrase `Alexa`,
   speak clearly near the microphone, confirm the app is still in `WAIT_WAKE`,
   then run `python -m src.main --wake-debug` or set `WAKE_DEBUG=1` to inspect
   microphone levels and wake scores.
@@ -221,9 +221,9 @@ The recovery check runs the AI Agent Harness verification, compiles project Pyth
 
 ## Post-MVP TODOs
 
-- Interrupt playback when the user says `Hey Jarvis` while audio is still
+- Interrupt playback when the user says `Alexa` while audio is still
   playing.
 - Keep listening for a six-second follow-up question after each answer before
   returning to wake-word-only mode.
 - Add configurable custom wake-word model loading instead of only using the
-  built-in openWakeWord Hey Jarvis model.
+  built-in openWakeWord Alexa model.

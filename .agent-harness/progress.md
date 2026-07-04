@@ -26,9 +26,17 @@ F010 has been completed through the orchestrator entrypoint, with the Coding Age
 
 F011 has been implemented by manual fallback after the orchestrator Coding Agent adapter hung waiting for a child process, and evaluator-approved. The wake debug workflow now supports explicit live PCM capture to a mono 16 kHz 16-bit WAV file, high-precision score and threshold output, live and file replay summary metrics, deterministic short final chunk replay, README record-and-replay guidance, focused tests using generated fixtures and fakes without physical microphone access, and durable evaluator evidence in `runs/F011-evaluation.md`.
 
+F012 has been completed through the orchestrator entrypoint, with Coding Agent implementation and Evaluator Agent approval recorded. The default wake phrase and openWakeWord model are now Alexa, wake model preparation and diagnostics target the Alexa ONNX asset plus feature models, runtime logs and README examples use Alexa as the accepted wake phrase, and focused tests cover Alexa loader arguments, score-key extraction, preparation paths, diagnostics, documentation, and recovery checks without physical microphone access. Durable evaluator evidence is recorded in `runs/F012-evaluation.md`.
+
+Manual wake-word debugging after F012 showed the openWakeWord path is blocking the MVP: both the original Hey Jarvis model and the Alexa model failed to wake reliably in live use, and captured/TTS replay produced tiny scores far below useful thresholds despite valid 16 kHz mono int16 chunking. The next recovery direction is to stop tuning openWakeWord for the MVP and switch the active wake-word runtime to Picovoice Porcupine with a user-provided Picovoice AccessKey.
+
+F013 has been completed through the orchestrator entrypoint, with Coding Agent implementation and Evaluator Agent approval recorded. The active wake-word path now uses Picovoice Porcupine with `PICOVOICE_ACCESS_KEY`, built-in keyword `jarvis`, configurable `PORCUPINE_SENSITIVITY`, engine `frame_length`, and engine `sample_rate`; openWakeWord, ONNX model preparation, and `onnxruntime` are no longer active-path requirements. Wake debug and WAV replay remain available with deterministic 0/1 Porcupine detection output and final short-frame padding. Durable evaluator evidence is recorded in `runs/F013-evaluation.md`.
+
+F014 has been completed through the orchestrator entrypoint, with Coding Agent implementation and Evaluator Agent approval recorded. The active wake-word runtime has been restored to the previously accepted F012 Alexa/openWakeWord ONNX path after the user reported they cannot obtain a Picovoice AccessKey. The restored path includes ONNX model preparation, diagnostics, documentation, 1280-frame wake debug/replay behavior, and focused regression tests. This is a usability rollback that removes the Picovoice account capability gap from the active path; it does not fix the known Alexa low-score recognition behavior. Durable evaluator evidence is recorded in `runs/F014-evaluation.md`.
+
 ## Last Completed Feature
 
-F011 - Add wake debug capture replay.
+F014 - Restore Alexa wake-word runtime.
 
 ## Next Feature
 
@@ -50,3 +58,6 @@ None currently selected.
 - F009 was completed through orchestrator-first work after approving the Codex provider runtime permission gap. Evaluator Agent review recorded `EVAL_PASS: F009` in `runs/F009-evaluation.md`.
 - F010 was completed through the orchestrator entrypoint after F009; implementation evidence is in `runs/F010-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F010` in `runs/F010-evaluation.md`.
 - F011 orchestrator execution was attempted through `make work`, but the Coding Agent adapter hung inside `subprocess.communicate()` and was interrupted. Manual fallback preserved evaluator gating; implementation evidence is in `runs/F011-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F011` in `runs/F011-evaluation.md`.
+- F012 was completed through the orchestrator entrypoint after waiting for the Coding Agent adapter to return. Implementation evidence is in `runs/F012-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F012` in `runs/F012-evaluation.md`.
+- F013 replaced openWakeWord with Picovoice Porcupine because manual tests of both Hey Jarvis and Alexa did not produce a usable wake event. Porcupine introduces a new required user capability: `PICOVOICE_ACCESS_KEY` from Picovoice Console. Implementation evidence is in `runs/F013-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F013` in `runs/F013-evaluation.md`.
+- F014 was completed through the orchestrator entrypoint because `PICOVOICE_ACCESS_KEY` is not currently obtainable by the user. The Porcupine account requirement is recorded as a capability gap in the abandoned Porcupine direction; F014 resolves it for the active MVP path by restoring Alexa/openWakeWord setup through durable requirements, diagnostics, documentation, and tests. Implementation evidence is in `runs/F014-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F014` in `runs/F014-evaluation.md`.

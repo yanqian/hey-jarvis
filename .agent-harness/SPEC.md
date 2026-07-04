@@ -311,6 +311,26 @@ Implementation paths: `src/main.py`, `src/wake_word.py`, `README.md`, `tests/`, 
 
 Verification surface: unit tests for saved live debug WAV output, precise score formatting, summary metrics, file replay of short chunks, parser flags, full `./init.sh`, and optional manual execution of live capture followed by wake-file replay.
 
+### Alexa Wake-Word Model Switch
+
+Goal: replace the unreliable built-in `hey_jarvis` wake-word path with openWakeWord's built-in `alexa` model so the assistant has a more practical default wake phrase for local demos.
+
+Included scope: default wake phrase, openWakeWord model name and model key, score-key handling, ONNX model preparation paths, diagnostics for missing model assets, README setup/debug instructions, `.env.example`, and tests that prove the project loads and prepares the Alexa model without requiring a physical microphone.
+
+Excluded scope: training a custom wake-word model, supporting multiple simultaneous wake models, adding runtime model selection UI, changing OpenAI transcription/chat/TTS behavior, or guaranteeing recognition in every room and microphone setup.
+
+Core flows: a user runs `python -m src.main --prepare-wake-word` to prepare the Alexa ONNX model assets, runs `python -m src.main --diagnose` and sees wake-word readiness, runs `python -m src.main --wake-debug --wake-debug-output tmp/alexa-debug.wav`, says `Alexa`, sees score/debug output for the Alexa model, then starts `python -m src.main` and uses `Alexa` as the wake phrase.
+
+Constraints: the project remains macOS-focused, Python 3.11/3.12-compatible, ONNX-runtime based, and dependency-free for automated recovery tests; tests must use fakes or metadata stubs instead of live microphone input; existing F010/F011 debug tools must keep working with the new score key.
+
+Ambiguities or assumptions: openWakeWord 0.6.0 includes a built-in `alexa` model and corresponding ONNX asset URL. Alexa is chosen as the single MVP default because empirical debugging showed the built-in `hey_jarvis` model returned extremely low scores for both user and synthetic recordings.
+
+Required capabilities: installed `openwakeword` and `onnxruntime`, explicit model preparation with network access when assets are missing, deterministic tests for model-name arguments and model-path diagnostics, and manual microphone permission for real runtime testing.
+
+Implementation paths: `src/wake_word.py`, `src/config.py`, `README.md`, `.env.example`, `tests/`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: focused unit tests for Alexa model constants, loader arguments, preparation paths, diagnostics, documentation, and debug score-key extraction; full `./init.sh`; optional manual `python -m src.main --prepare-wake-word`, `--diagnose`, and `--wake-debug` with the Alexa phrase.
+
 ## 4. Acceptance Criteria
 
 - `./init.sh` validates harness state and runs the tiny example tests.
@@ -446,6 +466,50 @@ The MVP is split into separate features because it crosses distinct capability a
 - README and `docs/real-world-usage.md` link real projects that informed the harness design.
 - `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, and GitHub issue templates are present.
 - `skills/ai-agent-harness/` contains a distributable skill with initialization, planning, one-feature work, evaluation, and explicit finalize-and-commit workflows.
+
+### Porcupine Wake-Word Runtime Switch
+
+Goal: unblock the macOS MVP wake-word path by replacing the openWakeWord runtime with Picovoice Porcupine as the default wake detector.
+
+Included scope: record the openWakeWord blocker discovered during manual testing, remove openWakeWord and ONNX-specific setup from the active runtime, add a Porcupine-based `WakeWordDetector`, configure Picovoice AccessKey and built-in keyword settings, update diagnostics, README, `.env.example`, requirements, wake debug behavior, and deterministic tests.
+
+Excluded scope: training a custom Porcupine `.ppn` model, supporting multiple simultaneous wake-word providers, adding cloud-hosted wake-word detection, changing OpenAI transcription/chat/TTS behavior, committing local debug audio, or requiring automated tests to use a real microphone or a real Picovoice AccessKey.
+
+Core flows: a user installs requirements, adds `PICOVOICE_ACCESS_KEY` to `.env`, runs `python -m src.main --diagnose` and sees Porcupine dependency and AccessKey readiness, starts `python -m src.main`, says the configured built-in keyword, the Porcupine detector returns a detection index, the assistant records the question, and the rest of the existing OpenAI/TTS/playback loop proceeds unchanged. A user can still run wake debug and wake-file replay to inspect RMS, peak, overflow, detection state, and threshold-like sensitivity configuration without invoking OpenAI.
+
+Constraints: Porcupine requires a Picovoice account AccessKey, the `pvporcupine` Python package, 16-bit mono PCM, and input frames sized to the engine's `frame_length` at the engine's `sample_rate`. Secrets must not be committed. Automated tests must use fake Porcupine modules or fake engines. The project remains macOS and Python 3.11/3.12 focused.
+
+Ambiguities or assumptions: use Porcupine's built-in `jarvis` keyword if the installed SDK exposes it; otherwise fall back to the built-in `porcupine` keyword as the documented first test phrase. The wake score debug field may become a detection indicator because Porcupine reports keyword indexes rather than continuous openWakeWord scores. Manual evidence showed both `hey jarvis` and `alexa` openWakeWord paths stayed at tiny scores and did not wake the assistant, so openWakeWord is recorded as a blocker for the MVP rather than tuned further.
+
+Required capabilities: official Picovoice Porcupine Python SDK behavior, `pvporcupine` as an installable dependency, user-provided `PICOVOICE_ACCESS_KEY`, deterministic fake-engine tests, diagnostics that report missing dependency or AccessKey clearly, and README instructions for creating and protecting the AccessKey.
+
+Implementation paths: `src/wake_word.py`, `src/config.py`, `src/main.py`, `src/audio_input.py` if chunk sizing must become engine-driven, `requirements.txt`, `.env.example`, `README.md`, `tests/`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: focused unit tests for Porcupine loader arguments, PCM conversion, frame length validation, detector preload/delete behavior, diagnostics and configuration, CLI/debug output compatibility, full `./init.sh`, and optional manual `python -m src.main --diagnose` plus live wake debug after a real Picovoice AccessKey is configured.
+
+Decomposition decision: this remains one feature because the cleanup and Porcupine replacement are one coherent wake-detector runtime capability with a shared verification surface; splitting would leave the MVP in a partially migrated wake-word state with no independent user value.
+
+### Alexa Wake-Word Runtime Restore
+
+Goal: restore the active wake-word runtime to the F012 Alexa/openWakeWord ONNX path because the Porcupine path requires a Picovoice AccessKey that the user cannot currently obtain.
+
+Included scope: record the Porcupine AccessKey/account capability gap, remove Picovoice Porcupine as the active runtime, restore Alexa as the default wake phrase and openWakeWord model, restore ONNX wake-word preparation and diagnostics, update requirements, README, `.env.example`, runtime logs, debug/replay frame sizing, and deterministic tests.
+
+Excluded scope: solving Alexa's low-score recognition behavior, returning to the original Hey Jarvis model, training a custom wake word, supporting multiple wake-word providers, requiring a Picovoice AccessKey, changing OpenAI transcription/chat/TTS behavior, or deleting local debug artifacts.
+
+Core flows: a user installs requirements, runs `python -m src.main --prepare-wake-word` to prepare Alexa ONNX assets, runs `python -m src.main --diagnose` and sees openWakeWord/ONNX readiness, starts `python -m src.main`, says `Alexa`, and the existing assistant state machine proceeds when the Alexa score crosses the configured threshold. Wake debug and wake-file replay continue to report RMS, peak, overflow, score, threshold, and summaries using openWakeWord's 1280-sample frame size.
+
+Constraints: the restored runtime is explicitly a rollback to the previously accepted F012 behavior, not a claim that Alexa recognition is fixed. Automated tests must not require a real microphone, live OpenAI call, network model download, or live openWakeWord inference. The project remains macOS and Python 3.11/3.12 focused.
+
+Ambiguities or assumptions: the user prefers a locally usable setup without a Picovoice company-account requirement, even though Alexa/openWakeWord previously produced low scores in manual testing. Picovoice may still be revisited later if a usable AccessKey becomes available.
+
+Required capabilities: installed `openwakeword` and `onnxruntime`, explicit network access only when the user runs ONNX model preparation, deterministic fake-model tests, diagnostics for missing ONNX assets, and documentation that names the known Alexa recognition caveat.
+
+Implementation paths: `src/wake_word.py`, `src/config.py`, `src/main.py`, `src/audio_input.py` if frame sizing was changed by F013, `requirements.txt`, `.env.example`, `README.md`, `tests/`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: focused unit tests for Alexa loader arguments, ONNX model preparation paths, diagnostics, 1280-sample debug/replay behavior, documentation, full `./init.sh`, and optional manual `python -m src.main --prepare-wake-word`, `--diagnose`, and `--wake-debug`.
+
+Decomposition decision: this is one rollback feature because the runtime, diagnostics, dependencies, docs, and tests must move together to avoid a half-Porcupine half-openWakeWord configuration.
 
 ## 5. Verification Plan
 

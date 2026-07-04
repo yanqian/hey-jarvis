@@ -24,6 +24,7 @@ class ConfigTests(unittest.TestCase):
         settings = load_settings(env={}, env_file=None)
 
         self.assertIsNone(settings.openai_api_key)
+        self.assertEqual(DEFAULT_WAKE_PHRASE, "alexa")
         self.assertEqual(settings.wake_phrase, DEFAULT_WAKE_PHRASE)
         self.assertEqual(settings.wake_threshold, DEFAULT_WAKE_THRESHOLD)
         self.assertEqual(settings.silence_seconds, DEFAULT_SILENCE_SECONDS)
@@ -39,7 +40,7 @@ class ConfigTests(unittest.TestCase):
         settings = load_settings(
             env={
                 "OPENAI_API_KEY": "sk-test",
-                "WAKE_PHRASE": "hello jarvis",
+                "WAKE_PHRASE": "computer",
                 "WAKE_THRESHOLD": "0.65",
                 "SILENCE_SECONDS": "2.25",
                 "MAX_RECORD_SECONDS": "30",
@@ -54,7 +55,7 @@ class ConfigTests(unittest.TestCase):
         )
 
         self.assertEqual(settings.openai_api_key, "sk-test")
-        self.assertEqual(settings.wake_phrase, "hello jarvis")
+        self.assertEqual(settings.wake_phrase, "computer")
         self.assertEqual(settings.wake_threshold, 0.65)
         self.assertEqual(settings.silence_seconds, 2.25)
         self.assertEqual(settings.max_record_seconds, 30.0)
@@ -132,14 +133,14 @@ class ConfigTests(unittest.TestCase):
 
     def test_diagnostics_report_missing_wake_word_model_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            missing_path = Path(tmp_dir) / "hey_jarvis_v0.1.onnx"
+            missing_path = Path(tmp_dir) / "alexa_v0.1.onnx"
             report = collect_diagnostics(
                 env={"OPENAI_API_KEY": "sk-test"},
                 env_file=None,
                 python_version=(3, 12),
                 afplay_path="/usr/bin/afplay",
                 dependency_modules={"json": "json"},
-                wake_word_model_paths={"hey_jarvis": missing_path},
+                wake_word_model_paths={"alexa": missing_path},
             )
 
         messages = {check.name: check.message for check in report.checks}
@@ -149,7 +150,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_diagnostics_accept_present_wake_word_model_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model_path = Path(tmp_dir) / "hey_jarvis_v0.1.onnx"
+            model_path = Path(tmp_dir) / "alexa_v0.1.onnx"
             model_path.write_bytes(b"onnx")
             report = collect_diagnostics(
                 env={"OPENAI_API_KEY": "sk-test"},
@@ -157,7 +158,7 @@ class ConfigTests(unittest.TestCase):
                 python_version=(3, 12),
                 afplay_path="/usr/bin/afplay",
                 dependency_modules={"json": "json"},
-                wake_word_model_paths={"hey_jarvis": model_path},
+                wake_word_model_paths={"alexa": model_path},
             )
 
         statuses = {check.name: check.status for check in report.checks}
