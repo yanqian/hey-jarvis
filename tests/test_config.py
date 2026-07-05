@@ -13,7 +13,9 @@ from src.config import (
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_SECONDS,
     DEFAULT_TRANSCRIBE_MODEL,
+    DEFAULT_TTS_INSTRUCTIONS,
     DEFAULT_TTS_MODEL,
+    DEFAULT_TTS_SPEED,
     DEFAULT_TTS_VOICE,
     DEFAULT_WAKE_DEBUG,
     DEFAULT_WAKE_BACKEND,
@@ -49,6 +51,9 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.chat_model, DEFAULT_CHAT_MODEL)
         self.assertEqual(settings.tts_model, DEFAULT_TTS_MODEL)
         self.assertEqual(settings.tts_voice, DEFAULT_TTS_VOICE)
+        self.assertIsNone(DEFAULT_TTS_INSTRUCTIONS)
+        self.assertIsNone(settings.tts_instructions)
+        self.assertEqual(settings.tts_speed, DEFAULT_TTS_SPEED)
         self.assertEqual(settings.wake_debug, DEFAULT_WAKE_DEBUG)
         self.assertEqual(settings.post_playback_wake_cooldown_seconds, DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS)
         self.assertEqual(settings.post_playback_quiet_seconds, DEFAULT_POST_PLAYBACK_QUIET_SECONDS)
@@ -72,6 +77,8 @@ class ConfigTests(unittest.TestCase):
                 "CHAT_MODEL": "chat-test",
                 "TTS_MODEL": "tts-test",
                 "TTS_VOICE": "verse",
+                "TTS_INSTRUCTIONS": "Speak with warm, quick, upbeat energy.",
+                "TTS_SPEED": "1.2",
                 "WAKE_DEBUG": "1",
                 "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS": "2.5",
                 "POST_PLAYBACK_QUIET_SECONDS": "0.75",
@@ -95,6 +102,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.chat_model, "chat-test")
         self.assertEqual(settings.tts_model, "tts-test")
         self.assertEqual(settings.tts_voice, "verse")
+        self.assertEqual(settings.tts_instructions, "Speak with warm, quick, upbeat energy.")
+        self.assertEqual(settings.tts_speed, 1.2)
         self.assertTrue(settings.wake_debug)
         self.assertEqual(settings.post_playback_wake_cooldown_seconds, 2.5)
         self.assertEqual(settings.post_playback_quiet_seconds, 0.75)
@@ -133,6 +142,7 @@ class ConfigTests(unittest.TestCase):
                     "MAX_RECORD_SECONDS": "5",
                     "SAMPLE_RATE": "not-an-int",
                     "CHAT_MODEL": "",
+                    "TTS_SPEED": "fast",
                     "WAKE_DEBUG": "maybe",
                     "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS": "2",
                     "POST_PLAYBACK_QUIET_SECONDS": "-0.1",
@@ -149,12 +159,29 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("WAKE_INFERENCE_FRAMEWORK must be one of tflite, onnx", message)
         self.assertIn("SAMPLE_RATE must be an integer", message)
         self.assertIn("CHAT_MODEL must not be empty", message)
+        self.assertIn("TTS_SPEED must be a number", message)
         self.assertIn("WAKE_DEBUG must be a boolean value", message)
         self.assertIn("POST_PLAYBACK_QUIET_SECONDS must be at least 0.0", message)
         self.assertIn("POST_PLAYBACK_QUIET_RMS must be at least 0.0", message)
         self.assertIn("POST_PLAYBACK_MAX_SUPPRESSION_SECONDS must be greater than or equal", message)
         self.assertIn("WAKE_CONFIRMATION_FRAMES must be at least 1", message)
         self.assertIn("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS", message)
+
+    def test_tts_speed_range_is_validated(self):
+        for invalid_speed, expected_message in (
+            ("0.24", "TTS_SPEED must be at least 0.25"),
+            ("4.1", "TTS_SPEED must be at most 4.0"),
+        ):
+            with self.subTest(invalid_speed=invalid_speed):
+                with self.assertRaises(ConfigError) as caught:
+                    load_settings(env={"TTS_SPEED": invalid_speed}, env_file=None)
+
+                self.assertIn(expected_message, str(caught.exception))
+
+    def test_blank_tts_instructions_are_ignored(self):
+        settings = load_settings(env={"TTS_INSTRUCTIONS": "   "}, env_file=None)
+
+        self.assertIsNone(settings.tts_instructions)
 
     def test_required_openai_key_has_actionable_error(self):
         with self.assertRaises(ConfigError) as caught:

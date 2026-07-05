@@ -152,8 +152,16 @@ TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 CHAT_MODEL=gpt-4o-mini
 TTS_MODEL=gpt-4o-mini-tts
 TTS_VOICE=alloy
+TTS_INSTRUCTIONS=
+TTS_SPEED=1.0
 WAKE_DEBUG=0
 ```
+
+`TTS_INSTRUCTIONS` maps OpenAI.fm-style vibe text to the speech API's
+instructions field, for example `Speak warmly, quickly, and with dry humor`.
+There is no separate OpenAI.fm vibe parameter in this assistant. `TTS_SPEED`
+sets generated-audio speed and must stay between `0.25` and `4.0`; `1.0` keeps
+the API default behavior.
 
 The automated recovery check uses fakes and dry-run paths, so it does not make live OpenAI API calls.
 

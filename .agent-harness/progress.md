@@ -42,9 +42,11 @@ F017 has been implemented by manual Coding Agent fallback after root `make work`
 
 F018 has been implemented by manual Coding Agent fallback after the user reported F017 was still insufficient: after the fixed 1.0s drain, two residual wake-positive frames still triggered `RECORDING` without speech. The post-playback suppression now also waits for configurable observed quiet before returning to active wake listening, feeds suppressed audio through the wake detector to advance its internal state while discarding detections, and treats wake-positive suppressed scores as not quiet even if PCM RMS is low. `.env.example`, README, DEPLOYMENT, and MANUAL_TESTING document `POST_PLAYBACK_QUIET_SECONDS`, `POST_PLAYBACK_QUIET_RMS`, and `POST_PLAYBACK_MAX_SUPPRESSION_SECONDS`. Focused tests simulate residual wake-positive chunks after cooldown followed by quiet audio, and `./init.sh` verifies 67 project tests plus smoke paths. Durable evaluator evidence is recorded in `runs/F018-evaluation.md`.
 
+F019 has been implemented through the orchestrator entrypoint and evaluator-approved. The OpenAI TTS path now loads optional `TTS_INSTRUCTIONS` and validated `TTS_SPEED`, passes speed plus optional instructions to `audio.speech.with_streaming_response.create`, documents OpenAI.fm-style vibe mapping through `TTS_INSTRUCTIONS`, and adds focused config, OpenAI request-shape, and documentation tests. Coding evidence is recorded in `runs/F019-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F019` in `runs/F019-evaluation.md`.
+
 ## Last Completed Feature
 
-F018 - Gate post-playback wake on observed quiet.
+F019 - Configure TTS vibe and speed.
 
 ## Next Feature
 
@@ -74,3 +76,4 @@ None currently selected.
 - F016 was completed by manual fallback because the user provided a live traceback from the real assistant loop and explicitly requested a bug-fix pass. The root cause was an unhandled `OpenAIClientError` when transcription returned empty text after a max-duration recording. Implementation evidence is in `runs/F016-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F016` in `runs/F016-evaluation.md`.
 - F017 was completed by manual fallback because root `make work` is unavailable in this hidden-layout project (`make: *** No rule to make target 'work'. Stop.`). The user-observed failure was a post-playback false wake with microphone overflow and an empty transcription recovery. Implementation evidence is in `runs/F017-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F017` in `runs/F017-evaluation.md`.
 - F018 was completed by manual fallback because root `make work` is unavailable in this hidden-layout project (`make: *** No rule to make target 'work'. Stop.`). The user-observed failure was the same post-playback false wake recurring after F017's fixed cooldown, proving the app needed an observed quiet gate rather than only a timer. Implementation evidence is in `runs/F018-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F018` in `runs/F018-evaluation.md`.
+- F019 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `runs/F019-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F019` in `runs/F019-evaluation.md`.

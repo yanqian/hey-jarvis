@@ -91,13 +91,17 @@ class OpenAIClient:
         speech_text = _require_text(text, "TTS input")
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
+        speech_request = {
+            "model": self.settings.tts_model,
+            "voice": self.settings.tts_voice,
+            "input": speech_text,
+            "speed": self.settings.tts_speed,
+        }
+        if self.settings.tts_instructions is not None:
+            speech_request["instructions"] = self.settings.tts_instructions
 
         try:
-            response_context = self._client().audio.speech.with_streaming_response.create(
-                model=self.settings.tts_model,
-                voice=self.settings.tts_voice,
-                input=speech_text,
-            )
+            response_context = self._client().audio.speech.with_streaming_response.create(**speech_request)
             with response_context as response:
                 response.stream_to_file(destination)
         except OpenAIClientError:

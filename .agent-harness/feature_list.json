@@ -368,6 +368,26 @@
       "depends_on": [
         "F017"
       ]
+    },
+    {
+      "id": "F019",
+      "title": "Configure TTS vibe and speed",
+      "description": "Expose OpenAI text-to-speech style instructions and generated audio speed through documented environment configuration so users can approximate OpenAI.fm vibe settings from the API-backed assistant.",
+      "acceptance": [
+        "Configuration loads optional TTS_INSTRUCTIONS and validated TTS_SPEED settings with documented defaults that preserve existing behavior.",
+        "OpenAIClient.text_to_speech sends voice, optional instructions, and speed to the OpenAI speech endpoint without requiring live API calls in tests.",
+        "Invalid TTS_SPEED values below 0.25, above 4.0, or non-numeric are reported as configuration errors before runtime.",
+        ".env.example, README, and DEPLOYMENT explain how OpenAI.fm-style vibe maps to TTS_INSTRUCTIONS rather than a separate API parameter.",
+        "Focused tests cover configuration defaults, overrides, invalid speed, TTS request shape, and documentation key coverage."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F005"
+      ]
     }
   ]
 }

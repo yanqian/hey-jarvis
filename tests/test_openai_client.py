@@ -9,7 +9,9 @@ from src.config import (
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_SECONDS,
     DEFAULT_TRANSCRIBE_MODEL,
+    DEFAULT_TTS_INSTRUCTIONS,
     DEFAULT_TTS_MODEL,
+    DEFAULT_TTS_SPEED,
     DEFAULT_TTS_VOICE,
     DEFAULT_WAKE_BACKEND,
     DEFAULT_WAKE_INFERENCE_FRAMEWORK,
@@ -36,6 +38,8 @@ def make_settings(openai_api_key="sk-test"):
         chat_model=DEFAULT_CHAT_MODEL,
         tts_model=DEFAULT_TTS_MODEL,
         tts_voice=DEFAULT_TTS_VOICE,
+        tts_instructions=DEFAULT_TTS_INSTRUCTIONS,
+        tts_speed=DEFAULT_TTS_SPEED,
     )
 
 
@@ -192,7 +196,32 @@ class OpenAIClientTests(unittest.TestCase):
         self.assertEqual(call["model"], DEFAULT_TTS_MODEL)
         self.assertEqual(call["voice"], DEFAULT_TTS_VOICE)
         self.assertEqual(call["input"], "answer")
+        self.assertEqual(call["speed"], DEFAULT_TTS_SPEED)
+        self.assertNotIn("instructions", call)
         self.assertEqual(speech_response.streamed_to.name, "output.mp3")
+
+    def test_text_to_speech_sends_configured_instructions_and_speed(self):
+        speech_response = FakeSpeechResponse(data=b"styled-mp3")
+        fake_sdk = FakeSDKClient(speech_response=speech_response)
+        settings = make_settings()
+        settings = Settings(
+            **{
+                **settings.__dict__,
+                "tts_instructions": "Sound relaxed, confident, and lightly amused.",
+                "tts_speed": 1.25,
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "output.mp3"
+
+            OpenAIClient(settings, sdk_client=fake_sdk).text_to_speech("answer", str(output_path))
+
+            self.assertEqual(output_path.read_bytes(), b"styled-mp3")
+
+        call = fake_sdk.audio.speech.with_streaming_response.calls[0]
+        self.assertEqual(call["instructions"], "Sound relaxed, confident, and lightly amused.")
+        self.assertEqual(call["speed"], 1.25)
 
     def test_missing_openai_api_key_has_actionable_error_without_sdk_import(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

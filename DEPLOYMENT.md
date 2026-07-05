@@ -52,6 +52,20 @@ Edit `.env` and replace the placeholder key:
 OPENAI_API_KEY=sk-...
 ```
 
+The default OpenAI speech settings preserve the normal generated voice:
+
+```text
+TTS_MODEL=gpt-4o-mini-tts
+TTS_VOICE=alloy
+TTS_INSTRUCTIONS=
+TTS_SPEED=1.0
+```
+
+Use `TTS_INSTRUCTIONS` for OpenAI.fm-style vibe text such as `Speak warmly,
+quickly, and with dry humor`; the assistant sends that value as speech API
+instructions rather than using a separate OpenAI.fm vibe parameter. `TTS_SPEED`
+controls generated-audio speed and must be from `0.25` through `4.0`.
+
 If the TFLite runtime is missing after installing requirements, run the same
 install command again from the active virtual environment and confirm
 `ai-edge-litert` is installed on macOS:

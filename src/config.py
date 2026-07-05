@@ -35,6 +35,8 @@ DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
 DEFAULT_TTS_MODEL = "gpt-4o-mini-tts"
 DEFAULT_TTS_VOICE = "alloy"
+DEFAULT_TTS_INSTRUCTIONS: str | None = None
+DEFAULT_TTS_SPEED = 1.0
 DEFAULT_WAKE_DEBUG = False
 DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS = 1.0
 DEFAULT_POST_PLAYBACK_QUIET_SECONDS = 0.5
@@ -78,6 +80,8 @@ class Settings:
     chat_model: str
     tts_model: str
     tts_voice: str
+    tts_instructions: str | None = DEFAULT_TTS_INSTRUCTIONS
+    tts_speed: float = DEFAULT_TTS_SPEED
     wake_debug: bool = DEFAULT_WAKE_DEBUG
     post_playback_wake_cooldown_seconds: float = DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS
     post_playback_quiet_seconds: float = DEFAULT_POST_PLAYBACK_QUIET_SECONDS
@@ -177,6 +181,15 @@ def load_settings(
     chat_model = _text_value(raw_env, "CHAT_MODEL", DEFAULT_CHAT_MODEL, errors)
     tts_model = _text_value(raw_env, "TTS_MODEL", DEFAULT_TTS_MODEL, errors)
     tts_voice = _text_value(raw_env, "TTS_VOICE", DEFAULT_TTS_VOICE, errors)
+    tts_instructions = _optional_text_value(raw_env, "TTS_INSTRUCTIONS")
+    tts_speed = _float_value(
+        raw_env,
+        "TTS_SPEED",
+        DEFAULT_TTS_SPEED,
+        errors,
+        minimum=0.25,
+        maximum=4.0,
+    )
     wake_debug = _bool_value(raw_env, "WAKE_DEBUG", DEFAULT_WAKE_DEBUG, errors)
     post_playback_wake_cooldown_seconds = _float_value(
         raw_env,
@@ -239,6 +252,8 @@ def load_settings(
         chat_model=chat_model,
         tts_model=tts_model,
         tts_voice=tts_voice,
+        tts_instructions=tts_instructions,
+        tts_speed=tts_speed,
         wake_debug=wake_debug,
         post_playback_wake_cooldown_seconds=post_playback_wake_cooldown_seconds,
         post_playback_quiet_seconds=post_playback_quiet_seconds,
@@ -505,6 +520,14 @@ def _text_value(env: Mapping[str, str], name: str, default: str, errors: list[st
             errors.append(str(exc))
             return default
     return value
+
+
+def _optional_text_value(env: Mapping[str, str], name: str) -> str | None:
+    raw_value = env.get(name)
+    if raw_value is None:
+        return None
+    value = raw_value.strip()
+    return value or None
 
 
 def _float_value(
