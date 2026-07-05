@@ -36,9 +36,11 @@ F014 has been completed through the orchestrator entrypoint, with Coding Agent i
 
 F015 has been completed through the orchestrator entrypoint, with Coding Agent implementation and Evaluator Agent approval recorded. The active Alexa/openWakeWord path now defaults to configurable TFLite inference with `WAKE_BACKEND=openwakeword`, `WAKE_MODEL=alexa`, `WAKE_INFERENCE_FRAMEWORK=tflite`, and `WAKE_THRESHOLD=0.5`; detector construction, model preparation, diagnostics, live/file wake debug output, `scripts/debug_oww_file.py`, README, `.env.example`, requirements, and focused tests are framework-aware. The implementation adds a macOS ARM64 guard that rejects explicit ONNX selection with guidance to use TFLite, and records durable TFLite runtime capability through `ai-edge-litert` requirements and diagnostics. Durable evaluator evidence is recorded in `runs/F015-evaluation.md`.
 
+F016 has been implemented by manual Coding Agent fallback and evaluator-approved. The real assistant loop now treats `OpenAIClientError` from transcription, chat, or text-to-speech as recoverable: it logs the failure, returns to `WAIT_WAKE`, skips downstream stages that depend on the failed stage, and keeps the long-running process alive. Focused tests cover the user-observed empty transcription traceback, chat/TTS recovery, unexpected exception propagation, and the successful loop. README and deployment troubleshooting now document empty transcription recovery. Durable evaluator evidence is recorded in `runs/F016-evaluation.md`.
+
 ## Last Completed Feature
 
-F015 - Switch Alexa openWakeWord runtime to TFLite.
+F016 - Keep assistant alive after empty transcription.
 
 ## Next Feature
 
@@ -65,3 +67,4 @@ None currently selected.
 - F014 was completed through the orchestrator entrypoint because `PICOVOICE_ACCESS_KEY` is not currently obtainable by the user. The Porcupine account requirement is recorded as a capability gap in the abandoned Porcupine direction; F014 resolves it for the active MVP path by restoring Alexa/openWakeWord setup through durable requirements, diagnostics, documentation, and tests. Implementation evidence is in `runs/F014-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F014` in `runs/F014-evaluation.md`.
 - F015 has been planned after local debug notes and upstream issue evidence showed openWakeWord ONNX produces near-zero Alexa scores on macOS ARM64 while TFLite produces usable scores. Planning intentionally keeps configuration, detector construction, preparation, diagnostics, debug observability, documentation, and tests in one feature so the active wake-word runtime cannot become half-TFLite and half-ONNX.
 - F015 was completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap. Implementation evidence is in `runs/F015-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F015` in `runs/F015-evaluation.md`.
+- F016 was completed by manual fallback because the user provided a live traceback from the real assistant loop and explicitly requested a bug-fix pass. The root cause was an unhandled `OpenAIClientError` when transcription returned empty text after a max-duration recording. Implementation evidence is in `runs/F016-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F016` in `runs/F016-evaluation.md`.

@@ -8,11 +8,13 @@ from src.main import build_parser
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 ENV_EXAMPLE = ROOT / ".env.example"
+DEPLOYMENT = ROOT / "DEPLOYMENT.md"
 
 
 class DocumentationTests(unittest.TestCase):
     def test_readme_documents_cli_modes_from_parser(self):
         readme = README.read_text(encoding="utf-8")
+        deployment = DEPLOYMENT.read_text(encoding="utf-8")
         help_text = build_parser().format_help()
 
         for flag in (
@@ -25,8 +27,10 @@ class DocumentationTests(unittest.TestCase):
         ):
             self.assertIn(flag, help_text)
             self.assertIn(f"python -m src.main {flag}", readme)
+            self.assertIn(f"python -m src.main {flag}", deployment)
 
         self.assertIn("python -m src.main", readme)
+        self.assertIn("python -m src.main", deployment)
 
     def test_readme_documents_env_example_keys(self):
         readme = README.read_text(encoding="utf-8")
@@ -40,35 +44,56 @@ class DocumentationTests(unittest.TestCase):
 
     def test_readme_documents_runtime_requirements_and_mvp_followups(self):
         readme = README.read_text(encoding="utf-8")
+        deployment = DEPLOYMENT.read_text(encoding="utf-8")
 
         self.assertIn("Python 3.11 or Python 3.12", readme)
+        self.assertIn("Python 3.11 or Python 3.12", deployment)
         self.assertIn("macOS microphone permission", readme)
+        self.assertIn("macOS with microphone access", deployment)
         self.assertIn("Microphone input overflows", readme)
         self.assertIn("Wake-Word Debugging", readme)
         self.assertIn("--wake-debug-output", readme)
+        self.assertIn("--wake-debug-output", deployment)
         self.assertIn("tmp/input.wav", readme)
+        self.assertIn("tmp/input.wav", deployment)
         self.assertIn("frame count", readme)
         self.assertIn("maximum observed score", readme)
         self.assertIn("rms", readme)
+        self.assertIn("rms", deployment)
         self.assertIn("peak", readme)
+        self.assertIn("peak", deployment)
         self.assertIn("score", readme)
+        self.assertIn("wake scores", deployment)
         self.assertIn("threshold", readme)
+        self.assertIn("WAKE_THRESHOLD", deployment)
         self.assertIn("WAIT_WAKE", readme)
+        self.assertIn("WAIT_WAKE", deployment)
         self.assertIn("audio processing may have fallen behind", readme)
         self.assertIn("afplay", readme)
+        self.assertIn("afplay", deployment)
         self.assertIn("Hey Jarvis", readme)
+        self.assertIn("Hey Jarvis", deployment)
         self.assertIn("Alexa", readme)
+        self.assertIn("Alexa", deployment)
         self.assertIn("openWakeWord", readme)
+        self.assertIn("openWakeWord", deployment)
         self.assertIn("ai-edge-litert", readme)
+        self.assertIn("ai-edge-litert", deployment)
         self.assertIn("WAKE_BACKEND=openwakeword", readme)
+        self.assertIn("WAKE_BACKEND=openwakeword", deployment)
         self.assertIn("WAKE_MODEL=alexa", readme)
+        self.assertIn("WAKE_MODEL=alexa", deployment)
         self.assertIn("WAKE_INFERENCE_FRAMEWORK=tflite", readme)
+        self.assertIn("WAKE_INFERENCE_FRAMEWORK=tflite", deployment)
         self.assertIn("scripts/debug_oww_file.py", readme)
         self.assertIn("wake_word_models", readme)
+        self.assertIn("wake_word_models", deployment)
         self.assertIn("WAKE_THRESHOLD=0.5", readme)
+        self.assertIn("WAKE_THRESHOLD=0.5", deployment)
         self.assertIn("WAKE_PHRASE=alexa", ENV_EXAMPLE.read_text(encoding="utf-8"))
         self.assertIn("WAKE_INFERENCE_FRAMEWORK=tflite", ENV_EXAMPLE.read_text(encoding="utf-8"))
         self.assertIn("what is two plus two?", readme)
+        self.assertIn("what is two plus two?", deployment)
         self.assertIn("Interrupt playback", readme)
         self.assertIn("six-second follow-up", readme)
         self.assertIn("custom wake-word model loading", readme)

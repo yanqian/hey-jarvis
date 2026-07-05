@@ -533,6 +533,62 @@ Verification surface: focused unit tests for configuration defaults and override
 
 Decomposition decision: this remains one feature because configuration, detector construction, model preparation, diagnostics, debug observability, documentation, and tests are one coherent runtime switch. Splitting them would leave the wake path in a misleading partial state where the detector might use TFLite but setup or debug still claims ONNX.
 
+### Recover From Empty Transcription And OpenAI Loop Errors
+
+Goal: keep the long-running assistant alive when a wake event leads to an empty
+OpenAI transcription or another OpenAI client error during the answer loop.
+
+Included scope: catch project-owned `OpenAIClientError` exceptions from
+transcription, chat completion, and text-to-speech inside the state machine;
+log the recoverable failure with the current state; return to `WAIT_WAKE`
+without calling later stages that depend on the failed stage; document the empty
+transcription troubleshooting case; add deterministic tests for the user-observed
+empty transcription traceback and adjacent OpenAI error stages.
+
+Excluded scope: changing OpenAI model selection, adding real-time stock/news/web
+tools, changing microphone recording thresholds, retrying OpenAI requests,
+playing an apology TTS after failures, swallowing unexpected programming errors,
+or requiring live OpenAI calls in automated tests.
+
+Core flows: after a valid wake detection, the assistant records
+`tmp/input.wav`. If transcription returns empty text and the OpenAI client raises
+`OpenAIClientError`, the state machine logs the failure, transitions back to
+`WAIT_WAKE`, does not call chat/TTS/playback, and the outer
+`run_assistant_forever` loop keeps listening. If chat or TTS raises
+`OpenAIClientError`, the same recoverable return-to-wake behavior happens after
+preserving the already completed stage outputs in the loop result. Unexpected
+non-OpenAI exceptions still surface for debugging.
+
+Constraints: the assistant is a long-running local process, so recoverable API
+or empty-audio outcomes must not terminate it. Automated tests must use fake
+clients and generated WAV files, not live OpenAI requests or a real microphone.
+The existing successful state-machine flow and fake-backend smoke path must keep
+working unchanged.
+
+Ambiguities or assumptions: empty transcription is treated as a recoverable
+runtime outcome, often caused by silence, background noise, max-duration
+recordings, or unusable speech after a wake event. The MVP logs the recovery and
+returns to wake listening instead of synthesizing a spoken apology.
+
+Required capabilities: deterministic fake `OpenAIClientError` test doubles,
+existing state-machine unit tests, README and deployment troubleshooting updates,
+and the recovery check through root `./init.sh`.
+
+Implementation paths: `src/state_machine.py`, `tests/test_state_machine.py`,
+`README.md`, `DEPLOYMENT.md`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, `.agent-harness/SPEC.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: focused state-machine tests for empty transcription,
+chat error, TTS error, unexpected exception propagation, existing successful
+loop behavior, OpenAI client tests, documentation tests, feature validation, and
+full `./init.sh`.
+
+Decomposition decision: this remains one bug-fix feature because the failures
+share one boundary: recoverable OpenAI client errors inside a single
+question-answer loop. Splitting by transcription/chat/TTS would duplicate the
+same recovery behavior without adding independently useful user value.
+
 ## 5. Verification Plan
 
 Run:

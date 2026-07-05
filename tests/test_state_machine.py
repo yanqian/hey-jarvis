@@ -19,6 +19,7 @@ from src.config import (
     DEFAULT_WAKE_THRESHOLD,
     Settings,
 )
+from src.openai_client import OpenAIClientError
 from src.recorder import RecordingResult
 from src.state_machine import AssistantState, VoiceAssistantStateMachine
 
@@ -64,21 +65,32 @@ class FakeWakeDetector:
 
 
 class FakeOpenAIClient:
-    def __init__(self):
+    def __init__(self, *, fail_at=None):
         self.transcribed_path = None
         self.tts_output_path = None
+        self.fail_at = fail_at
+        self.chat_calls = 0
+        self.tts_calls = 0
 
     def transcribe_audio(self, path):
         self.transcribed_path = Path(path)
+        if self.fail_at == "transcribe":
+            raise OpenAIClientError("OpenAI transcription returned empty text")
         return "what is two plus two?"
 
     def ask_chatgpt(self, text, history):
+        self.chat_calls += 1
+        if self.fail_at == "chat":
+            raise OpenAIClientError("OpenAI chat response returned empty text")
         history.append({"role": "user", "content": text})
         answer = "Two plus two is four."
         history.append({"role": "assistant", "content": answer})
         return answer
 
     def text_to_speech(self, text, output_path):
+        self.tts_calls += 1
+        if self.fail_at == "tts":
+            raise OpenAIClientError("OpenAI text-to-speech request failed: timeout")
         self.tts_output_path = Path(output_path)
         self.tts_output_path.write_bytes(text.encode("utf-8"))
 
@@ -137,6 +149,8 @@ class StateMachineTests(unittest.TestCase):
         self.assertEqual(result.answer, "Two plus two is four.")
         self.assertEqual(openai_client.transcribed_path, input_path)
         self.assertEqual(openai_client.tts_output_path, output_path)
+        self.assertEqual(openai_client.chat_calls, 1)
+        self.assertEqual(openai_client.tts_calls, 1)
         self.assertEqual(player.played, [output_path])
         self.assertEqual(history[-1], {"role": "assistant", "content": "Two plus two is four."})
         log_output = "\n".join(logs.output)
@@ -172,6 +186,122 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("overflow=false", log_output)
         self.assertIn("score=1.000000000", log_output)
         self.assertIn("threshold=0.500000000", log_output)
+
+    def test_empty_transcription_returns_to_wait_wake_without_crashing(self):
+        logger = logging.getLogger("tests.state_machine.empty_transcription")
+        audio_source = FakeAudioSource()
+        openai_client = FakeOpenAIClient(fail_at="transcribe")
+        player = FakePlayer()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "input.wav"
+            output_path = Path(tmp_dir) / "output.mp3"
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=openai_client,
+                player=player,
+                record_audio=fake_record_audio,
+                input_path=input_path,
+                output_path=output_path,
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(result.transcription, "")
+        self.assertEqual(result.answer, "")
+        self.assertEqual(result.error, "OpenAI transcription returned empty text")
+        self.assertEqual(openai_client.transcribed_path, input_path)
+        self.assertEqual(openai_client.chat_calls, 0)
+        self.assertEqual(openai_client.tts_calls, 0)
+        self.assertEqual(player.played, [])
+        log_output = "\n".join(logs.output)
+        self.assertIn("Recoverable OpenAI error in state TRANSCRIBE", log_output)
+        self.assertIn("Transition TRANSCRIBE -> WAIT_WAKE", log_output)
+        self.assertIn("State WAIT_WAKE: ready for the next wake word", log_output)
+
+    def test_chat_error_returns_to_wait_wake_without_tts_or_playback(self):
+        logger = logging.getLogger("tests.state_machine.chat_error")
+        openai_client = FakeOpenAIClient(fail_at="chat")
+        player = FakePlayer()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(),
+                audio_source=FakeAudioSource(),
+                wake_detector=FakeWakeDetector(),
+                openai_client=openai_client,
+                player=player,
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO"):
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(result.transcription, "what is two plus two?")
+        self.assertEqual(result.answer, "")
+        self.assertEqual(result.error, "OpenAI chat response returned empty text")
+        self.assertEqual(openai_client.chat_calls, 1)
+        self.assertEqual(openai_client.tts_calls, 0)
+        self.assertEqual(player.played, [])
+
+    def test_tts_error_returns_to_wait_wake_without_playback(self):
+        logger = logging.getLogger("tests.state_machine.tts_error")
+        openai_client = FakeOpenAIClient(fail_at="tts")
+        player = FakePlayer()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(),
+                audio_source=FakeAudioSource(),
+                wake_detector=FakeWakeDetector(),
+                openai_client=openai_client,
+                player=player,
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO"):
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(result.transcription, "what is two plus two?")
+        self.assertEqual(result.answer, "Two plus two is four.")
+        self.assertEqual(result.error, "OpenAI text-to-speech request failed: timeout")
+        self.assertEqual(openai_client.tts_calls, 1)
+        self.assertEqual(player.played, [])
+
+    def test_unexpected_transcription_error_is_not_swallowed(self):
+        class BrokenOpenAIClient(FakeOpenAIClient):
+            def transcribe_audio(self, path):
+                raise RuntimeError("programming mistake")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(),
+                audio_source=FakeAudioSource(),
+                wake_detector=FakeWakeDetector(),
+                openai_client=BrokenOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+            )
+
+            with self.assertRaises(RuntimeError) as caught:
+                machine.run_once()
+
+        self.assertIn("programming mistake", str(caught.exception))
 
 
 if __name__ == "__main__":

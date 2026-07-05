@@ -13,6 +13,8 @@ Assistant: "Two plus two is four."
 
 This project now includes the MVP voice-assistant loop behind testable boundaries. The recovery entrypoint proves the Python package, tests, and a fake-backend state-machine path work without requiring a microphone, speakers, or OpenAI credentials. Real audio capture, wake-word detection, OpenAI transcription/chat/TTS, and macOS playback are wired through `python -m src.main`.
 
+For full local macOS deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Runtime
 
 Use Python 3.11 or Python 3.12 for the MVP. Some audio and ML dependencies may not yet support newer Python releases.
@@ -20,14 +22,13 @@ Use Python 3.11 or Python 3.12 for the MVP. Some audio and ML dependencies may n
 ## Setup
 
 Create an isolated Python environment, install the runtime dependencies, create
-local configuration, and run the dependency-free smoke path:
+local configuration, and run the dependency-free dry-run smoke path:
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-python -m src.main --prepare-wake-word
+test -f .env || cp .env.example .env
 python -m src.main --dry-run
 ```
 
@@ -51,6 +52,8 @@ are visible before microphone capture starts:
 ```bash
 python -m src.main --prepare-wake-word
 ```
+
+The complete deployment sequence is documented in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 To inspect local runtime readiness without starting the assistant, run:
 
@@ -92,10 +95,11 @@ python -m src.main
 
 ## Real Demo
 
-Before the real demo, run `python -m src.main --prepare-wake-word`, then
-`python -m src.main --diagnose`, and fix any reported errors. Grant macOS
-microphone permission to the terminal or agent surface that launches the
-assistant, and make sure `.env` contains a real `OPENAI_API_KEY`.
+Before the real demo, follow [DEPLOYMENT.md](DEPLOYMENT.md): install
+requirements, set `OPENAI_API_KEY`, run `python -m src.main
+--prepare-wake-word`, run `python -m src.main --diagnose`, and fix any reported
+errors. Grant macOS microphone permission to the terminal or agent surface that
+launches the assistant.
 
 Start the assistant:
 
@@ -206,6 +210,9 @@ Common outcomes:
 
 - `OPENAI_API_KEY is required`: copy `.env.example` to `.env` and replace the
   placeholder value.
+- `OpenAI transcription returned empty text`: the assistant did not get usable
+  speech from the recorded question. It logs the recoverable error and returns
+  to `WAIT_WAKE`; try again closer to the microphone or reduce background noise.
 - `sounddevice is not importable`, `openai is not importable`, or another
   dependency is missing: activate `.venv` and run `pip install -r
   requirements.txt`.
@@ -242,6 +249,9 @@ From the repository root:
 ```
 
 The recovery check runs the AI Agent Harness verification, compiles project Python files, runs tests, and executes dry-run plus fake-backend smoke paths.
+
+Use [DEPLOYMENT.md](DEPLOYMENT.md) for live macOS deployment and wake-word
+acceptance testing after the recovery check passes.
 
 ## Post-MVP TODOs
 

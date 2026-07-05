@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, MutableSequence, Protocol
 
 from .config import Settings
+from .openai_client import OpenAIClientError
 from .recorder import DEFAULT_INPUT_WAV, RecordingResult, record_to_wav
 from .wake_word import pcm_rms_and_peak
 
@@ -61,6 +62,7 @@ class AssistantLoopResult:
     transcription: str
     answer: str
     final_state: AssistantState
+    error: str | None = None
 
 
 class VoiceAssistantStateMachine:
@@ -109,15 +111,29 @@ class VoiceAssistantStateMachine:
         )
 
         self._set_state(AssistantState.TRANSCRIBE)
-        transcription = self.openai_client.transcribe_audio(str(recording.path))
+        try:
+            transcription = self.openai_client.transcribe_audio(str(recording.path))
+        except OpenAIClientError as exc:
+            return self._recover_from_openai_error(recording, exc)
         self._logger.info("State TRANSCRIBE: received transcription")
 
         self._set_state(AssistantState.ASK_OPENAI)
-        answer = self.openai_client.ask_chatgpt(transcription, self.history)
+        try:
+            answer = self.openai_client.ask_chatgpt(transcription, self.history)
+        except OpenAIClientError as exc:
+            return self._recover_from_openai_error(recording, exc, transcription=transcription)
         self._logger.info("State ASK_OPENAI: received assistant answer")
 
         self._set_state(AssistantState.TTS)
-        self.openai_client.text_to_speech(answer, str(self.output_path))
+        try:
+            self.openai_client.text_to_speech(answer, str(self.output_path))
+        except OpenAIClientError as exc:
+            return self._recover_from_openai_error(
+                recording,
+                exc,
+                transcription=transcription,
+                answer=answer,
+            )
         self._logger.info("State TTS: wrote synthesized speech to %s", self.output_path)
 
         self._set_state(AssistantState.PLAYING)
@@ -132,6 +148,26 @@ class VoiceAssistantStateMachine:
             transcription=transcription,
             answer=answer,
             final_state=self.state,
+        )
+
+    def _recover_from_openai_error(
+        self,
+        recording: RecordingResult,
+        exc: OpenAIClientError,
+        *,
+        transcription: str = "",
+        answer: str = "",
+    ) -> AssistantLoopResult:
+        self._logger.error("Recoverable OpenAI error in state %s: %s", self.state.value, exc)
+        self._set_state(AssistantState.WAIT_WAKE)
+        self._logger.info("State WAIT_WAKE: ready for the next wake word")
+        return AssistantLoopResult(
+            recording_path=recording.path,
+            output_path=self.output_path,
+            transcription=transcription,
+            answer=answer,
+            final_state=self.state,
+            error=str(exc),
         )
 
     def _wait_for_wake_word(self) -> None:

@@ -305,6 +305,27 @@
       "depends_on": [
         "F014"
       ]
+    },
+    {
+      "id": "F016",
+      "title": "Keep assistant alive after empty transcription",
+      "description": "Fix the real assistant loop so an empty OpenAI transcription or other OpenAI client error after a wake event is logged as a recoverable loop failure and returns to WAIT_WAKE instead of crashing the long-running process.",
+      "acceptance": [
+        "If transcription raises OpenAIClientError, including empty transcription text, the state machine logs the failure and returns to WAIT_WAKE without calling chat, TTS, or playback.",
+        "OpenAIClientError from chat completion or text-to-speech is also handled as a recoverable loop failure that returns to WAIT_WAKE without exiting the process.",
+        "Unexpected non-OpenAI exceptions are not broadly swallowed by the state machine.",
+        "Focused tests cover empty transcription recovery and prove successful loops still complete normally.",
+        "Progress or run evidence records the user-observed traceback and the manual fallback verification."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F006",
+        "F005"
+      ]
     }
   ]
 }
