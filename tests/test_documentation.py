@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 ENV_EXAMPLE = ROOT / ".env.example"
 DEPLOYMENT = ROOT / "DEPLOYMENT.md"
+MANUAL_TESTING = ROOT / "MANUAL_TESTING.md"
 
 
 class DocumentationTests(unittest.TestCase):
@@ -45,6 +46,7 @@ class DocumentationTests(unittest.TestCase):
     def test_readme_documents_runtime_requirements_and_mvp_followups(self):
         readme = README.read_text(encoding="utf-8")
         deployment = DEPLOYMENT.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
 
         self.assertIn("Python 3.11 or Python 3.12", readme)
         self.assertIn("Python 3.11 or Python 3.12", deployment)
@@ -94,6 +96,13 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("WAKE_INFERENCE_FRAMEWORK=tflite", ENV_EXAMPLE.read_text(encoding="utf-8"))
         self.assertIn("what is two plus two?", readme)
         self.assertIn("what is two plus two?", deployment)
+        self.assertIn("MANUAL_TESTING.md", readme)
+        self.assertIn("MANUAL_TESTING.md", deployment)
+        self.assertIn("SILENCE_SECONDS", manual_testing)
+        self.assertIn("MAX_RECORD_SECONDS", manual_testing)
+        self.assertIn("stopped_by=silence", manual_testing)
+        self.assertIn("10-15 second question", manual_testing)
+        self.assertIn("tmp/input.wav", manual_testing)
         self.assertIn("Interrupt playback", readme)
         self.assertIn("six-second follow-up", readme)
         self.assertIn("custom wake-word model loading", readme)

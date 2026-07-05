@@ -6,6 +6,10 @@ from unittest.mock import patch
 from src.config import (
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_RECORD_SECONDS,
+    DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
+    DEFAULT_POST_PLAYBACK_QUIET_RMS,
+    DEFAULT_POST_PLAYBACK_QUIET_SECONDS,
+    DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_SECONDS,
     DEFAULT_TRANSCRIBE_MODEL,
@@ -17,6 +21,7 @@ from src.config import (
     DEFAULT_WAKE_MODEL,
     DEFAULT_WAKE_PHRASE,
     DEFAULT_WAKE_THRESHOLD,
+    DEFAULT_WAKE_CONFIRMATION_FRAMES,
     ConfigError,
     collect_diagnostics,
     load_settings,
@@ -45,6 +50,11 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.tts_model, DEFAULT_TTS_MODEL)
         self.assertEqual(settings.tts_voice, DEFAULT_TTS_VOICE)
         self.assertEqual(settings.wake_debug, DEFAULT_WAKE_DEBUG)
+        self.assertEqual(settings.post_playback_wake_cooldown_seconds, DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS)
+        self.assertEqual(settings.post_playback_quiet_seconds, DEFAULT_POST_PLAYBACK_QUIET_SECONDS)
+        self.assertEqual(settings.post_playback_quiet_rms, DEFAULT_POST_PLAYBACK_QUIET_RMS)
+        self.assertEqual(settings.post_playback_max_suppression_seconds, DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS)
+        self.assertEqual(settings.wake_confirmation_frames, DEFAULT_WAKE_CONFIRMATION_FRAMES)
 
     def test_environment_overrides_are_typed(self):
         settings = load_settings(
@@ -63,6 +73,11 @@ class ConfigTests(unittest.TestCase):
                 "TTS_MODEL": "tts-test",
                 "TTS_VOICE": "verse",
                 "WAKE_DEBUG": "1",
+                "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS": "2.5",
+                "POST_PLAYBACK_QUIET_SECONDS": "0.75",
+                "POST_PLAYBACK_QUIET_RMS": "650",
+                "POST_PLAYBACK_MAX_SUPPRESSION_SECONDS": "5",
+                "WAKE_CONFIRMATION_FRAMES": "3",
             },
             env_file=None,
         )
@@ -81,6 +96,11 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.tts_model, "tts-test")
         self.assertEqual(settings.tts_voice, "verse")
         self.assertTrue(settings.wake_debug)
+        self.assertEqual(settings.post_playback_wake_cooldown_seconds, 2.5)
+        self.assertEqual(settings.post_playback_quiet_seconds, 0.75)
+        self.assertEqual(settings.post_playback_quiet_rms, 650.0)
+        self.assertEqual(settings.post_playback_max_suppression_seconds, 5.0)
+        self.assertEqual(settings.wake_confirmation_frames, 3)
 
     def test_env_file_values_are_loaded_and_environment_wins(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -114,6 +134,11 @@ class ConfigTests(unittest.TestCase):
                     "SAMPLE_RATE": "not-an-int",
                     "CHAT_MODEL": "",
                     "WAKE_DEBUG": "maybe",
+                    "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS": "2",
+                    "POST_PLAYBACK_QUIET_SECONDS": "-0.1",
+                    "POST_PLAYBACK_QUIET_RMS": "-1",
+                    "POST_PLAYBACK_MAX_SUPPRESSION_SECONDS": "0.5",
+                    "WAKE_CONFIRMATION_FRAMES": "0",
                 },
                 env_file=None,
             )
@@ -125,6 +150,10 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("SAMPLE_RATE must be an integer", message)
         self.assertIn("CHAT_MODEL must not be empty", message)
         self.assertIn("WAKE_DEBUG must be a boolean value", message)
+        self.assertIn("POST_PLAYBACK_QUIET_SECONDS must be at least 0.0", message)
+        self.assertIn("POST_PLAYBACK_QUIET_RMS must be at least 0.0", message)
+        self.assertIn("POST_PLAYBACK_MAX_SUPPRESSION_SECONDS must be greater than or equal", message)
+        self.assertIn("WAKE_CONFIRMATION_FRAMES must be at least 1", message)
         self.assertIn("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS", message)
 
     def test_required_openai_key_has_actionable_error(self):

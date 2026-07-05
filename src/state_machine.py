@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -141,6 +142,7 @@ class VoiceAssistantStateMachine:
         self._logger.info("State PLAYING: playback finished")
 
         self._set_state(AssistantState.WAIT_WAKE)
+        self._drain_post_playback_audio()
         self._logger.info("State WAIT_WAKE: ready for the next wake word")
         return AssistantLoopResult(
             recording_path=recording.path,
@@ -171,11 +173,26 @@ class VoiceAssistantStateMachine:
         )
 
     def _wait_for_wake_word(self) -> None:
+        consecutive_detections = 0
+        required_detections = max(1, self.settings.wake_confirmation_frames)
         while True:
             chunk = self.audio_source.read_chunk()
+            if getattr(self.audio_source, "last_overflowed", False):
+                consecutive_detections = 0
+                self._logger.info("State WAIT_WAKE: ignoring overflowed microphone chunk for wake detection")
+                continue
             if self._debug_or_detect_wake_word(chunk):
-                self._logger.info("State WAIT_WAKE: wake word detected")
-                return
+                consecutive_detections += 1
+                if consecutive_detections >= required_detections:
+                    self._logger.info("State WAIT_WAKE: wake word detected")
+                    return
+                self._logger.info(
+                    "State WAIT_WAKE: wake word candidate %s/%s",
+                    consecutive_detections,
+                    required_detections,
+                )
+            else:
+                consecutive_detections = 0
 
     def _debug_or_detect_wake_word(self, chunk: bytes) -> bool:
         if not self.settings.wake_debug:
@@ -216,6 +233,95 @@ class VoiceAssistantStateMachine:
             logger=self._logger,
         )
 
+    def _drain_post_playback_audio(self) -> None:
+        cooldown_seconds = self.settings.post_playback_wake_cooldown_seconds
+        quiet_seconds_required = self.settings.post_playback_quiet_seconds
+        max_suppression_seconds = self.settings.post_playback_max_suppression_seconds
+        if cooldown_seconds <= 0 and quiet_seconds_required <= 0:
+            return
+
+        minimum_chunk_seconds = 1.0 / self.settings.sample_rate
+        expected_frame_seconds = _detector_frame_seconds(self.wake_detector, self.settings.sample_rate)
+        max_chunks = max(1, math.ceil(cooldown_seconds / expected_frame_seconds))
+        drained_seconds = 0.0
+        drained_chunks = 0
+
+        self._logger.info(
+            "State WAIT_WAKE: suppressing post-playback wake detection for %.2fs",
+            cooldown_seconds,
+        )
+        while drained_chunks < max_chunks and drained_seconds < cooldown_seconds:
+            chunk = self.audio_source.read_chunk()
+            drained_chunks += 1
+            drained_seconds += max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+
+        self._logger.info(
+            "State WAIT_WAKE: discarded %s post-playback microphone chunks",
+            drained_chunks,
+        )
+        self._wait_for_post_playback_quiet(
+            drained_seconds=drained_seconds,
+            minimum_chunk_seconds=minimum_chunk_seconds,
+        )
+
+    def _wait_for_post_playback_quiet(self, *, drained_seconds: float, minimum_chunk_seconds: float) -> None:
+        quiet_seconds_required = self.settings.post_playback_quiet_seconds
+        if quiet_seconds_required <= 0:
+            return
+
+        max_suppression_seconds = self.settings.post_playback_max_suppression_seconds
+        quiet_seconds = 0.0
+        suppressed_chunks = 0
+        max_scores: list[float] = []
+        self._logger.info(
+            "State WAIT_WAKE: waiting for %.2fs of post-playback quiet audio",
+            quiet_seconds_required,
+        )
+
+        while quiet_seconds < quiet_seconds_required:
+            if max_suppression_seconds > 0 and drained_seconds >= max_suppression_seconds:
+                self._logger.warning(
+                    "State WAIT_WAKE: post-playback quiet gate reached %.2fs maximum suppression before quiet",
+                    max_suppression_seconds,
+                )
+                break
+
+            chunk = self.audio_source.read_chunk()
+            chunk_seconds = max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+            drained_seconds += chunk_seconds
+            suppressed_chunks += 1
+
+            overflowed = bool(getattr(self.audio_source, "last_overflowed", False))
+            score = self._suppressed_wake_score(chunk, overflowed=overflowed)
+            if score is not None:
+                max_scores.append(score)
+            rms, _ = pcm_rms_and_peak(chunk)
+            wake_score_is_quiet = score is None or score < self.settings.wake_threshold
+            if not overflowed and rms <= self.settings.post_playback_quiet_rms and wake_score_is_quiet:
+                quiet_seconds += chunk_seconds
+            else:
+                quiet_seconds = 0.0
+
+        max_score = max(max_scores, default=0.0)
+        self._logger.info(
+            "State WAIT_WAKE: post-playback quiet gate consumed %s chunks; quiet=%.2fs max_suppressed_score=%.9f",
+            suppressed_chunks,
+            quiet_seconds,
+            max_score,
+        )
+
+    def _suppressed_wake_score(self, chunk: bytes, *, overflowed: bool) -> float | None:
+        if overflowed:
+            self._logger.info("State WAIT_WAKE: suppressing overflowed post-playback microphone chunk")
+            return None
+
+        score_method = getattr(self.wake_detector, "score", None)
+        if score_method is not None:
+            score = float(score_method(chunk))
+        else:
+            score = 1.0 if self.wake_detector.detect(chunk) else 0.0
+        return score
+
     def _set_state(self, next_state: AssistantState) -> None:
         if self.state == next_state:
             return
@@ -229,3 +335,16 @@ def _overflow_value(audio_source: object) -> str:
 
 def _bool_text(value: bool) -> str:
     return "true" if value else "false"
+
+
+def _chunk_duration_seconds(pcm_chunk: bytes, sample_rate: int) -> float:
+    if sample_rate <= 0 or not pcm_chunk:
+        return 0.0
+    return len(pcm_chunk) / (sample_rate * 2)
+
+
+def _detector_frame_seconds(wake_detector: object, sample_rate: int) -> float:
+    frame_length = int(getattr(wake_detector, "frame_length", 0) or 0)
+    if sample_rate <= 0 or frame_length <= 0:
+        return 0.08
+    return frame_length / sample_rate

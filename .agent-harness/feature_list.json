@@ -326,6 +326,48 @@
         "F006",
         "F005"
       ]
+    },
+    {
+      "id": "F017",
+      "title": "Suppress post-playback false wake detection",
+      "description": "Fix the real assistant loop so answer playback residue, stale microphone chunks, or immediate overflow after PLAYING do not trigger a new wake event when the user has not spoken.",
+      "acceptance": [
+        "After playback finishes, the state machine consumes a configurable post-playback microphone cooldown window without invoking wake detection before declaring WAIT_WAKE ready.",
+        "Wake detection requires a configurable number of consecutive positive wake frames so a single residual or overflowed frame does not enter RECORDING.",
+        "The default cooldown and confirmation settings are loaded from documented environment variables and keep the fake-backend smoke path deterministic.",
+        "Focused tests simulate playback residue and overflowed microphone chunks without real hardware and prove they are ignored after PLAYING.",
+        "README, DEPLOYMENT, MANUAL_TESTING, progress, and run evidence document the user-observed failure and the manual retest path."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F006",
+        "F015",
+        "F016"
+      ]
+    },
+    {
+      "id": "F018",
+      "title": "Gate post-playback wake on observed quiet",
+      "description": "Fix the remaining post-playback false wake path by keeping wake decisions suppressed until the microphone has produced a configurable quiet window after playback, not just until a fixed cooldown expires.",
+      "acceptance": [
+        "Post-playback suppression first drains the fixed cooldown and then waits for configurable consecutive quiet audio before logging that WAIT_WAKE is ready.",
+        "Suppressed post-playback audio advances the wake detector state but never triggers RECORDING, even when residual chunks score as wake-positive after the fixed cooldown.",
+        "The quiet-window duration, quiet RMS threshold, and maximum suppression duration are loaded from documented environment variables with validation.",
+        "Focused tests simulate residual wake-positive playback audio after the cooldown followed by quiet audio and prove the assistant does not enter a second RECORDING loop.",
+        "README, DEPLOYMENT, MANUAL_TESTING, progress, and run evidence document the second observed failure and the manual retest path."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F017"
+      ]
     }
   ]
 }

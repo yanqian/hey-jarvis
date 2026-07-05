@@ -21,7 +21,14 @@ WAKE_MODEL=alexa
 WAKE_INFERENCE_FRAMEWORK=tflite
 WAKE_PHRASE=alexa
 WAKE_THRESHOLD=0.5
+POST_PLAYBACK_WAKE_COOLDOWN_SECONDS=1.0
+POST_PLAYBACK_QUIET_SECONDS=0.5
+POST_PLAYBACK_QUIET_RMS=500
+POST_PLAYBACK_MAX_SUPPRESSION_SECONDS=6.0
+WAKE_CONFIRMATION_FRAMES=2
 ```
+
+Manual acceptance cases are tracked in [MANUAL_TESTING.md](MANUAL_TESTING.md).
 
 On macOS ARM64, do not deploy with `WAKE_INFERENCE_FRAMEWORK=onnx`; the project
 intentionally uses TFLite there because local debugging found ONNX Alexa scores
@@ -191,3 +198,8 @@ Only start the real assistant after recovery and diagnostics pass.
   prepared before listening.
 - Playback fails: run `python -m src.main --diagnose` and confirm `afplay` is
   available.
+- Playback finishes and immediately wakes again: keep
+  `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` enabled, keep
+  `POST_PLAYBACK_QUIET_SECONDS` enabled, keep `WAKE_CONFIRMATION_FRAMES` at `2`
+  or higher, and increase the cooldown or quiet window if speaker echo still
+  bleeds into the microphone.

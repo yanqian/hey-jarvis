@@ -14,6 +14,7 @@ Assistant: "Two plus two is four."
 This project now includes the MVP voice-assistant loop behind testable boundaries. The recovery entrypoint proves the Python package, tests, and a fake-backend state-machine path work without requiring a microphone, speakers, or OpenAI credentials. Real audio capture, wake-word detection, OpenAI transcription/chat/TTS, and macOS playback are wired through `python -m src.main`.
 
 For full local macOS deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+For manual acceptance cases, see [MANUAL_TESTING.md](MANUAL_TESTING.md).
 
 ## Runtime
 
@@ -139,6 +140,11 @@ WAKE_BACKEND=openwakeword
 WAKE_MODEL=alexa
 WAKE_INFERENCE_FRAMEWORK=tflite
 WAKE_THRESHOLD=0.5
+POST_PLAYBACK_WAKE_COOLDOWN_SECONDS=1.0
+POST_PLAYBACK_QUIET_SECONDS=0.5
+POST_PLAYBACK_QUIET_RMS=500
+POST_PLAYBACK_MAX_SUPPRESSION_SECONDS=6.0
+WAKE_CONFIRMATION_FRAMES=2
 SILENCE_SECONDS=1.5
 MAX_RECORD_SECONDS=20
 SAMPLE_RATE=16000
@@ -205,6 +211,10 @@ Common outcomes:
 - `score` stays low while `rms` and `peak` move: the microphone is working, but
   openWakeWord is not matching the phrase; check pronunciation, distance, and
   background noise.
+- The assistant wakes immediately after playback when nobody spoke: keep
+  `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` above `0`, keep
+  `POST_PLAYBACK_QUIET_SECONDS` above `0`, keep `WAKE_CONFIRMATION_FRAMES` at
+  `2` or higher, and rerun the playback-overlap manual test.
 
 ## Troubleshooting
 
@@ -235,6 +245,11 @@ Common outcomes:
   CPU-heavy audio or ML processes before trying the wake phrase again.
 - Playback fails: run `python -m src.main --diagnose` and confirm `afplay` is
   available. The MVP is macOS-only for playback.
+- Playback finishes and immediately triggers a new wake event: the app now
+  discards a short post-playback microphone window, waits for observed quiet,
+  and requires consecutive wake-positive frames. Increase
+  `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` or `POST_PLAYBACK_QUIET_SECONDS` if room
+  echo or speaker bleed still retriggers wake detection.
 - Wake-word detection does not trigger: use the accepted phrase `Alexa`,
   speak clearly near the microphone, confirm the app is still in `WAIT_WAKE`,
   then run `python -m src.main --wake-debug` or set `WAKE_DEBUG=1` to inspect

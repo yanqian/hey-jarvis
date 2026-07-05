@@ -62,7 +62,7 @@ def run_fake_backend_smoke() -> int:
 
     logger = logging.getLogger(LOGGER_NAME)
     settings = load_settings(env={}, env_file=None)
-    microphone = _FakeMicrophone([b"\x00\x00", b"\x01\x00"])
+    microphone = _FakeMicrophone([_FAKE_SILENCE_CHUNK, _FAKE_WAKE_CHUNK, _FAKE_WAKE_CHUNK])
     machine = VoiceAssistantStateMachine(
         settings=settings,
         audio_source=microphone,
@@ -312,19 +312,24 @@ def configure_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
+_FAKE_SILENCE_CHUNK = b"\x00\x00" * OPENWAKEWORD_FRAME_SAMPLES
+_FAKE_WAKE_CHUNK = b"\x01\x00" * OPENWAKEWORD_FRAME_SAMPLES
+
+
 class _FakeMicrophone:
-    def __init__(self, chunks: list[bytes]) -> None:
+    def __init__(self, chunks: list[bytes], *, fallback_chunk: bytes = _FAKE_SILENCE_CHUNK) -> None:
         self._chunks = list(chunks)
+        self._fallback_chunk = fallback_chunk
 
     def read_chunk(self) -> bytes:
         if not self._chunks:
-            return b"\x01\x00"
+            return self._fallback_chunk
         return self._chunks.pop(0)
 
 
 class _FakeWakeDetector:
     def detect(self, pcm_chunk: bytes) -> bool:
-        return pcm_chunk == b"\x01\x00"
+        return pcm_chunk.startswith(b"\x01\x00")
 
     def score(self, pcm_chunk: bytes) -> float:
         return 1.0 if self.detect(pcm_chunk) else 0.0

@@ -36,6 +36,11 @@ DEFAULT_CHAT_MODEL = "gpt-4o-mini"
 DEFAULT_TTS_MODEL = "gpt-4o-mini-tts"
 DEFAULT_TTS_VOICE = "alloy"
 DEFAULT_WAKE_DEBUG = False
+DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS = 1.0
+DEFAULT_POST_PLAYBACK_QUIET_SECONDS = 0.5
+DEFAULT_POST_PLAYBACK_QUIET_RMS = 500.0
+DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS = 6.0
+DEFAULT_WAKE_CONFIRMATION_FRAMES = 2
 
 SUPPORTED_PYTHON_VERSIONS = {(3, 11), (3, 12)}
 PLACEHOLDER_API_KEYS = {"", "your_api_key_here", "replace_me", "changeme"}
@@ -74,6 +79,11 @@ class Settings:
     tts_model: str
     tts_voice: str
     wake_debug: bool = DEFAULT_WAKE_DEBUG
+    post_playback_wake_cooldown_seconds: float = DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS
+    post_playback_quiet_seconds: float = DEFAULT_POST_PLAYBACK_QUIET_SECONDS
+    post_playback_quiet_rms: float = DEFAULT_POST_PLAYBACK_QUIET_RMS
+    post_playback_max_suppression_seconds: float = DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS
+    wake_confirmation_frames: int = DEFAULT_WAKE_CONFIRMATION_FRAMES
 
 
 @dataclass(frozen=True)
@@ -168,9 +178,49 @@ def load_settings(
     tts_model = _text_value(raw_env, "TTS_MODEL", DEFAULT_TTS_MODEL, errors)
     tts_voice = _text_value(raw_env, "TTS_VOICE", DEFAULT_TTS_VOICE, errors)
     wake_debug = _bool_value(raw_env, "WAKE_DEBUG", DEFAULT_WAKE_DEBUG, errors)
+    post_playback_wake_cooldown_seconds = _float_value(
+        raw_env,
+        "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS",
+        DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS,
+        errors,
+        minimum=0.0,
+    )
+    post_playback_quiet_seconds = _float_value(
+        raw_env,
+        "POST_PLAYBACK_QUIET_SECONDS",
+        DEFAULT_POST_PLAYBACK_QUIET_SECONDS,
+        errors,
+        minimum=0.0,
+    )
+    post_playback_quiet_rms = _float_value(
+        raw_env,
+        "POST_PLAYBACK_QUIET_RMS",
+        DEFAULT_POST_PLAYBACK_QUIET_RMS,
+        errors,
+        minimum=0.0,
+    )
+    post_playback_max_suppression_seconds = _float_value(
+        raw_env,
+        "POST_PLAYBACK_MAX_SUPPRESSION_SECONDS",
+        DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
+        errors,
+        minimum=0.0,
+    )
+    wake_confirmation_frames = _int_value(
+        raw_env,
+        "WAKE_CONFIRMATION_FRAMES",
+        DEFAULT_WAKE_CONFIRMATION_FRAMES,
+        errors,
+        minimum=1,
+    )
 
     if max_record_seconds <= silence_seconds:
         errors.append("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS")
+    if post_playback_max_suppression_seconds < post_playback_wake_cooldown_seconds:
+        errors.append(
+            "POST_PLAYBACK_MAX_SUPPRESSION_SECONDS must be greater than or equal to "
+            "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS"
+        )
 
     if errors:
         raise ConfigError(errors)
@@ -190,6 +240,11 @@ def load_settings(
         tts_model=tts_model,
         tts_voice=tts_voice,
         wake_debug=wake_debug,
+        post_playback_wake_cooldown_seconds=post_playback_wake_cooldown_seconds,
+        post_playback_quiet_seconds=post_playback_quiet_seconds,
+        post_playback_quiet_rms=post_playback_quiet_rms,
+        post_playback_max_suppression_seconds=post_playback_max_suppression_seconds,
+        wake_confirmation_frames=wake_confirmation_frames,
     )
 
 

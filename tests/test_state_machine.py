@@ -7,6 +7,10 @@ from pathlib import Path
 from src.config import (
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_RECORD_SECONDS,
+    DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
+    DEFAULT_POST_PLAYBACK_QUIET_RMS,
+    DEFAULT_POST_PLAYBACK_QUIET_SECONDS,
+    DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_SECONDS,
     DEFAULT_TRANSCRIBE_MODEL,
@@ -17,6 +21,7 @@ from src.config import (
     DEFAULT_WAKE_MODEL,
     DEFAULT_WAKE_PHRASE,
     DEFAULT_WAKE_THRESHOLD,
+    DEFAULT_WAKE_CONFIRMATION_FRAMES,
     Settings,
 )
 from src.openai_client import OpenAIClientError
@@ -24,7 +29,15 @@ from src.recorder import RecordingResult
 from src.state_machine import AssistantState, VoiceAssistantStateMachine
 
 
-def make_settings(*, wake_debug=False):
+def make_settings(
+    *,
+    wake_debug=False,
+    post_playback_wake_cooldown_seconds=DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS,
+    post_playback_quiet_seconds=DEFAULT_POST_PLAYBACK_QUIET_SECONDS,
+    post_playback_quiet_rms=DEFAULT_POST_PLAYBACK_QUIET_RMS,
+    post_playback_max_suppression_seconds=DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
+    wake_confirmation_frames=DEFAULT_WAKE_CONFIRMATION_FRAMES,
+):
     return Settings(
         openai_api_key="sk-test",
         wake_backend=DEFAULT_WAKE_BACKEND,
@@ -40,15 +53,35 @@ def make_settings(*, wake_debug=False):
         tts_model=DEFAULT_TTS_MODEL,
         tts_voice=DEFAULT_TTS_VOICE,
         wake_debug=wake_debug,
+        post_playback_wake_cooldown_seconds=post_playback_wake_cooldown_seconds,
+        post_playback_quiet_seconds=post_playback_quiet_seconds,
+        post_playback_quiet_rms=post_playback_quiet_rms,
+        post_playback_max_suppression_seconds=post_playback_max_suppression_seconds,
+        wake_confirmation_frames=wake_confirmation_frames,
     )
 
 
+def pcm_chunk(sample, frames=1280):
+    return sample.to_bytes(2, byteorder="little", signed=True) * frames
+
+
+WAKE_CHUNK = pcm_chunk(1)
+QUIET_CHUNK = pcm_chunk(0)
+LOUD_CHUNK = pcm_chunk(2000)
+
+
 class FakeAudioSource:
-    def __init__(self):
-        self.chunks = [b"\x00\x00", b"\x01\x00"]
+    def __init__(self, chunks=None, *, fallback_chunk=QUIET_CHUNK):
+        self.chunks = list(chunks if chunks is not None else [QUIET_CHUNK, WAKE_CHUNK, WAKE_CHUNK])
+        self.fallback_chunk = fallback_chunk
+        self.read_chunks = []
+        self.last_overflowed = False
 
     def read_chunk(self):
-        return self.chunks.pop(0)
+        chunk = self.chunks.pop(0) if self.chunks else self.fallback_chunk
+        self.read_chunks.append(chunk)
+        self.last_overflowed = chunk == b"overflow"
+        return WAKE_CHUNK if chunk == b"overflow" else chunk
 
 
 class FakeWakeDetector:
@@ -57,11 +90,11 @@ class FakeWakeDetector:
 
     def detect(self, pcm_chunk):
         self.detected_chunks.append(pcm_chunk)
-        return pcm_chunk == b"\x01\x00"
+        return pcm_chunk.startswith(b"\x01\x00")
 
     def score(self, pcm_chunk):
         self.detected_chunks.append(pcm_chunk)
-        return 1.0 if pcm_chunk == b"\x01\x00" else 0.0
+        return 1.0 if pcm_chunk.startswith(b"\x01\x00") else 0.0
 
 
 class FakeOpenAIClient:
@@ -157,6 +190,149 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("State WAIT_WAKE: wake word detected", log_output)
         self.assertIn("Transition WAIT_WAKE -> RECORDING", log_output)
         self.assertIn("Transition PLAYING -> WAIT_WAKE", log_output)
+        self.assertIn("suppressing post-playback wake detection", log_output)
+
+    def test_single_wake_candidate_does_not_enter_recording_until_confirmed(self):
+        logger = logging.getLogger("tests.state_machine.wake_confirmation")
+        audio_source = FakeAudioSource([WAKE_CHUNK, QUIET_CHUNK, WAKE_CHUNK, WAKE_CHUNK])
+        wake_detector = FakeWakeDetector()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                    wake_confirmation_frames=2,
+                ),
+                audio_source=audio_source,
+                wake_detector=wake_detector,
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(wake_detector.detected_chunks, [WAKE_CHUNK, QUIET_CHUNK, WAKE_CHUNK, WAKE_CHUNK])
+        log_output = "\n".join(logs.output)
+        self.assertIn("wake word candidate 1/2", log_output)
+        self.assertIn("State WAIT_WAKE: wake word detected", log_output)
+
+    def test_post_playback_residue_is_drained_without_wake_detection(self):
+        logger = logging.getLogger("tests.state_machine.post_playback")
+        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, b"overflow", WAKE_CHUNK, QUIET_CHUNK])
+        wake_detector = FakeWakeDetector()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    post_playback_wake_cooldown_seconds=0.16,
+                    post_playback_quiet_seconds=0.08,
+                    wake_confirmation_frames=2,
+                ),
+                audio_source=audio_source,
+                wake_detector=wake_detector,
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(wake_detector.detected_chunks, [WAKE_CHUNK, WAKE_CHUNK, QUIET_CHUNK])
+        self.assertGreaterEqual(audio_source.read_chunks.count(b"overflow"), 1)
+        log_output = "\n".join(logs.output)
+        self.assertIn("suppressing post-playback wake detection", log_output)
+        self.assertIn("discarded", log_output)
+        self.assertIn("post-playback quiet gate consumed", log_output)
+
+    def test_post_playback_residue_after_cooldown_waits_for_quiet_gate(self):
+        logger = logging.getLogger("tests.state_machine.post_playback_quiet")
+        audio_source = FakeAudioSource(
+            [
+                WAKE_CHUNK,
+                WAKE_CHUNK,
+                LOUD_CHUNK,
+                LOUD_CHUNK,
+                WAKE_CHUNK,
+                WAKE_CHUNK,
+                QUIET_CHUNK,
+                QUIET_CHUNK,
+            ],
+            fallback_chunk=QUIET_CHUNK,
+        )
+        wake_detector = FakeWakeDetector()
+        player = FakePlayer()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "output.mp3"
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    post_playback_wake_cooldown_seconds=0.16,
+                    post_playback_quiet_seconds=0.16,
+                    post_playback_quiet_rms=500,
+                    post_playback_max_suppression_seconds=1.0,
+                    wake_confirmation_frames=2,
+                ),
+                audio_source=audio_source,
+                wake_detector=wake_detector,
+                openai_client=FakeOpenAIClient(),
+                player=player,
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=output_path,
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(wake_detector.detected_chunks[:2], [WAKE_CHUNK, WAKE_CHUNK])
+        self.assertIn(WAKE_CHUNK, wake_detector.detected_chunks[2:])
+        self.assertEqual(player.played, [output_path])
+        log_output = "\n".join(logs.output)
+        self.assertIn("max_suppressed_score=1.000000000", log_output)
+        self.assertIn("post-playback quiet gate consumed", log_output)
+
+    def test_overflowed_wake_chunk_is_ignored(self):
+        logger = logging.getLogger("tests.state_machine.overflow")
+        audio_source = FakeAudioSource([b"overflow", WAKE_CHUNK, WAKE_CHUNK])
+        wake_detector = FakeWakeDetector()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                    wake_confirmation_frames=2,
+                ),
+                audio_source=audio_source,
+                wake_detector=wake_detector,
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(wake_detector.detected_chunks, [WAKE_CHUNK, WAKE_CHUNK])
+        self.assertIn("ignoring overflowed microphone chunk", "\n".join(logs.output))
 
     def test_wake_debug_logs_scores_during_wait_wake(self):
         logger = logging.getLogger("tests.state_machine.debug")

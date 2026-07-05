@@ -180,6 +180,101 @@ Any session can resume by reading repository files and git history. Chat history
 
 When implementation relies on behavior outside repository code, agents verify that behavior through primary sources, real commands, official documentation, captured logs, or real-shaped fixtures before depending on it.
 
+### Hey Jarvis Post-Playback Wake Suppression
+
+Goal: prevent the real assistant from immediately re-triggering wake detection
+after answer playback when the user has not spoken.
+
+Included scope: consume post-playback microphone audio without wake detection,
+require configurable consecutive wake-positive frames before entering
+`RECORDING`, expose configuration defaults in `.env.example`, document the
+manual acceptance failure, and add deterministic tests that simulate playback
+residue and microphone overflow without real audio hardware.
+
+Excluded scope: changing the accepted wake phrase, replacing openWakeWord,
+implementing full acoustic echo cancellation, pausing or interrupting playback,
+fixing long-question recording cutoff behavior, or making live OpenAI,
+microphone, and speaker calls in automated tests.
+
+Core flows: after `PLAYING` finishes, the state machine transitions back to
+`WAIT_WAKE`, drains a short configured amount of microphone audio, logs that
+post-playback wake audio is being suppressed, and only the next real wake
+attempt can begin recording. During normal wake listening, a single
+wake-positive residual frame is treated as a candidate and does not trigger
+recording until the configured consecutive frame count is met.
+
+Constraints: the MVP remains macOS-focused, keeps one reusable microphone
+stream, avoids real microphone/OpenAI/speaker requirements in automated tests,
+and keeps fake-backend recovery deterministic. Configuration defaults must be
+safe enough to reduce self-triggering but adjustable for wake sensitivity.
+
+Ambiguities or assumptions: the user-observed log shows a wake event
+immediately after playback plus microphone overflow, so the likely root cause
+is residual playback audio or stale microphone chunks rather than intentional
+speech. A short drain window and consecutive-frame confirmation are acceptable
+MVP defenses short of full echo cancellation.
+
+Required capabilities: deterministic fake microphone chunks, configurable
+cooldown and confirmation settings, state-machine tests for residual audio,
+documentation for manual retesting, and standard recovery verification.
+
+Implementation paths: `src/config.py`, `src/state_machine.py`, `src/main.py`,
+`.env.example`, `README.md`, `DEPLOYMENT.md`, `MANUAL_TESTING.md`, `tests/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: focused unit tests for config and state-machine behavior,
+documentation tests for the new settings and manual acceptance note, full
+`./init.sh`, and manual retest of the user-observed playback-then-immediate-wake
+scenario.
+
+### Hey Jarvis Post-Playback Quiet Gate
+
+Goal: make post-playback wake suppression depend on observed microphone quiet,
+not only a fixed timer, so speaker echo or TTS tail audio cannot immediately
+trigger a new wake after the cooldown expires.
+
+Included scope: add configurable post-playback quiet seconds, quiet RMS
+threshold, and maximum suppression duration; during suppression, feed ignored
+audio into the wake detector so its internal state advances; keep detections
+discarded until the quiet gate passes; document the second manual failure; and
+add deterministic tests for residual post-playback wake-positive chunks after
+the fixed cooldown.
+
+Excluded scope: full acoustic echo cancellation, changing the wake phrase,
+replacing openWakeWord, interrupting playback, live OpenAI/microphone/speaker
+automation, or fixing long-question recording cutoff behavior.
+
+Core flows: playback finishes; the assistant performs the configured fixed
+post-playback cooldown; then it continues suppressing wake decisions while
+checking microphone RMS; wake model calls during suppression are ignored but
+advance model state; the assistant declares `WAIT_WAKE` ready only after a
+configured amount of quiet audio or after a configurable maximum suppression
+window with an explicit warning.
+
+Constraints: suppression must be bounded by configuration, deterministic in
+fake-backend tests, and should not make normal wake detection require live
+hardware. Quiet detection uses project-owned PCM RMS logic rather than external
+audio APIs.
+
+Ambiguities or assumptions: the second observed failure showed two wake-positive
+frames immediately after the 1.0s drain, so residual echo lasted beyond the
+fixed cooldown or the detector state needed suppressed audio frames to settle.
+The MVP should prefer a slightly delayed return to `WAIT_WAKE` over recording a
+silent max-duration false wake.
+
+Required capabilities: configurable quiet gate settings, fake PCM fixtures for
+quiet and residual chunks, deterministic state-machine tests, documentation,
+and recovery verification.
+
+Implementation paths: `src/config.py`, `src/state_machine.py`, `.env.example`,
+`README.md`, `DEPLOYMENT.md`, `MANUAL_TESTING.md`, `tests/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: config tests, state-machine tests for residual chunks
+after cooldown, documentation tests, `./init.sh`, and manual M022 retest.
+
 ### Skill Assisted Workflow
 
 The harness can also be used through a distributable skill. The skill is a convenience layer for humans and agents: it initializes or repairs harness files, routes new requirements through planning, routes implementation through one-feature Coding Agent work, routes verification through Evaluator Agent rules, and commits approved work only after explicit user satisfaction.
