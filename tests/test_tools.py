@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from src.tools import answer_with_tools, execute_route, is_realtime_sensitive, route_text
 from src.tools.providers import ProviderConfig
 from src.tools.router import format_text_debug
+from src.openai_client import OpenAIClientError
 
 
 class FakeJsonClient:
@@ -61,6 +62,20 @@ class FakeChatClient:
         history.append({"role": "user", "content": text})
         history.append({"role": "assistant", "content": "chat answer"})
         return "chat answer"
+
+
+class FakeNaturalizingClient(FakeChatClient):
+    def __init__(self, *, naturalized_answer="naturalized tool answer", fail=False):
+        super().__init__()
+        self.naturalized_answer = naturalized_answer
+        self.fail = fail
+        self.naturalization_calls = []
+
+    def naturalize_tool_answer(self, **kwargs):
+        self.naturalization_calls.append(kwargs)
+        if self.fail:
+            raise OpenAIClientError("OpenAI tool answer naturalization request failed: timeout")
+        return self.naturalized_answer
 
 
 class ToolRoutingTests(unittest.TestCase):
@@ -173,6 +188,124 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(route.params["intent"], "tomorrow")
         self.assertEqual(result.status, "success")
         self.assertIn("Tomorrow in Singapore, Singapore", answer)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
+    def test_successful_weather_result_can_be_naturalized_without_chat_history(self):
+        chat_client = FakeNaturalizingClient(naturalized_answer="明天新加坡会下雨，温度约 24 到 31 C，来源 Open-Meteo。")
+        client = FakeJsonClient([weather_geocoding_response(), weather_daily_response()])
+        history = [{"role": "user", "content": "old"}]
+
+        answer, route, result = answer_with_tools(
+            "明天天气怎么样",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            naturalize_tool_answers=True,
+            provider_config=ProviderConfig(default_location="Singapore"),
+            http_client=client,
+        )
+
+        self.assertEqual(answer, "明天新加坡会下雨，温度约 24 到 31 C，来源 Open-Meteo。")
+        self.assertEqual(route.category, "weather")
+        self.assertEqual(result.status, "success")
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [{"role": "user", "content": "old"}])
+        call = chat_client.naturalization_calls[0]
+        self.assertEqual(call["question"], "明天天气怎么样")
+        self.assertEqual(call["route"]["category"], "weather")
+        self.assertEqual(call["route"]["tool_name"], "weather_provider")
+        self.assertIn("open-meteo", call["summary"])
+        self.assertIn("Tomorrow in Singapore, Singapore", call["raw_answer"])
+        self.assertEqual(call["data"]["source"], "open-meteo")
+
+    def test_disabled_tool_naturalization_keeps_raw_provider_answer(self):
+        chat_client = FakeNaturalizingClient()
+        client = FakeJsonClient([{"date": "2026-07-03", "base": "USD", "quote": "SGD", "rate": 1.34567}])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "100 USD to SGD",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            naturalize_tool_answers=False,
+            provider_config=ProviderConfig(default_base_currency="USD"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "fx")
+        self.assertEqual(result.status, "success")
+        self.assertIn("100 USD is about 134.57 SGD", answer)
+        self.assertEqual(chat_client.naturalization_calls, [])
+        self.assertEqual(history, [])
+
+    def test_recoverable_naturalization_error_falls_back_to_raw_answer(self):
+        chat_client = FakeNaturalizingClient(fail=True)
+        client = FakeJsonClient([stock_quote_response()])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "AAPL stock price",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            naturalize_tool_answers=True,
+            provider_config=ProviderConfig(finnhub_api_key="fh-secret"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "stock")
+        self.assertEqual(result.status, "success")
+        self.assertIn("AAPL last traded at 193.12", answer)
+        self.assertEqual(len(chat_client.naturalization_calls), 1)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
+    def test_empty_naturalization_output_falls_back_to_raw_answer(self):
+        chat_client = FakeNaturalizingClient(naturalized_answer="  ")
+        client = FakeJsonClient([{"date": "2026-07-03", "base": "USD", "quote": "SGD", "rate": 1.34567}])
+
+        answer, route, result = answer_with_tools(
+            "100 USD to SGD",
+            chat_client=chat_client,
+            history=[],
+            tools_enabled=True,
+            naturalize_tool_answers=True,
+            provider_config=ProviderConfig(default_base_currency="USD"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "fx")
+        self.assertEqual(result.status, "success")
+        self.assertIn("100 USD is about 134.57 SGD", answer)
+
+    def test_local_and_refused_tool_results_are_not_naturalized(self):
+        chat_client = FakeNaturalizingClient()
+        history = []
+
+        calculator_answer, calculator_route, calculator_result = answer_with_tools(
+            "2 + 2",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            naturalize_tool_answers=True,
+        )
+        refusal_answer, refusal_route, refusal_result = answer_with_tools(
+            "今天有什么新闻",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            naturalize_tool_answers=True,
+        )
+
+        self.assertEqual(calculator_route.category, "calculator")
+        self.assertEqual(calculator_result.status, "success")
+        self.assertEqual(calculator_answer, "The answer is 4.")
+        self.assertEqual(refusal_route.category, "unsupported_realtime")
+        self.assertEqual(refusal_result.status, "refused")
+        self.assertIn("without a configured provider", refusal_answer)
+        self.assertEqual(chat_client.naturalization_calls, [])
         self.assertEqual(chat_client.calls, [])
         self.assertEqual(history, [])
 
@@ -372,6 +505,8 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertIn("finnhub_api_key:configured", debug)
         self.assertNotIn("fh-secret", debug)
         self.assertIn("result_status=success", debug)
+        self.assertIn("raw_answer=The local time is 09:08", debug)
+        self.assertIn("naturalization_status=not_applicable", debug)
         self.assertIn("final_answer=The local time is 09:08", debug)
 
     def test_text_debug_can_show_mocked_weather_result(self):
@@ -385,6 +520,8 @@ class ToolRoutingTests(unittest.TestCase):
 
         self.assertIn("route=weather", debug)
         self.assertIn("result_status=success", debug)
+        self.assertIn("raw_answer=Tomorrow in Singapore", debug)
+        self.assertIn("naturalization_status=not_run_text_debug", debug)
         self.assertIn("Open-Meteo forecast for 2026-07-07", debug)
 
     def test_text_debug_can_show_mocked_fx_result(self):

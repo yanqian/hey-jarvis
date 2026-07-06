@@ -754,6 +754,80 @@ and tests share one external capability boundary. It depends on the shared
 provider infrastructure from F023 but remains independent from the weather and
 FX tools.
 
+### Naturalized Structured Tool Answers
+
+Goal: keep provider-backed tools as stable structured fact providers while
+adding a separate OpenAI language pass that can turn successful weather, FX, and
+stock tool results into more natural spoken answers without changing the facts.
+
+Included scope: an explicit tool-answer naturalization boundary, documented
+configuration for enabling or disabling naturalization, a constrained OpenAI
+request shape for successful provider-backed tool results, fallback to the raw
+deterministic tool answer when naturalization is disabled or fails, text-debug
+visibility into raw tool answers and naturalization status, documentation, and
+deterministic tests with fake OpenAI clients and mocked providers.
+
+Excluded scope: changing provider fetching or parsing, adding new providers,
+letting the LLM select tools, using chat memory to reinterpret tool facts,
+naturalizing provider failures, weakening realtime refusal behavior, making
+`python -m src.main --text ...` require OpenAI credentials, or adding live
+OpenAI/network calls to automated tests.
+
+Core flows: a user asks a weather, FX, or stock question; the deterministic
+router selects the tool; the provider returns a `ToolResult` with stable
+`status`, `summary`, `answer`, and `data`; if the result is `success` and
+naturalization is enabled, the assistant sends the original user question,
+route metadata, raw answer, summary, and structured data to a dedicated OpenAI
+naturalization method; the model returns one or two short spoken sentences that
+preserve numbers, units, timestamps, sources, and caveats; the assistant sends
+that naturalized answer to TTS. If naturalization is disabled, unavailable, or
+raises a recoverable OpenAI error, the assistant uses the raw deterministic
+tool answer. Provider errors, missing credentials, not-configured results, and
+realtime refusals bypass naturalization and never fall back to chat speculation.
+
+Constraints: structured `ToolResult.data` remains the source of truth and must
+be inspectable in tests and debug output. The naturalization prompt must instruct
+the model not to add facts, advice, forecasts, prices, rates, sources, or
+timing details absent from the tool result. Secret values such as
+`FINNHUB_API_KEY` must never be included in naturalization input or debug output.
+Automated verification uses fakes and real-shaped tool fixtures, not live
+OpenAI, live Finnhub, live Open-Meteo, or live Frankfurter calls. Spoken answers
+must stay concise enough for TTS.
+
+Ambiguities or assumptions: "more natural" means improving phrasing for spoken
+delivery, not changing the routing decision, provider data model, or factual
+content. The initial naturalization pass applies only to successful
+provider-backed realtime tools because local calculator and time answers are
+already short and deterministic. If the LLM returns an empty answer or fails,
+raw deterministic output is preferable to dropping the response.
+
+Required capabilities: existing F023-F026 provider-backed tool results,
+OpenAI chat capability from F005, a dedicated prompt/request boundary that can
+be tested without live API access, settings for the naturalization toggle,
+fake clients that record naturalization calls, and documentation/manual testing
+paths for comparing raw versus naturalized answers.
+
+Implementation paths: `src/config.py`, `.env.example`, `src/openai_client.py`,
+`src/tools/router.py`, `src/state_machine.py` if answer-path wiring needs to
+carry the naturalized response, `src/main.py` if text debug output changes,
+`README.md`, `DEPLOYMENT.md`, `MANUAL_TESTING.md`, `tests/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `runs/`.
+
+Verification surface: configuration tests for the naturalization toggle;
+OpenAI-client tests for the dedicated naturalization request shape and empty or
+failed responses; router/answer-path tests proving successful weather, FX, and
+stock results can be naturalized while failures bypass the LLM; tests proving
+history is not polluted by naturalization; text-debug tests showing raw answer
+and naturalization status without OpenAI; documentation tests; full
+`python3 -m unittest discover -s tests`; final root `./init.sh`; and optional
+manual comparison with real providers plus `OPENAI_API_KEY`.
+
+Decomposition decision: this is one feature because it is a single presentation
+layer capability over the already completed provider tools. Provider-specific
+fetching and parsing remain separate completed features; splitting by weather,
+FX, and stock would duplicate the same naturalization boundary without adding
+independent project value.
+
 ## 5. Verification Plan
 
 Run:

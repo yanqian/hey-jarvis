@@ -48,6 +48,7 @@ DEFAULT_TTS_INSTRUCTIONS: str | None = None
 DEFAULT_TTS_SPEED = 1.0
 DEFAULT_ENABLE_TOOLS = True
 DEFAULT_TOOL_ROUTER_DEBUG = False
+DEFAULT_TOOL_ANSWER_NATURALIZATION = True
 DEFAULT_WEATHER_PROVIDER = PROVIDER_DEFAULT_WEATHER_PROVIDER
 DEFAULT_FX_PROVIDER = PROVIDER_DEFAULT_FX_PROVIDER
 DEFAULT_STOCK_PROVIDER = PROVIDER_DEFAULT_STOCK_PROVIDER
@@ -105,6 +106,7 @@ class Settings:
     tts_speed: float = DEFAULT_TTS_SPEED
     enable_tools: bool = DEFAULT_ENABLE_TOOLS
     tool_router_debug: bool = DEFAULT_TOOL_ROUTER_DEBUG
+    tool_answer_naturalization: bool = DEFAULT_TOOL_ANSWER_NATURALIZATION
     weather_provider: str = DEFAULT_WEATHER_PROVIDER
     fx_provider: str = DEFAULT_FX_PROVIDER
     stock_provider: str = DEFAULT_STOCK_PROVIDER
@@ -226,6 +228,12 @@ def load_settings(
     )
     enable_tools = _bool_value(raw_env, "ENABLE_TOOLS", DEFAULT_ENABLE_TOOLS, errors)
     tool_router_debug = _bool_value(raw_env, "TOOL_ROUTER_DEBUG", DEFAULT_TOOL_ROUTER_DEBUG, errors)
+    tool_answer_naturalization = _bool_value(
+        raw_env,
+        "TOOL_ANSWER_NATURALIZATION",
+        DEFAULT_TOOL_ANSWER_NATURALIZATION,
+        errors,
+    )
     weather_provider = _text_value(raw_env, "WEATHER_PROVIDER", DEFAULT_WEATHER_PROVIDER, errors)
     fx_provider = _text_value(raw_env, "FX_PROVIDER", DEFAULT_FX_PROVIDER, errors)
     stock_provider = _text_value(raw_env, "STOCK_PROVIDER", DEFAULT_STOCK_PROVIDER, errors)
@@ -336,6 +344,7 @@ def load_settings(
         tts_speed=tts_speed,
         enable_tools=enable_tools,
         tool_router_debug=tool_router_debug,
+        tool_answer_naturalization=tool_answer_naturalization,
         weather_provider=weather_provider,
         fx_provider=fx_provider,
         stock_provider=stock_provider,

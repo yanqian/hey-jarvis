@@ -19,6 +19,7 @@ from src.config import (
     DEFAULT_STOCK_PROVIDER,
     DEFAULT_TRANSCRIBE_MODEL,
     DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS,
+    DEFAULT_TOOL_ANSWER_NATURALIZATION,
     DEFAULT_TOOL_ROUTER_DEBUG,
     DEFAULT_TTS_INSTRUCTIONS,
     DEFAULT_TTS_MODEL,
@@ -68,6 +69,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.tts_speed, DEFAULT_TTS_SPEED)
         self.assertEqual(settings.enable_tools, DEFAULT_ENABLE_TOOLS)
         self.assertEqual(settings.tool_router_debug, DEFAULT_TOOL_ROUTER_DEBUG)
+        self.assertEqual(settings.tool_answer_naturalization, DEFAULT_TOOL_ANSWER_NATURALIZATION)
         self.assertEqual(settings.weather_provider, DEFAULT_WEATHER_PROVIDER)
         self.assertEqual(settings.fx_provider, DEFAULT_FX_PROVIDER)
         self.assertEqual(settings.stock_provider, DEFAULT_STOCK_PROVIDER)
@@ -106,6 +108,7 @@ class ConfigTests(unittest.TestCase):
                 "TTS_SPEED": "1.2",
                 "ENABLE_TOOLS": "0",
                 "TOOL_ROUTER_DEBUG": "1",
+                "TOOL_ANSWER_NATURALIZATION": "0",
                 "WEATHER_PROVIDER": "open-meteo",
                 "FX_PROVIDER": "frankfurter",
                 "STOCK_PROVIDER": "finnhub",
@@ -144,6 +147,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.tts_speed, 1.2)
         self.assertFalse(settings.enable_tools)
         self.assertTrue(settings.tool_router_debug)
+        self.assertFalse(settings.tool_answer_naturalization)
         self.assertEqual(settings.weather_provider, "open-meteo")
         self.assertEqual(settings.fx_provider, "frankfurter")
         self.assertEqual(settings.stock_provider, "finnhub")
@@ -196,6 +200,7 @@ class ConfigTests(unittest.TestCase):
                     "TTS_SPEED": "fast",
                     "ENABLE_TOOLS": "maybe",
                     "TOOL_ROUTER_DEBUG": "maybe",
+                    "TOOL_ANSWER_NATURALIZATION": "maybe",
                     "WEATHER_PROVIDER": "",
                     "FX_PROVIDER": "",
                     "STOCK_PROVIDER": "",
@@ -225,6 +230,7 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("TTS_SPEED must be a number", message)
         self.assertIn("ENABLE_TOOLS must be a boolean value", message)
         self.assertIn("TOOL_ROUTER_DEBUG must be a boolean value", message)
+        self.assertIn("TOOL_ANSWER_NATURALIZATION must be a boolean value", message)
         self.assertIn("WEATHER_PROVIDER must not be empty", message)
         self.assertIn("FX_PROVIDER must not be empty", message)
         self.assertIn("STOCK_PROVIDER must not be empty", message)

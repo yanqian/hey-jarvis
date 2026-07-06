@@ -60,13 +60,15 @@ F025 has been completed through the orchestrator entrypoint after approving the 
 
 F026 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The structured stock route now extracts uppercase ticker symbols and conservative company aliases such as Apple/AAPL while preserving ambiguous ordinary phrases like `苹果怎么样` as non-stock routes. The Finnhub provider uses `FINNHUB_API_KEY` only as the request token, returns current price, change, percent change, high, low, open, previous close, timestamp, source, freshness, and market-data caveats, and maps missing keys, unknown symbols, zero or missing current prices, provider failures, and malformed data to structured tool errors without chat speculation. After an initial evaluator requirement-gap failure, the durable normalized SPEC entry for F026 was restored with goal, scope, flows, constraints, assumptions, capabilities, implementation paths, verification surface, and decomposition rationale. Focused mocked tests, documentation tests, CLI text-debug checks, full project tests, and `./init.sh` pass, coding evidence is recorded in `runs/F026-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F026` in `runs/F026-evaluation.md`.
 
+F027 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The code now includes a default-enabled `TOOL_ANSWER_NATURALIZATION` setting, a dedicated OpenAI naturalization boundary for successful provider-backed weather, FX, and stock `ToolResult` answers, raw-answer fallback for disabled naturalization, failures, realtime refusals, local tools, empty LLM output, and recoverable OpenAI errors, text-debug `raw_answer` and `naturalization_status` output without OpenAI calls, and focused tests for request shape, no chat-history pollution, no secret leakage, fallback behavior, and documentation coverage. Coding evidence is recorded in `runs/F027-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F027` in `runs/F027-evaluation.md`.
+
 ## Last Completed Feature
 
-F026 - Implement Finnhub stock quote tool.
+F027 - Naturalize structured tool answers with LLM.
 
 ## Next Feature
 
-No currently planned todo feature. The F023-F026 network-backed structured tool batch is complete.
+No currently planned todo feature.
 
 ## Known Issues
 
@@ -96,3 +98,4 @@ No currently planned todo feature. The F023-F026 network-backed structured tool 
 - F020 was completed by manual fallback because the user explicitly requested planning and implementation in this interactive session after confirming the local configured Hey Jarvis TFLite trial worked. Implementation evidence is in `runs/F020-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F020` in `runs/F020-evaluation.md`.
 - F021 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `runs/F021-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F021` in `runs/F021-evaluation.md`.
 - F022 was completed by manual fallback after the first unprivileged orchestrator run failed with a Codex state/app-server permission error, the escalated run entered `Round 1: F022`, and the Coding Agent child process hung inside `subprocess.communicate()`. The partial Coding Agent work was preserved, completed manually, and evaluator evidence recorded `EVAL_PASS: F022` in `runs/F022-evaluation.md`.
+- F027 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `runs/F027-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F027` in `runs/F027-evaluation.md`.

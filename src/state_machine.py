@@ -137,6 +137,7 @@ class VoiceAssistantStateMachine:
                 chat_client=self.openai_client,
                 history=self.history,
                 tools_enabled=self.settings.enable_tools,
+                naturalize_tool_answers=self.settings.tool_answer_naturalization,
                 provider_config=provider_config_from_settings(self.settings),
             )
         except OpenAIClientError as exc:

@@ -534,6 +534,29 @@
       "depends_on": [
         "F023"
       ]
+    },
+    {
+      "id": "F027",
+      "title": "Naturalize structured tool answers with LLM",
+      "description": "Add a separate OpenAI naturalization pass that turns successful provider-backed ToolResult data into more natural spoken answers while keeping provider data stable, inspectable, and authoritative.",
+      "acceptance": [
+        "Configuration documents and loads a toggle for tool-answer naturalization, defaulting to enabled for successful provider-backed tool results while preserving a deterministic raw-answer fallback.",
+        "Successful weather, FX, and stock ToolResult values can be passed to a dedicated OpenAI naturalization boundary that receives only the user question, route metadata, raw answer, summary, and non-secret structured data, with prompt instructions to preserve numbers, units, sources, timestamps, caveats, and advice disclaimers.",
+        "Provider failures, missing credentials, not-configured results, realtime refusals, local calculator/time answers, disabled naturalization, empty LLM output, and recoverable OpenAI errors bypass naturalization and do not fall back to chat speculation.",
+        "Text debug remains dependency-free and exposes the raw tool answer plus naturalization status without requiring OpenAI credentials or live network calls.",
+        "Focused tests use fake OpenAI clients and mocked provider results to verify request shape, fallback behavior, no chat-history pollution, no secret leakage, documentation coverage, and final ./init.sh recovery verification."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F023",
+        "F024",
+        "F025",
+        "F026"
+      ]
     }
   ]
 }

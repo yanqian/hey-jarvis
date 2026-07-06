@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, MutableSequence
@@ -13,6 +14,13 @@ DEFAULT_HISTORY_LIMIT = 8
 CHAT_SYSTEM_PROMPT = (
     "You are Hey Jarvis, a concise macOS voice assistant. "
     "Answer spoken questions in one or two short sentences."
+)
+TOOL_NATURALIZATION_SYSTEM_PROMPT = (
+    "You are Hey Jarvis naturalizing an already-verified structured tool answer for speech. "
+    "The structured data and raw answer are authoritative. Preserve all numbers, units, currencies, "
+    "dates, timestamps, locations, provider or source names, caveats, and advice disclaimers. "
+    "Do not add facts, recommendations, forecasts, prices, sources, or speculation. "
+    "Answer in the user's language when it is clear, in one or two concise sentences."
 )
 OPENAI_RECOVERY_GUIDANCE = (
     "Set OPENAI_API_KEY in .env or the environment and install requirements.txt "
@@ -84,6 +92,49 @@ class OpenAIClient:
         history.append({"role": "assistant", "content": reply})
         del history[:-self.history_limit]
         return reply
+
+    def naturalize_tool_answer(
+        self,
+        *,
+        question: str,
+        route: Mapping[str, object],
+        raw_answer: str,
+        summary: str,
+        data: Mapping[str, object],
+    ) -> str:
+        """Rewrite a successful structured tool answer without using chat history."""
+
+        user_question = _require_text(question, "Tool naturalization question")
+        raw_tool_answer = _require_text(raw_answer, "Tool raw answer")
+        payload = {
+            "user_question": user_question,
+            "route": dict(route),
+            "raw_answer": raw_tool_answer,
+            "summary": summary,
+            "data": _sanitized_tool_data(data),
+        }
+        messages = [
+            {"role": "system", "content": TOOL_NATURALIZATION_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(payload, ensure_ascii=False, sort_keys=True),
+            },
+        ]
+
+        try:
+            response = self._client().chat.completions.create(
+                model=self.settings.chat_model,
+                messages=messages,
+            )
+        except OpenAIClientError:
+            raise
+        except Exception as exc:
+            raise OpenAIClientError(f"OpenAI tool answer naturalization request failed: {exc}") from exc
+
+        answer = _extract_chat_text(response).strip()
+        if not answer:
+            raise OpenAIClientError("OpenAI tool answer naturalization returned empty text")
+        return answer
 
     def text_to_speech(self, text: str, output_path: str) -> None:
         """Synthesize speech to an MP3 file."""
@@ -232,3 +283,14 @@ def _validated_history(history: MutableSequence[dict[str, str]]) -> list[dict[st
             raise OpenAIClientError("Chat history role and content must not be empty")
         messages.append({"role": role, "content": content})
     return messages
+
+
+def _sanitized_tool_data(data: Mapping[str, object]) -> dict[str, object]:
+    sanitized: dict[str, object] = {}
+    for key, value in data.items():
+        normalized_key = key.casefold()
+        if any(marker in normalized_key for marker in ("key", "token", "secret", "credential")):
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            sanitized[key] = value
+    return sanitized

@@ -75,6 +75,7 @@ Structured local tools are enabled by default:
 ```text
 ENABLE_TOOLS=1
 TOOL_ROUTER_DEBUG=0
+TOOL_ANSWER_NATURALIZATION=1
 WEATHER_PROVIDER=open-meteo
 FX_PROVIDER=frankfurter
 STOCK_PROVIDER=finnhub
@@ -91,6 +92,14 @@ Stock requests use Finnhub when `STOCK_PROVIDER=finnhub` and a real
 `FINNHUB_API_KEY` is configured.
 `TOOL_ROUTER_DEBUG=1` logs route, tool, params, and rule reason during the voice
 loop.
+`TOOL_ANSWER_NATURALIZATION=1` sends only successful Open-Meteo weather,
+Frankfurter FX, and Finnhub stock `ToolResult` values through a separate OpenAI
+wording pass that must preserve numbers, units, timestamps, sources, caveats,
+and advice disclaimers. Raw provider data remains authoritative; failures, missing
+credentials, realtime refusals, calculator/local-time answers, empty
+naturalization output, and recoverable OpenAI errors keep the deterministic raw
+answer and do not fall back to chat speculation. Text debug reports the raw
+answer and `naturalization_status` without calling OpenAI or printing secrets.
 
 `WEATHER_PROVIDER=open-meteo` resolves city names through Open-Meteo geocoding
 and fetches current, today, or tomorrow weather from the Open-Meteo forecast

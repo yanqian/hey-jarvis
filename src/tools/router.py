@@ -25,6 +25,7 @@ ROUTE_UNSUPPORTED_REALTIME = "unsupported_realtime"
 ROUTE_NONE = "none"
 
 PLANNED_PROVIDER_TOOLS = {ROUTE_WEATHER, ROUTE_STOCK, ROUTE_FX}
+NATURALIZABLE_PROVIDER_TOOLS = {ROUTE_WEATHER, ROUTE_STOCK, ROUTE_FX}
 
 
 @dataclass(frozen=True)
@@ -163,6 +164,7 @@ def answer_with_tools(
     chat_client: object,
     history: MutableSequence[dict[str, str]],
     tools_enabled: bool,
+    naturalize_tool_answers: bool = False,
     now_provider: Callable[[], datetime] | None = None,
     provider_config: object | None = None,
     http_client: object | None = None,
@@ -178,7 +180,14 @@ def answer_with_tools(
             http_client=http_client,
         )
         if result.handled:
-            return result.answer, route, result
+            answer = _naturalized_or_raw_answer(
+                text,
+                route,
+                result,
+                chat_client=chat_client,
+                enabled=naturalize_tool_answers,
+            )
+            return answer, route, result
 
     answer = chat_client.ask_chatgpt(text, history)
     return answer, route, None
@@ -205,6 +214,7 @@ def format_text_debug(
         else None
     )
     final_answer = result.answer if result is not None and result.handled else "(would use chat)"
+    raw_answer = result.answer if result is not None and result.handled else ""
     lines = [
         f"input={text}",
         f"route={route.category}",
@@ -213,6 +223,8 @@ def format_text_debug(
         f"provider_config={_format_provider_config(provider_config)}",
         f"result_status={result.status if result is not None else 'not_run'}",
         f"result_summary={result.summary if result is not None else 'no tool route'}",
+        f"raw_answer={raw_answer}",
+        f"naturalization_status={_text_debug_naturalization_status(route, result)}",
         f"final_answer={final_answer}",
     ]
     return "\n".join(lines)
@@ -629,6 +641,61 @@ def _format_mapping(values: Mapping[str, str]) -> str:
     if not values:
         return "{}"
     return "{" + ",".join(f"{key}:{value}" for key, value in sorted(values.items())) + "}"
+
+
+def _naturalized_or_raw_answer(
+    text: str,
+    route: ToolRoute,
+    result: ToolResult,
+    *,
+    chat_client: object,
+    enabled: bool,
+) -> str:
+    if not _should_naturalize_tool_answer(route, result, enabled=enabled):
+        return result.answer
+
+    naturalize = getattr(chat_client, "naturalize_tool_answer", None)
+    if not callable(naturalize):
+        return result.answer
+
+    try:
+        naturalized = naturalize(
+            question=text,
+            route=_route_metadata(route),
+            raw_answer=result.answer,
+            summary=result.summary,
+            data=result.data,
+        )
+    except Exception as exc:
+        from ..openai_client import OpenAIClientError
+
+        if isinstance(exc, OpenAIClientError):
+            return result.answer
+        raise
+
+    stripped = naturalized.strip()
+    return stripped or result.answer
+
+
+def _should_naturalize_tool_answer(route: ToolRoute, result: ToolResult, *, enabled: bool) -> bool:
+    return enabled and route.category in NATURALIZABLE_PROVIDER_TOOLS and result.status == TOOL_STATUS_SUCCESS
+
+
+def _route_metadata(route: ToolRoute) -> Mapping[str, object]:
+    return {
+        "category": route.category,
+        "tool_name": route.tool_name,
+        "params": dict(route.params),
+        "reason": route.reason,
+    }
+
+
+def _text_debug_naturalization_status(route: ToolRoute, result: ToolResult | None) -> str:
+    if result is None:
+        return "not_applicable"
+    if _should_naturalize_tool_answer(route, result, enabled=True):
+        return "not_run_text_debug"
+    return "not_applicable"
 
 
 def _format_provider_config(provider_config: object | None) -> str:

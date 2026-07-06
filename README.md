@@ -183,6 +183,7 @@ TTS_INSTRUCTIONS=
 TTS_SPEED=1.0
 ENABLE_TOOLS=1
 TOOL_ROUTER_DEBUG=0
+TOOL_ANSWER_NATURALIZATION=1
 WEATHER_PROVIDER=open-meteo
 FX_PROVIDER=frankfurter
 STOCK_PROVIDER=finnhub
@@ -220,6 +221,16 @@ configured. Unsupported realtime-sensitive requests such as
 `今天有什么新闻` are refused instead of falling back to chat memory or model
 guessing.
 
+`TOOL_ANSWER_NATURALIZATION=1` enables a separate OpenAI pass only for
+successful Open-Meteo weather, Frankfurter FX, and Finnhub stock `ToolResult`
+answers. The raw structured result remains authoritative and inspectable; the
+naturalization prompt is allowed to rewrite the wording for speech but must
+preserve numbers, units, currencies, timestamps, sources, caveats, and advice
+disclaimers. Provider failures, missing credentials, realtime refusals,
+calculator answers, local time answers, empty naturalization output, and
+recoverable OpenAI naturalization errors use the deterministic raw answer
+instead of falling back to chat speculation.
+
 `WEATHER_PROVIDER=open-meteo` resolves city names through Open-Meteo geocoding
 and fetches current, today, or tomorrow weather from Open-Meteo forecast data.
 `DEFAULT_LOCATION=Singapore` is used when the user asks a weather question
@@ -247,8 +258,10 @@ low, open, previous close, the Finnhub quote timestamp, plus caveats that market
 current prices, provider failures, and malformed Finnhub responses return
 structured tool errors without chat speculation.
 
-Use the text debug path to inspect the route, params, tool result summary, and
-final answer plus provider configuration:
+Use the text debug path to inspect the route, params, tool result summary,
+`raw_answer`, `naturalization_status`, and final answer plus provider
+configuration. Text debug never calls OpenAI for naturalization and does not
+require `OPENAI_API_KEY`:
 
 ```bash
 python -m src.main --text "2 + 2"

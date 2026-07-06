@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -180,6 +181,64 @@ class OpenAIClientTests(unittest.TestCase):
             OpenAIClient(make_settings(), sdk_client=fake_sdk).ask_chatgpt("hello", [])
 
         self.assertIn("OpenAI chat request failed", str(caught.exception))
+
+    def test_naturalize_tool_answer_sends_authoritative_payload_without_history(self):
+        fake_sdk = FakeSDKClient(
+            chat_response=SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content="Tomorrow in Singapore looks rainy, around 24 to 31 C, from Open-Meteo."
+                        )
+                    )
+                ]
+            )
+        )
+        history = [{"role": "user", "content": "old chat"}]
+
+        result = OpenAIClient(make_settings(), sdk_client=fake_sdk).naturalize_tool_answer(
+            question="明天天气怎么样",
+            route={"category": "weather", "tool_name": "weather_provider", "intent": "tomorrow"},
+            raw_answer="Tomorrow in Singapore, Singapore: 24.0 C to 31.0 C. Source: Open-Meteo.",
+            summary="Open-Meteo forecast for 2026-07-07",
+            data={
+                "source": "Open-Meteo",
+                "temperature_min_c": 24.0,
+                "temperature_max_c": 31.0,
+                "finnhub_api_key": "fh-secret",
+                "token": "secret-token",
+            },
+        )
+
+        self.assertIn("Open-Meteo", result)
+        self.assertEqual(history, [{"role": "user", "content": "old chat"}])
+        call = fake_sdk.chat.completions.calls[0]
+        self.assertEqual(call["model"], DEFAULT_CHAT_MODEL)
+        self.assertEqual(call["messages"][0]["role"], "system")
+        self.assertIn("Preserve all numbers", call["messages"][0]["content"])
+        payload = json.loads(call["messages"][1]["content"])
+        self.assertEqual(payload["user_question"], "明天天气怎么样")
+        self.assertEqual(payload["route"]["category"], "weather")
+        self.assertEqual(payload["summary"], "Open-Meteo forecast for 2026-07-07")
+        self.assertEqual(payload["data"]["source"], "Open-Meteo")
+        self.assertEqual(payload["data"]["temperature_min_c"], 24.0)
+        self.assertNotIn("finnhub_api_key", payload["data"])
+        self.assertNotIn("token", payload["data"])
+        self.assertNotIn("fh-secret", call["messages"][1]["content"])
+
+    def test_naturalize_tool_answer_rejects_empty_output(self):
+        fake_sdk = FakeSDKClient(chat_response=SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="  "))]))
+
+        with self.assertRaises(OpenAIClientError) as caught:
+            OpenAIClient(make_settings(), sdk_client=fake_sdk).naturalize_tool_answer(
+                question="AAPL stock price",
+                route={"category": "stock", "tool_name": "stock_provider"},
+                raw_answer="AAPL last traded at 193.12 USD. This is not trading advice.",
+                summary="Finnhub quote for AAPL",
+                data={"source": "Finnhub", "current_price": 193.12},
+            )
+
+        self.assertIn("naturalization returned empty text", str(caught.exception))
 
     def test_text_to_speech_streams_to_output_file(self):
         speech_response = FakeSpeechResponse(data=b"fake-mp3")
