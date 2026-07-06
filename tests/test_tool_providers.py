@@ -4,6 +4,7 @@ import unittest
 import urllib.error
 
 from src.tools.providers import (
+    DEFAULT_HTTP_USER_AGENT,
     FINNHUB_QUOTE_URL,
     FRANKFURTER_RATE_URL_TEMPLATE,
     JsonHttpClient,
@@ -118,7 +119,15 @@ class ToolProviderTests(unittest.TestCase):
         calls = []
 
         def opener(request, *, timeout):
-            calls.append((request.full_url, timeout, request.get_method()))
+            calls.append(
+                (
+                    request.full_url,
+                    timeout,
+                    request.get_method(),
+                    request.get_header("Accept"),
+                    request.get_header("User-agent"),
+                )
+            )
             return FakeResponse(b'{"ok": true, "value": 2}')
 
         result = JsonHttpClient(opener=opener).get_json(
@@ -128,7 +137,10 @@ class ToolProviderTests(unittest.TestCase):
         )
 
         self.assertEqual(result, {"ok": True, "value": 2})
-        self.assertEqual(calls, [("https://example.test/api?q=a+b&limit=2", 1.25, "GET")])
+        self.assertEqual(
+            calls,
+            [("https://example.test/api?q=a+b&limit=2", 1.25, "GET", "application/json", DEFAULT_HTTP_USER_AGENT)],
+        )
 
     def test_json_get_maps_http_error(self):
         def opener(request, *, timeout):

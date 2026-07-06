@@ -30,6 +30,7 @@ DEFAULT_STOCK_PROVIDER = "finnhub"
 DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS = 5.0
 DEFAULT_LOCATION = "Singapore"
 DEFAULT_BASE_CURRENCY = "USD"
+DEFAULT_HTTP_USER_AGENT = "hey-jarvis/1.0"
 
 PROVIDER_ERROR_HTTP_STATUS = "http_status"
 PROVIDER_ERROR_TIMEOUT = "timeout"
@@ -113,7 +114,14 @@ class JsonHttpClient:
         timeout_seconds: float = DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS,
     ) -> Any:
         request_url = _url_with_params(url, params or {})
-        request = urllib.request.Request(request_url, method="GET")
+        request = urllib.request.Request(
+            request_url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": DEFAULT_HTTP_USER_AGENT,
+            },
+            method="GET",
+        )
         try:
             with self._opener(request, timeout=timeout_seconds) as response:
                 status_code = int(getattr(response, "status", getattr(response, "code", 200)))
