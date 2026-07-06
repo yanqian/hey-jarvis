@@ -85,16 +85,19 @@ FINNHUB_API_KEY=
 ```
 
 `ENABLE_TOOLS` routes local time and simple calculator requests before chat
-generation. Weather, stock, and FX requests are recognized but return
-provider-not-configured answers until network-backed providers are implemented.
+generation. Weather requests use Open-Meteo when `WEATHER_PROVIDER=open-meteo`.
+Stock and FX requests are recognized but return provider-not-configured answers
+until their provider-specific features are implemented.
 `TOOL_ROUTER_DEBUG=1` logs route, tool, params, and rule reason during the voice
 loop.
 
-`WEATHER_PROVIDER`, `FX_PROVIDER`, and `STOCK_PROVIDER` name the planned
-network-backed providers. `TOOL_HTTP_TIMEOUT_SECONDS` is the shared JSON request
-timeout. `DEFAULT_LOCATION` and `DEFAULT_BASE_CURRENCY` are defaults for future
-weather and FX requests. `FINNHUB_API_KEY` is optional until stock quotes are
-enabled; diagnostics report configured or missing without printing the value.
+`WEATHER_PROVIDER=open-meteo` resolves city names through Open-Meteo geocoding
+and fetches current, today, or tomorrow weather from the Open-Meteo forecast
+endpoint. `TOOL_HTTP_TIMEOUT_SECONDS` is the shared JSON request timeout.
+`DEFAULT_LOCATION=Singapore` is used when the user omits a weather location.
+`DEFAULT_BASE_CURRENCY=USD` is the default future FX base currency.
+`FINNHUB_API_KEY` is optional until stock quotes are enabled; diagnostics report
+configured or missing without printing the value.
 
 Wake acknowledgement playback is enabled by default. The assistant plays the
 prepared `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` file after `Hey Jarvis`, drains
@@ -167,7 +170,7 @@ For an end-to-end state-machine smoke test without hardware or OpenAI:
 python -m src.main --fake-backend
 ```
 
-For structured tool routing without microphone, wake-word detection, TTS,
+For local structured tool routing without microphone, wake-word detection, TTS,
 playback, OpenAI, or external network access:
 
 ```bash
@@ -176,9 +179,16 @@ python -m src.main --text "100加20是多少"
 python -m src.main --text "今天有什么新闻"
 ```
 
+For a manual Open-Meteo weather smoke with live network access, run:
+
+```bash
+python -m src.main --text "明天天气怎么样"
+python -m src.main --text "weather in Tokyo today"
+```
+
 Automated tests mock the shared JSON HTTP boundary and must not call live
-weather, FX, or stock services. Manual real-provider smoke tests are expected
-when F024, F025, and F026 add provider-specific behavior.
+weather, FX, or stock services. Manual real-provider smoke tests for FX and
+stock remain expected when F025 and F026 add provider-specific behavior.
 
 ## Microphone Permission
 

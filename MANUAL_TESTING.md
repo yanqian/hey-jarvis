@@ -116,6 +116,7 @@ The MVP is acceptable when:
 | M021 | Restart recovery | Stop the process and start it again without cleaning `tmp/`. | Assistant starts normally and can complete another loop. |
 | M022 | Post-playback false wake | Complete a successful answer, then say nothing after playback finishes. | The assistant drains the post-playback microphone window, waits for quiet audio, stays in `WAIT_WAKE`, and does not enter `RECORDING`. |
 | M023 | Wake acknowledgement boundary | Say only `Hey Jarvis`, wait for acknowledgement, then remain silent. Inspect `tmp/input.wav`. | The acknowledgement plays from the prepared local file, the recorder starts only after the drain window, and `tmp/input.wav` does not contain the acknowledgement audio. |
+| M024 | Open-Meteo weather | Run `python -m src.main --text "明天天气怎么样"` and `python -m src.main --text "weather in Tokyo today"` with network access. Optionally ask the same questions through the voice loop. | Text debug routes to `weather`, returns `result_status=success`, names `Open-Meteo`, uses `DEFAULT_LOCATION=Singapore` when no location is spoken, and does not fall back to chat speculation on provider errors. |
 
 ## Known Manual Failures
 

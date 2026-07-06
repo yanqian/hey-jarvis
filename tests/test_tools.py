@@ -6,6 +6,48 @@ from src.tools.providers import ProviderConfig
 from src.tools.router import format_text_debug
 
 
+class FakeJsonClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def get_json(self, url, *, params=None, timeout_seconds=5.0):
+        self.calls.append((url, dict(params or {}), timeout_seconds))
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def weather_geocoding_response():
+    return {
+        "results": [
+            {
+                "name": "Singapore",
+                "country": "Singapore",
+                "latitude": 1.29,
+                "longitude": 103.85,
+                "timezone": "Asia/Singapore",
+            }
+        ]
+    }
+
+
+def weather_daily_response():
+    return {
+        "daily": {
+            "time": ["2026-07-06", "2026-07-07"],
+            "temperature_2m_min": [25.0, 24.0],
+            "temperature_2m_max": [32.0, 31.0],
+            "apparent_temperature_max": [37.0, 36.0],
+            "weather_code": [61, 63],
+            "precipitation_sum": [1.0, 3.0],
+            "rain_sum": [1.0, 3.0],
+            "precipitation_probability_max": [55, 70],
+        }
+    }
+
+
 class FakeChatClient:
     def __init__(self):
         self.calls = []
@@ -48,9 +90,20 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(result.summary, "local time 2026-07-06 09:08 +08")
         self.assertIn("09:08", result.answer)
 
-    def test_routes_planned_provider_categories_to_not_configured(self):
+    def test_routes_weather_with_location_and_intent(self):
+        route = route_text("tomorrow weather in Tokyo")
+
+        self.assertEqual(route.category, "weather")
+        self.assertEqual(route.params["intent"], "tomorrow")
+        self.assertEqual(route.params["location"], "tokyo")
+
+        chinese_route = route_text("明天东京天气怎么样")
+        self.assertEqual(chinese_route.category, "weather")
+        self.assertEqual(chinese_route.params["intent"], "tomorrow")
+        self.assertEqual(chinese_route.params["location"], "东京")
+
+    def test_routes_remaining_planned_provider_categories_to_not_configured(self):
         cases = {
-            "明天天气怎么样": "weather",
             "美元兑新币汇率是多少": "fx",
             "苹果股价多少": "stock",
             "AAPL stock price": "stock",
@@ -63,6 +116,47 @@ class ToolRoutingTests(unittest.TestCase):
                 self.assertEqual(route.category, expected_category)
                 self.assertEqual(result.status, "not_configured")
                 self.assertIn("provider behavior is not implemented", result.answer)
+
+    def test_weather_answer_path_uses_provider_and_skips_chat(self):
+        chat_client = FakeChatClient()
+        client = FakeJsonClient([weather_geocoding_response(), weather_daily_response()])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "明天天气怎么样",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            provider_config=ProviderConfig(default_location="Singapore"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "weather")
+        self.assertEqual(route.params["intent"], "tomorrow")
+        self.assertEqual(result.status, "success")
+        self.assertIn("Tomorrow in Singapore, Singapore", answer)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
+    def test_weather_provider_failure_does_not_fall_back_to_chat(self):
+        chat_client = FakeChatClient()
+        client = FakeJsonClient([{"results": []}])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "weather in Atlantis",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            provider_config=ProviderConfig(),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "weather")
+        self.assertEqual(result.status, "error")
+        self.assertIn("could not get weather data", answer)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
 
     def test_stock_provider_route_reports_missing_finnhub_key(self):
         route = route_text("AAPL stock price")
@@ -151,6 +245,19 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertNotIn("fh-secret", debug)
         self.assertIn("result_status=success", debug)
         self.assertIn("final_answer=The local time is 09:08", debug)
+
+    def test_text_debug_can_show_mocked_weather_result(self):
+        client = FakeJsonClient([weather_geocoding_response(), weather_daily_response()])
+
+        debug = format_text_debug(
+            "tomorrow weather",
+            provider_config=ProviderConfig(default_location="Singapore"),
+            http_client=client,
+        )
+
+        self.assertIn("route=weather", debug)
+        self.assertIn("result_status=success", debug)
+        self.assertIn("Open-Meteo forecast for 2026-07-07", debug)
 
 
 if __name__ == "__main__":

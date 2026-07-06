@@ -75,12 +75,15 @@ For the dependency-free full-loop smoke path, run:
 python -m src.main --fake-backend
 ```
 
-To inspect structured tool routing for typed text without microphone,
+To inspect local structured tool routing for typed text without microphone,
 wake-word detection, OpenAI, TTS, playback, or network access, run:
 
 ```bash
 python -m src.main --text "现在几点"
 ```
+
+Weather text-debug requests such as `python -m src.main --text "明天天气怎么样"`
+use the configured Open-Meteo provider and require network access.
 
 To inspect wake-word behavior without OpenAI or playback, run a wake debug
 probe:
@@ -208,37 +211,45 @@ the normal recorder starts.
 `ENABLE_TOOLS=1` enables a deterministic routing boundary after transcription
 and before chat generation. `TOOL_ROUTER_DEBUG=1` logs the selected route, tool,
 params, and rule reason during the voice loop. Local time requests and simple
-arithmetic are answered without asking the chat model. Weather, stock, and FX
-requests return a clear provider-not-configured answer because the MVP has no
-network-backed providers yet. Unsupported realtime-sensitive requests such as
+arithmetic are answered without asking the chat model. Weather requests are
+answered through Open-Meteo when `WEATHER_PROVIDER=open-meteo`. Stock and FX
+requests still return clear provider-not-configured answers until their
+provider-specific follow-up features land. Unsupported realtime-sensitive requests such as
 `今天有什么新闻` are refused instead of falling back to chat memory or model
 guessing.
 
-Network-backed tool provider infrastructure is configured but provider behavior
-is still split into follow-up features. `WEATHER_PROVIDER=open-meteo`,
-`FX_PROVIDER=frankfurter`, and `STOCK_PROVIDER=finnhub` name the planned
-providers. `TOOL_HTTP_TIMEOUT_SECONDS=5` is the shared JSON request timeout.
-`DEFAULT_LOCATION=Singapore` and `DEFAULT_BASE_CURRENCY=USD` are defaults future
-weather and FX tools will use when the user omits those details. `FINNHUB_API_KEY`
-is optional until stock quotes are enabled; diagnostics and text debug report it
-as configured or missing without printing the secret value.
+`WEATHER_PROVIDER=open-meteo` resolves city names through Open-Meteo geocoding
+and fetches current, today, or tomorrow weather from Open-Meteo forecast data.
+`DEFAULT_LOCATION=Singapore` is used when the user asks a weather question
+without naming a place. Weather answers include source, location, observation or
+forecast time, temperature, feels-like or weather-code context, and rain or
+precipitation probability where Open-Meteo provides it. `FX_PROVIDER=frankfurter`
+and `STOCK_PROVIDER=finnhub` name planned providers for later features.
+`TOOL_HTTP_TIMEOUT_SECONDS=5` is the shared JSON request timeout.
+`DEFAULT_BASE_CURRENCY=USD` is the default future FX base currency.
+`FINNHUB_API_KEY` is optional until stock quotes are enabled; diagnostics and
+text debug report it as configured or missing without printing the secret value.
 
 Use the text debug path to inspect the route, params, tool result summary, and
 final answer plus provider configuration:
 
 ```bash
 python -m src.main --text "2 + 2"
+python -m src.main --text "明天天气怎么样"
+python -m src.main --text "weather in Tokyo today"
 python -m src.main --text "苹果怎么样"
 python -m src.main --text "今天有什么新闻"
 ```
 
-Structured tools do not browse the web during automated tests. F022 supports
-local time, safe local calculator expressions, conservative route detection for
-planned weather, stock, and FX providers, and refusal for unsupported realtime
-categories such as news, sports scores, product prices, or arbitrary live web
-facts. F023 adds the shared provider configuration and mocked JSON HTTP boundary
-only; manual real-provider smoke expectations begin with the provider-specific
-features F024 through F026.
+Structured tools do not browse the web during automated tests; weather provider
+tests mock Open-Meteo geocoding and forecast responses through the shared JSON
+HTTP boundary. F022 supports local time, safe local calculator expressions,
+conservative route detection for provider-backed weather, stock, and FX
+requests, and refusal for unsupported realtime categories such as news, sports
+scores, product prices, or arbitrary live web facts. F023 adds the shared
+provider configuration and mocked JSON HTTP boundary. F024 enables Open-Meteo
+weather. Manual real-provider smoke expectations for FX and stock begin with
+F025 and F026.
 
 The automated recovery check uses fakes and dry-run paths, so it does not make
 live OpenAI API calls or live provider network calls.

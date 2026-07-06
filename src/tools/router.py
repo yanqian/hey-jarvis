@@ -1,9 +1,4 @@
-"""Deterministic structured-tool routing.
-
-This module intentionally avoids network calls. Provider-backed tools such as
-weather, FX, and stock can be connected later behind the same route/result
-schemas without changing the voice state machine.
-"""
+"""Deterministic structured-tool routing and tool execution."""
 
 from __future__ import annotations
 
@@ -85,11 +80,12 @@ def route_text(text: str) -> ToolRoute:
         return ToolRoute(ROUTE_TIME, "local_time", {"timezone": "local"}, "local time request")
 
     if _contains_any(normalized, _WEATHER_MARKERS):
+        weather_params = _extract_weather_params(text)
         return ToolRoute(
             ROUTE_WEATHER,
             "weather_provider",
-            {"query": text.strip()},
-            "weather request requires configured provider",
+            weather_params,
+            "weather request",
         )
 
     if _contains_any(normalized, _FX_MARKERS):
@@ -131,6 +127,7 @@ def execute_route(
     *,
     now_provider: Callable[[], datetime] | None = None,
     provider_config: object | None = None,
+    http_client: object | None = None,
 ) -> ToolResult:
     """Execute a routed local tool or return a configured failure result."""
 
@@ -139,7 +136,9 @@ def execute_route(
     if route.category == ROUTE_CALCULATOR:
         expression = route.params.get("expression", "")
         return _calculator_result(expression)
-    if route.category in PLANNED_PROVIDER_TOOLS:
+    if route.category == ROUTE_WEATHER:
+        return _weather_result(route, provider_config=provider_config, http_client=http_client)
+    if route.category in {ROUTE_STOCK, ROUTE_FX}:
         return _not_configured_result(route, provider_config=provider_config)
     if route.category == ROUTE_UNSUPPORTED_REALTIME:
         return ToolResult(
@@ -162,12 +161,18 @@ def answer_with_tools(
     tools_enabled: bool,
     now_provider: Callable[[], datetime] | None = None,
     provider_config: object | None = None,
+    http_client: object | None = None,
 ) -> tuple[str, ToolRoute, ToolResult | None]:
     """Answer text through tools when enabled, otherwise through chat."""
 
     route = route_text(text)
     if tools_enabled and route.uses_tool:
-        result = execute_route(route, now_provider=now_provider, provider_config=provider_config)
+        result = execute_route(
+            route,
+            now_provider=now_provider,
+            provider_config=provider_config,
+            http_client=http_client,
+        )
         if result.handled:
             return result.answer, route, result
 
@@ -180,12 +185,18 @@ def format_text_debug(
     *,
     now_provider: Callable[[], datetime] | None = None,
     provider_config: object | None = None,
+    http_client: object | None = None,
 ) -> str:
     """Format a dependency-free text debug report for CLI output."""
 
     route = route_text(text)
     result = (
-        execute_route(route, now_provider=now_provider, provider_config=provider_config)
+        execute_route(
+            route,
+            now_provider=now_provider,
+            provider_config=provider_config,
+            http_client=http_client,
+        )
         if route.uses_tool
         else None
     )
@@ -269,6 +280,26 @@ def _not_configured_result(route: ToolRoute, *, provider_config: object | None =
         f"I cannot answer {label} questions yet because provider behavior is not implemented.",
         data,
     )
+
+
+def _weather_result(
+    route: ToolRoute,
+    *,
+    provider_config: object | None,
+    http_client: object | None,
+) -> ToolResult:
+    provider_name = _provider_name(route, provider_config)
+    if provider_name and provider_name.casefold() != "open-meteo":
+        return _not_configured_result(route, provider_config=provider_config)
+
+    from .providers import JsonHttpClient, ProviderConfig, ProviderError, open_meteo_weather_result, provider_error_result
+
+    config = provider_config if provider_config is not None else ProviderConfig()
+    client = http_client if http_client is not None else JsonHttpClient()
+    try:
+        return open_meteo_weather_result(route, provider_config=config, http_client=client)
+    except ProviderError as exc:
+        return provider_error_result(route, exc)
 
 
 def _safe_eval_expression(expression: str) -> float:
@@ -377,6 +408,50 @@ def _looks_like_stock_request(text: str) -> bool:
     return bool(re.search(r"\b(aapl|tsla|nvda|msft|googl?)\b", text))
 
 
+def _extract_weather_params(text: str) -> Mapping[str, str]:
+    stripped = text.strip()
+    normalized = _normalize_text(text)
+    intent = "current"
+    if _contains_any(normalized, _WEATHER_TOMORROW_MARKERS):
+        intent = "tomorrow"
+    elif _contains_any(normalized, _WEATHER_TODAY_MARKERS):
+        intent = "today"
+
+    location = _extract_weather_location(stripped, normalized)
+    params = {"query": stripped, "intent": intent}
+    if location:
+        params["location"] = location
+    return params
+
+
+def _extract_weather_location(text: str, normalized: str) -> str:
+    english_match = re.search(
+        r"\b(?:in|for|at)\s+([a-z][a-z\s.'-]{1,80}?)(?:\s+(?:today|tomorrow|now|right now|weather|forecast|temperature|rain)|[?.!,]|$)",
+        normalized,
+    )
+    if english_match:
+        return _clean_weather_location(english_match.group(1))
+
+    if re.search(r"[\u4e00-\u9fff]", text):
+        location = text
+        for marker in _WEATHER_CN_STOP_MARKERS:
+            location = location.replace(marker, "")
+        location = re.sub(r"[?？!！,，.。]", "", location)
+        location = _clean_weather_location(location)
+        if location and location not in {"怎么样", "如何", "多少", "几度", "會", "会"}:
+            return location
+
+    return ""
+
+
+def _clean_weather_location(value: str) -> str:
+    cleaned = _normalize_text(value)
+    cleaned = re.sub(r"\b(what is|what's|how is|show me|tell me|please|the)\b", " ", cleaned)
+    cleaned = re.sub(r"\b(weather|forecast|temperature|rain|raining|today|tomorrow|now|right now)\b", " ", cleaned)
+    cleaned = " ".join(cleaned.split(" 的 "))
+    return " ".join(cleaned.split()).strip(" ?!.，,。")
+
+
 def _format_mapping(values: Mapping[str, str]) -> str:
     if not values:
         return "{}"
@@ -473,9 +548,51 @@ _WEATHER_MARKERS = (
     "weather",
     "forecast",
     "temperature",
+    "rain",
+    "raining",
     "天气",
     "天氣",
     "温度",
+    "下雨",
+)
+_WEATHER_TODAY_MARKERS = (
+    "today",
+    "tonight",
+    "今天",
+    "今日",
+)
+_WEATHER_TOMORROW_MARKERS = (
+    "tomorrow",
+    "明天",
+    "明日",
+)
+_WEATHER_CN_STOP_MARKERS = (
+    "天气怎么样",
+    "天氣怎麼樣",
+    "天气如何",
+    "天氣如何",
+    "天气",
+    "天氣",
+    "温度",
+    "多少度",
+    "几度",
+    "幾度",
+    "会不会下雨",
+    "會不會下雨",
+    "下雨吗",
+    "下雨嗎",
+    "下雨",
+    "今天",
+    "今日",
+    "明天",
+    "明日",
+    "现在",
+    "現在",
+    "怎么样",
+    "怎麼樣",
+    "如何",
+    "吗",
+    "嗎",
 )
 _FX_MARKERS = (
     "exchange rate",

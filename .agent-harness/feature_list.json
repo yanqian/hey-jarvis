@@ -486,9 +486,9 @@
         "No geocoding match, missing forecast fields, provider HTTP failures, and malformed provider data return structured weather failures and do not fall back to chat speculation.",
         "Focused tests mock geocoding and forecast responses, cover success and failure paths, verify text-debug/answer-path behavior, update documentation examples, and pass final ./init.sh recovery verification."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

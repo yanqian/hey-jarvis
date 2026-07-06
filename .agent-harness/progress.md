@@ -54,13 +54,15 @@ Network-backed structured tools have been planned as four follow-up features. F0
 
 F023 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The code now includes shared provider configuration fields, optional Finnhub credential loading without secret disclosure, provider diagnostics/text-debug surfacing, a standard-library JSON GET boundary with structured recoverable provider errors, provider-aware planned-tool `not_configured` results, offline mocked tests, and documentation for provider settings plus no-live-network automated verification. Coding evidence is recorded in `runs/F023-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F023` in `runs/F023-evaluation.md`.
 
+F024 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The structured weather route now extracts current/today/tomorrow intent and practical locations, falls back to `DEFAULT_LOCATION` when omitted, resolves places through Open-Meteo geocoding, fetches current and daily Open-Meteo forecast fields, returns source/freshness/temperature/apparent-temperature/weather-code/precipitation context in `ToolResult` data, and maps no-match, missing-field, HTTP, timeout, network, and malformed-data failures to structured tool errors without chat speculation. Focused mocked tests cover weather routing, text debug, success and failure paths, default location behavior, and non-Open-Meteo provider fallback. Coding evidence is recorded in `runs/F024-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F024` in `runs/F024-evaluation.md`.
+
 ## Last Completed Feature
 
-F023 - Add shared network tool provider infrastructure.
+F024 - Implement Open-Meteo weather tool.
 
 ## Next Feature
 
-F024 - Implement Open-Meteo weather tool.
+F025 - Implement Frankfurter FX tool.
 
 ## Known Issues
 
