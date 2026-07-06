@@ -22,6 +22,15 @@ from .wake_word import (
     normalize_wake_backend,
     normalize_wake_model,
 )
+from .tools.providers import (
+    DEFAULT_BASE_CURRENCY as PROVIDER_DEFAULT_BASE_CURRENCY,
+    DEFAULT_FX_PROVIDER as PROVIDER_DEFAULT_FX_PROVIDER,
+    DEFAULT_LOCATION as PROVIDER_DEFAULT_LOCATION,
+    DEFAULT_STOCK_PROVIDER as PROVIDER_DEFAULT_STOCK_PROVIDER,
+    DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS as PROVIDER_DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS,
+    DEFAULT_WEATHER_PROVIDER as PROVIDER_DEFAULT_WEATHER_PROVIDER,
+    ProviderConfig,
+)
 
 DEFAULT_WAKE_BACKEND = OPENWAKEWORD_BACKEND
 DEFAULT_WAKE_MODEL = OPENWAKEWORD_MODEL_NAME
@@ -39,6 +48,12 @@ DEFAULT_TTS_INSTRUCTIONS: str | None = None
 DEFAULT_TTS_SPEED = 1.0
 DEFAULT_ENABLE_TOOLS = True
 DEFAULT_TOOL_ROUTER_DEBUG = False
+DEFAULT_WEATHER_PROVIDER = PROVIDER_DEFAULT_WEATHER_PROVIDER
+DEFAULT_FX_PROVIDER = PROVIDER_DEFAULT_FX_PROVIDER
+DEFAULT_STOCK_PROVIDER = PROVIDER_DEFAULT_STOCK_PROVIDER
+DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS = PROVIDER_DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS
+DEFAULT_LOCATION = PROVIDER_DEFAULT_LOCATION
+DEFAULT_BASE_CURRENCY = PROVIDER_DEFAULT_BASE_CURRENCY
 DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED = True
 DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT = "在呢"
 DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH = Path("tmp/ack.mp3")
@@ -90,6 +105,13 @@ class Settings:
     tts_speed: float = DEFAULT_TTS_SPEED
     enable_tools: bool = DEFAULT_ENABLE_TOOLS
     tool_router_debug: bool = DEFAULT_TOOL_ROUTER_DEBUG
+    weather_provider: str = DEFAULT_WEATHER_PROVIDER
+    fx_provider: str = DEFAULT_FX_PROVIDER
+    stock_provider: str = DEFAULT_STOCK_PROVIDER
+    tool_http_timeout_seconds: float = DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS
+    default_location: str = DEFAULT_LOCATION
+    default_base_currency: str = DEFAULT_BASE_CURRENCY
+    finnhub_api_key: str | None = None
     wake_acknowledgement_enabled: bool = DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED
     wake_acknowledgement_text: str = DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT
     wake_acknowledgement_audio_path: Path = DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH
@@ -204,6 +226,25 @@ def load_settings(
     )
     enable_tools = _bool_value(raw_env, "ENABLE_TOOLS", DEFAULT_ENABLE_TOOLS, errors)
     tool_router_debug = _bool_value(raw_env, "TOOL_ROUTER_DEBUG", DEFAULT_TOOL_ROUTER_DEBUG, errors)
+    weather_provider = _text_value(raw_env, "WEATHER_PROVIDER", DEFAULT_WEATHER_PROVIDER, errors)
+    fx_provider = _text_value(raw_env, "FX_PROVIDER", DEFAULT_FX_PROVIDER, errors)
+    stock_provider = _text_value(raw_env, "STOCK_PROVIDER", DEFAULT_STOCK_PROVIDER, errors)
+    tool_http_timeout_seconds = _float_value(
+        raw_env,
+        "TOOL_HTTP_TIMEOUT_SECONDS",
+        DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS,
+        errors,
+        minimum=0.1,
+    )
+    default_location = _text_value(raw_env, "DEFAULT_LOCATION", DEFAULT_LOCATION, errors)
+    default_base_currency = _text_value(
+        raw_env,
+        "DEFAULT_BASE_CURRENCY",
+        DEFAULT_BASE_CURRENCY,
+        errors,
+        normalizer=lambda value: value.upper(),
+    )
+    finnhub_api_key = _optional_secret(raw_env.get("FINNHUB_API_KEY"))
     wake_acknowledgement_enabled = _bool_value(
         raw_env,
         "WAKE_ACKNOWLEDGEMENT_ENABLED",
@@ -295,6 +336,13 @@ def load_settings(
         tts_speed=tts_speed,
         enable_tools=enable_tools,
         tool_router_debug=tool_router_debug,
+        weather_provider=weather_provider,
+        fx_provider=fx_provider,
+        stock_provider=stock_provider,
+        tool_http_timeout_seconds=tool_http_timeout_seconds,
+        default_location=default_location,
+        default_base_currency=default_base_currency,
+        finnhub_api_key=finnhub_api_key,
         wake_acknowledgement_enabled=wake_acknowledgement_enabled,
         wake_acknowledgement_text=wake_acknowledgement_text,
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
@@ -363,6 +411,8 @@ def collect_diagnostics(
     else:
         checks.append(DiagnosticCheck("OPENAI_API_KEY", "ok", "OpenAI API key is configured"))
 
+    checks.extend(_provider_configuration_checks(settings))
+
     modules_to_check = DEPENDENCY_MODULES if dependency_modules is None else dependency_modules
     for package_name, module_name in modules_to_check.items():
         if importlib.util.find_spec(module_name) is None:
@@ -426,6 +476,45 @@ def _wake_acknowledgement_audio_checks(settings: Settings | None) -> list[Diagno
             f"Wake acknowledgement audio file is present at {settings.wake_acknowledgement_audio_path}",
         )
     ]
+
+
+def _provider_configuration_checks(settings: Settings | None) -> list[DiagnosticCheck]:
+    if settings is None:
+        return []
+
+    provider_config = ProviderConfig(
+        weather_provider=settings.weather_provider,
+        fx_provider=settings.fx_provider,
+        stock_provider=settings.stock_provider,
+        http_timeout_seconds=settings.tool_http_timeout_seconds,
+        default_location=settings.default_location,
+        default_base_currency=settings.default_base_currency,
+        finnhub_api_key=settings.finnhub_api_key,
+    )
+    summary = provider_config.public_summary()
+    checks = [
+        DiagnosticCheck(
+            "tool_providers",
+            "ok",
+            (
+                f"weather={summary['weather_provider']}; fx={summary['fx_provider']}; "
+                f"stock={summary['stock_provider']}; timeout={summary['http_timeout_seconds']}s; "
+                f"default_location={summary['default_location']}; "
+                f"default_base_currency={summary['default_base_currency']}"
+            ),
+        )
+    ]
+    if settings.stock_provider.strip().lower() == "finnhub" and settings.finnhub_api_key is None:
+        checks.append(
+            DiagnosticCheck(
+                "FINNHUB_API_KEY",
+                "warning",
+                "FINNHUB_API_KEY is missing; stock quote requests will report missing credentials",
+            )
+        )
+    elif settings.finnhub_api_key is not None:
+        checks.append(DiagnosticCheck("FINNHUB_API_KEY", "ok", "Finnhub API key is configured"))
+    return checks
 
 
 def _wake_word_model_checks(

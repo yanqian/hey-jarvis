@@ -6,14 +6,19 @@ from unittest.mock import patch
 from src.config import (
     DEFAULT_CHAT_MODEL,
     DEFAULT_ENABLE_TOOLS,
+    DEFAULT_BASE_CURRENCY,
     DEFAULT_MAX_RECORD_SECONDS,
+    DEFAULT_FX_PROVIDER,
+    DEFAULT_LOCATION,
     DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
     DEFAULT_POST_PLAYBACK_QUIET_RMS,
     DEFAULT_POST_PLAYBACK_QUIET_SECONDS,
     DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_SECONDS,
+    DEFAULT_STOCK_PROVIDER,
     DEFAULT_TRANSCRIBE_MODEL,
+    DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS,
     DEFAULT_TOOL_ROUTER_DEBUG,
     DEFAULT_TTS_INSTRUCTIONS,
     DEFAULT_TTS_MODEL,
@@ -30,6 +35,7 @@ from src.config import (
     DEFAULT_WAKE_PHRASE,
     DEFAULT_WAKE_THRESHOLD,
     DEFAULT_WAKE_CONFIRMATION_FRAMES,
+    DEFAULT_WEATHER_PROVIDER,
     ConfigError,
     collect_diagnostics,
     load_settings,
@@ -62,6 +68,13 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.tts_speed, DEFAULT_TTS_SPEED)
         self.assertEqual(settings.enable_tools, DEFAULT_ENABLE_TOOLS)
         self.assertEqual(settings.tool_router_debug, DEFAULT_TOOL_ROUTER_DEBUG)
+        self.assertEqual(settings.weather_provider, DEFAULT_WEATHER_PROVIDER)
+        self.assertEqual(settings.fx_provider, DEFAULT_FX_PROVIDER)
+        self.assertEqual(settings.stock_provider, DEFAULT_STOCK_PROVIDER)
+        self.assertEqual(settings.tool_http_timeout_seconds, DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS)
+        self.assertEqual(settings.default_location, DEFAULT_LOCATION)
+        self.assertEqual(settings.default_base_currency, DEFAULT_BASE_CURRENCY)
+        self.assertIsNone(settings.finnhub_api_key)
         self.assertEqual(settings.wake_acknowledgement_enabled, DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED)
         self.assertEqual(settings.wake_acknowledgement_text, DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT)
         self.assertEqual(settings.wake_acknowledgement_audio_path, DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH)
@@ -93,6 +106,13 @@ class ConfigTests(unittest.TestCase):
                 "TTS_SPEED": "1.2",
                 "ENABLE_TOOLS": "0",
                 "TOOL_ROUTER_DEBUG": "1",
+                "WEATHER_PROVIDER": "open-meteo",
+                "FX_PROVIDER": "frankfurter",
+                "STOCK_PROVIDER": "finnhub",
+                "TOOL_HTTP_TIMEOUT_SECONDS": "2.75",
+                "DEFAULT_LOCATION": "Singapore",
+                "DEFAULT_BASE_CURRENCY": "sgd",
+                "FINNHUB_API_KEY": "fh-test",
                 "WAKE_ACKNOWLEDGEMENT_ENABLED": "0",
                 "WAKE_ACKNOWLEDGEMENT_TEXT": "yes?",
                 "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "tmp/custom-ack.mp3",
@@ -124,6 +144,13 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.tts_speed, 1.2)
         self.assertFalse(settings.enable_tools)
         self.assertTrue(settings.tool_router_debug)
+        self.assertEqual(settings.weather_provider, "open-meteo")
+        self.assertEqual(settings.fx_provider, "frankfurter")
+        self.assertEqual(settings.stock_provider, "finnhub")
+        self.assertEqual(settings.tool_http_timeout_seconds, 2.75)
+        self.assertEqual(settings.default_location, "Singapore")
+        self.assertEqual(settings.default_base_currency, "SGD")
+        self.assertEqual(settings.finnhub_api_key, "fh-test")
         self.assertFalse(settings.wake_acknowledgement_enabled)
         self.assertEqual(settings.wake_acknowledgement_text, "yes?")
         self.assertEqual(settings.wake_acknowledgement_audio_path, Path("tmp/custom-ack.mp3"))
@@ -169,6 +196,12 @@ class ConfigTests(unittest.TestCase):
                     "TTS_SPEED": "fast",
                     "ENABLE_TOOLS": "maybe",
                     "TOOL_ROUTER_DEBUG": "maybe",
+                    "WEATHER_PROVIDER": "",
+                    "FX_PROVIDER": "",
+                    "STOCK_PROVIDER": "",
+                    "TOOL_HTTP_TIMEOUT_SECONDS": "0",
+                    "DEFAULT_LOCATION": "",
+                    "DEFAULT_BASE_CURRENCY": "",
                     "WAKE_ACKNOWLEDGEMENT_ENABLED": "maybe",
                     "WAKE_ACKNOWLEDGEMENT_TEXT": "",
                     "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "",
@@ -192,6 +225,12 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("TTS_SPEED must be a number", message)
         self.assertIn("ENABLE_TOOLS must be a boolean value", message)
         self.assertIn("TOOL_ROUTER_DEBUG must be a boolean value", message)
+        self.assertIn("WEATHER_PROVIDER must not be empty", message)
+        self.assertIn("FX_PROVIDER must not be empty", message)
+        self.assertIn("STOCK_PROVIDER must not be empty", message)
+        self.assertIn("TOOL_HTTP_TIMEOUT_SECONDS must be at least 0.1", message)
+        self.assertIn("DEFAULT_LOCATION must not be empty", message)
+        self.assertIn("DEFAULT_BASE_CURRENCY must not be empty", message)
         self.assertIn("WAKE_ACKNOWLEDGEMENT_ENABLED must be a boolean value", message)
         self.assertIn("WAKE_ACKNOWLEDGEMENT_TEXT must not be empty", message)
         self.assertIn("WAKE_ACKNOWLEDGEMENT_AUDIO_PATH must not be empty", message)
@@ -250,6 +289,46 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(statuses["OPENAI_API_KEY"], "error")
         self.assertIn("add it to .env or export it", messages["OPENAI_API_KEY"])
         self.assertIn("Grant macOS microphone permission", messages["microphone_permission"])
+
+    def test_diagnostics_report_tool_provider_configuration_without_secret_values(self):
+        report = collect_diagnostics(
+            env={
+                "OPENAI_API_KEY": "sk-test",
+                "FINNHUB_API_KEY": "fh-secret",
+                "DEFAULT_LOCATION": "Singapore",
+                "DEFAULT_BASE_CURRENCY": "sgd",
+            },
+            env_file=None,
+            python_version=(3, 12),
+            afplay_path="/usr/bin/afplay",
+            dependency_modules={"json": "json"},
+            wake_word_model_paths={},
+        )
+
+        messages = {check.name: check.message for check in report.checks}
+        statuses = {check.name: check.status for check in report.checks}
+        self.assertEqual(statuses["tool_providers"], "ok")
+        self.assertIn("weather=open-meteo", messages["tool_providers"])
+        self.assertIn("fx=frankfurter", messages["tool_providers"])
+        self.assertIn("stock=finnhub", messages["tool_providers"])
+        self.assertIn("default_base_currency=SGD", messages["tool_providers"])
+        self.assertEqual(statuses["FINNHUB_API_KEY"], "ok")
+        self.assertNotIn("fh-secret", "\n".join(messages.values()))
+
+    def test_diagnostics_report_missing_stock_provider_credentials(self):
+        report = collect_diagnostics(
+            env={"OPENAI_API_KEY": "sk-test", "STOCK_PROVIDER": "finnhub"},
+            env_file=None,
+            python_version=(3, 12),
+            afplay_path="/usr/bin/afplay",
+            dependency_modules={"json": "json"},
+            wake_word_model_paths={},
+        )
+
+        messages = {check.name: check.message for check in report.checks}
+        statuses = {check.name: check.status for check in report.checks}
+        self.assertEqual(statuses["FINNHUB_API_KEY"], "warning")
+        self.assertIn("stock quote requests", messages["FINNHUB_API_KEY"])
 
     def test_diagnostics_report_missing_wake_word_model_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from src.tools import answer_with_tools, execute_route, is_realtime_sensitive, route_text
+from src.tools.providers import ProviderConfig
 from src.tools.router import format_text_debug
 
 
@@ -61,7 +62,17 @@ class ToolRoutingTests(unittest.TestCase):
                 result = execute_route(route)
                 self.assertEqual(route.category, expected_category)
                 self.assertEqual(result.status, "not_configured")
-                self.assertIn("no provider is configured", result.answer)
+                self.assertIn("provider behavior is not implemented", result.answer)
+
+    def test_stock_provider_route_reports_missing_finnhub_key(self):
+        route = route_text("AAPL stock price")
+        result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key=None))
+
+        self.assertEqual(route.category, "stock")
+        self.assertEqual(result.status, "not_configured")
+        self.assertEqual(result.summary, "stock market provider credentials are missing")
+        self.assertIn("FINNHUB_API_KEY is missing", result.answer)
+        self.assertNotIn("sk-", result.answer)
 
     def test_ambiguous_stock_like_phrase_does_not_route_to_stock(self):
         route = route_text("苹果怎么样")
@@ -129,11 +140,15 @@ class ToolRoutingTests(unittest.TestCase):
         debug = format_text_debug(
             "现在几点",
             now_provider=self.local_clock,
+            provider_config=ProviderConfig(finnhub_api_key="fh-secret"),
         )
 
         self.assertIn("input=现在几点", debug)
         self.assertIn("route=time", debug)
         self.assertIn("tool=local_time", debug)
+        self.assertIn("provider_config=", debug)
+        self.assertIn("finnhub_api_key:configured", debug)
+        self.assertNotIn("fh-secret", debug)
         self.assertIn("result_status=success", debug)
         self.assertIn("final_answer=The local time is 09:08", debug)
 

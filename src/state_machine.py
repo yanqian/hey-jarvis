@@ -13,6 +13,7 @@ from .config import Settings
 from .openai_client import OpenAIClientError
 from .recorder import DEFAULT_INPUT_WAV, RecordingResult, record_to_wav
 from .tools import answer_with_tools
+from .tools.providers import provider_config_from_settings
 from .wake_word import pcm_rms_and_peak
 
 
@@ -136,6 +137,7 @@ class VoiceAssistantStateMachine:
                 chat_client=self.openai_client,
                 history=self.history,
                 tools_enabled=self.settings.enable_tools,
+                provider_config=provider_config_from_settings(self.settings),
             )
         except OpenAIClientError as exc:
             return self._recover_from_openai_error(recording, exc, transcription=transcription)

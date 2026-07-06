@@ -130,6 +130,7 @@ def execute_route(
     route: ToolRoute,
     *,
     now_provider: Callable[[], datetime] | None = None,
+    provider_config: object | None = None,
 ) -> ToolResult:
     """Execute a routed local tool or return a configured failure result."""
 
@@ -139,7 +140,7 @@ def execute_route(
         expression = route.params.get("expression", "")
         return _calculator_result(expression)
     if route.category in PLANNED_PROVIDER_TOOLS:
-        return _not_configured_result(route)
+        return _not_configured_result(route, provider_config=provider_config)
     if route.category == ROUTE_UNSUPPORTED_REALTIME:
         return ToolResult(
             TOOL_STATUS_REFUSED,
@@ -160,12 +161,13 @@ def answer_with_tools(
     history: MutableSequence[dict[str, str]],
     tools_enabled: bool,
     now_provider: Callable[[], datetime] | None = None,
+    provider_config: object | None = None,
 ) -> tuple[str, ToolRoute, ToolResult | None]:
     """Answer text through tools when enabled, otherwise through chat."""
 
     route = route_text(text)
     if tools_enabled and route.uses_tool:
-        result = execute_route(route, now_provider=now_provider)
+        result = execute_route(route, now_provider=now_provider, provider_config=provider_config)
         if result.handled:
             return result.answer, route, result
 
@@ -173,17 +175,27 @@ def answer_with_tools(
     return answer, route, None
 
 
-def format_text_debug(text: str, *, now_provider: Callable[[], datetime] | None = None) -> str:
+def format_text_debug(
+    text: str,
+    *,
+    now_provider: Callable[[], datetime] | None = None,
+    provider_config: object | None = None,
+) -> str:
     """Format a dependency-free text debug report for CLI output."""
 
     route = route_text(text)
-    result = execute_route(route, now_provider=now_provider) if route.uses_tool else None
+    result = (
+        execute_route(route, now_provider=now_provider, provider_config=provider_config)
+        if route.uses_tool
+        else None
+    )
     final_answer = result.answer if result is not None and result.handled else "(would use chat)"
     lines = [
         f"input={text}",
         f"route={route.category}",
         f"tool={route.tool_name}",
         f"params={_format_mapping(route.params)}",
+        f"provider_config={_format_provider_config(provider_config)}",
         f"result_status={result.status if result is not None else 'not_run'}",
         f"result_summary={result.summary if result is not None else 'no tool route'}",
         f"final_answer={final_answer}",
@@ -227,18 +239,35 @@ def _calculator_result(expression: str) -> ToolResult:
     )
 
 
-def _not_configured_result(route: ToolRoute) -> ToolResult:
+def _not_configured_result(route: ToolRoute, *, provider_config: object | None = None) -> ToolResult:
     category_labels = {
         ROUTE_WEATHER: "weather",
         ROUTE_STOCK: "stock market",
         ROUTE_FX: "foreign exchange",
     }
     label = category_labels.get(route.category, route.category)
+    provider_name = _provider_name(route, provider_config)
+    data: dict[str, str | float] = {
+        "category": route.category,
+        "query": route.params.get("query", ""),
+    }
+    if provider_name:
+        data["provider"] = provider_name
+
+    if route.category == ROUTE_STOCK and _missing_finnhub_key(provider_config):
+        return ToolResult(
+            TOOL_STATUS_NOT_CONFIGURED,
+            "stock market provider credentials are missing",
+            "I cannot answer stock market questions yet because FINNHUB_API_KEY is missing.",
+            data | {"credential": "FINNHUB_API_KEY"},
+        )
+
+    provider_phrase = f" {provider_name}" if provider_name else ""
     return ToolResult(
         TOOL_STATUS_NOT_CONFIGURED,
-        f"{label} provider is not configured",
-        f"I cannot answer {label} questions yet because no provider is configured.",
-        {"query": route.params.get("query", "")},
+        f"{label} provider{provider_phrase} is not implemented",
+        f"I cannot answer {label} questions yet because provider behavior is not implemented.",
+        data,
     )
 
 
@@ -352,6 +381,52 @@ def _format_mapping(values: Mapping[str, str]) -> str:
     if not values:
         return "{}"
     return "{" + ",".join(f"{key}:{value}" for key, value in sorted(values.items())) + "}"
+
+
+def _format_provider_config(provider_config: object | None) -> str:
+    if provider_config is None:
+        return "{}"
+    public_summary = getattr(provider_config, "public_summary", None)
+    if public_summary is not None:
+        return _format_public_mapping(public_summary())
+    return _format_public_mapping(
+        {
+            "weather_provider": getattr(provider_config, "weather_provider", ""),
+            "fx_provider": getattr(provider_config, "fx_provider", ""),
+            "stock_provider": getattr(provider_config, "stock_provider", ""),
+            "http_timeout_seconds": getattr(provider_config, "http_timeout_seconds", ""),
+            "default_location": getattr(provider_config, "default_location", ""),
+            "default_base_currency": getattr(provider_config, "default_base_currency", ""),
+            "finnhub_api_key": "configured" if getattr(provider_config, "finnhub_api_key", None) else "missing",
+        }
+    )
+
+
+def _format_public_mapping(values: Mapping[str, object]) -> str:
+    if not values:
+        return "{}"
+    return "{" + ",".join(f"{key}:{value}" for key, value in sorted(values.items())) + "}"
+
+
+def _provider_name(route: ToolRoute, provider_config: object | None) -> str:
+    if provider_config is None:
+        return ""
+    attr_by_route = {
+        ROUTE_WEATHER: "weather_provider",
+        ROUTE_STOCK: "stock_provider",
+        ROUTE_FX: "fx_provider",
+    }
+    attr = attr_by_route.get(route.category)
+    if attr is None:
+        return ""
+    return str(getattr(provider_config, attr, "")).strip()
+
+
+def _missing_finnhub_key(provider_config: object | None) -> bool:
+    if provider_config is None:
+        return False
+    stock_provider = str(getattr(provider_config, "stock_provider", "")).strip().lower()
+    return stock_provider == "finnhub" and not getattr(provider_config, "finnhub_api_key", None)
 
 
 def _format_number(value: float) -> str:

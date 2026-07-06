@@ -17,6 +17,7 @@ from .openai_client import build_openai_client
 from .player import MacOSPlayer
 from .recorder import RecordingResult
 from .state_machine import AssistantState, VoiceAssistantStateMachine
+from .tools.providers import provider_config_from_settings
 from .tools.router import format_text_debug
 from .wake_word import (
     OPENWAKEWORD_FRAME_SAMPLES,
@@ -123,7 +124,8 @@ def run_prepare_acknowledgement(
 def run_text_debug(text: str) -> int:
     """Print deterministic structured-tool routing for text input."""
 
-    print(format_text_debug(text))
+    settings = load_settings()
+    print(format_text_debug(text, provider_config=provider_config_from_settings(settings)))
     return 0
 
 

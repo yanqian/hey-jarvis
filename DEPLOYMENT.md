@@ -75,6 +75,13 @@ Structured local tools are enabled by default:
 ```text
 ENABLE_TOOLS=1
 TOOL_ROUTER_DEBUG=0
+WEATHER_PROVIDER=open-meteo
+FX_PROVIDER=frankfurter
+STOCK_PROVIDER=finnhub
+TOOL_HTTP_TIMEOUT_SECONDS=5
+DEFAULT_LOCATION=Singapore
+DEFAULT_BASE_CURRENCY=USD
+FINNHUB_API_KEY=
 ```
 
 `ENABLE_TOOLS` routes local time and simple calculator requests before chat
@@ -82,6 +89,12 @@ generation. Weather, stock, and FX requests are recognized but return
 provider-not-configured answers until network-backed providers are implemented.
 `TOOL_ROUTER_DEBUG=1` logs route, tool, params, and rule reason during the voice
 loop.
+
+`WEATHER_PROVIDER`, `FX_PROVIDER`, and `STOCK_PROVIDER` name the planned
+network-backed providers. `TOOL_HTTP_TIMEOUT_SECONDS` is the shared JSON request
+timeout. `DEFAULT_LOCATION` and `DEFAULT_BASE_CURRENCY` are defaults for future
+weather and FX requests. `FINNHUB_API_KEY` is optional until stock quotes are
+enabled; diagnostics report configured or missing without printing the value.
 
 Wake acknowledgement playback is enabled by default. The assistant plays the
 prepared `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` file after `Hey Jarvis`, drains
@@ -162,6 +175,10 @@ python -m src.main --text "现在几点"
 python -m src.main --text "100加20是多少"
 python -m src.main --text "今天有什么新闻"
 ```
+
+Automated tests mock the shared JSON HTTP boundary and must not call live
+weather, FX, or stock services. Manual real-provider smoke tests are expected
+when F024, F025, and F026 add provider-specific behavior.
 
 ## Microphone Permission
 
@@ -268,6 +285,8 @@ Only start the real assistant after recovery and diagnostics pass.
   prepared before listening.
 - Playback fails: run `python -m src.main --diagnose` and confirm `afplay` is
   available.
+- `FINNHUB_API_KEY` is reported as missing: stock quote routing is visible, but
+  live Finnhub stock quotes are not enabled until the stock provider feature.
 - Playback finishes and immediately wakes again: keep
   `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` enabled, keep
   `POST_PLAYBACK_QUIET_SECONDS` enabled, keep `WAKE_CONFIRMATION_FRAMES` at `2`

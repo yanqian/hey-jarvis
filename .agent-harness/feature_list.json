@@ -454,6 +454,86 @@
         "F006",
         "F021"
       ]
+    },
+    {
+      "id": "F023",
+      "title": "Add shared network tool provider infrastructure",
+      "description": "Add a small shared provider/HTTP boundary for network-backed structured tools, including provider configuration, timeout and JSON handling, structured recoverable errors, diagnostics/text-debug surfacing, and mocked tests without implementing weather, FX, or stock provider behavior yet.",
+      "acceptance": [
+        "Configuration loads documented provider settings and timeout defaults, including WEATHER_PROVIDER, FX_PROVIDER, STOCK_PROVIDER, TOOL_HTTP_TIMEOUT_SECONDS, DEFAULT_LOCATION, DEFAULT_BASE_CURRENCY, and optional FINNHUB_API_KEY without logging secrets.",
+        "A shared tools HTTP/provider helper performs JSON GET requests with query parameters and timeout handling, and maps HTTP status, timeout, network, and malformed JSON failures into structured tool/provider errors without crashing the assistant.",
+        "Diagnostics or text-debug output surfaces provider configuration and missing stock-quote credentials clearly without invoking microphone, wake-word detection, TTS, playback, OpenAI, or live network calls.",
+        "Focused tests mock the HTTP boundary and cover success, HTTP errors, timeouts, malformed JSON, network exceptions, provider config defaults, invalid timeout values, and missing credential messaging.",
+        ".env.example, README or manual testing docs, and final ./init.sh recovery verification cover the provider settings, no-live-network automated-test rule, and manual real-provider smoke expectations."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F022"
+      ]
+    },
+    {
+      "id": "F024",
+      "title": "Implement Open-Meteo weather tool",
+      "description": "Replace the weather not-configured result with an Open-Meteo-backed provider that resolves locations, fetches current/today/tomorrow forecast data, and returns short structured weather answers with source and freshness metadata.",
+      "acceptance": [
+        "Weather routing extracts practical location and current/today/tomorrow intent, uses DEFAULT_LOCATION when the user omits a location, and preserves unsupported realtime guards for non-weather topics.",
+        "The weather provider resolves city names through Open-Meteo geocoding and calls the Open-Meteo forecast endpoint for current, hourly, or daily fields needed for current, today, and tomorrow answers.",
+        "Successful ToolResult data includes normalized location, source=open-meteo, observation or forecast time, freshness wording, temperature, apparent temperature or weather code where available, and precipitation or rain probability context.",
+        "No geocoding match, missing forecast fields, provider HTTP failures, and malformed provider data return structured weather failures and do not fall back to chat speculation.",
+        "Focused tests mock geocoding and forecast responses, cover success and failure paths, verify text-debug/answer-path behavior, update documentation examples, and pass final ./init.sh recovery verification."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F023"
+      ]
+    },
+    {
+      "id": "F025",
+      "title": "Implement Frankfurter FX tool",
+      "description": "Replace the FX not-configured result with a Frankfurter-backed exchange-rate provider that normalizes amount/base/quote requests, calculates conversions locally, and returns concise reference-rate answers.",
+      "acceptance": [
+        "FX routing extracts amount, base currency, and quote currency from common English and Chinese aliases, including at least USD, SGD, CNY, EUR, JPY, HKD, GBP, and AUD, with documented defaults when one side is omitted.",
+        "The FX provider calls Frankfurter's rate endpoint for a single currency pair, calculates converted amounts locally, and returns rate, converted amount, rate date, source=frankfurter, and reference-rate freshness metadata.",
+        "Answers clearly distinguish provider reference rates from bank cash rates or executable trading quotes while staying short enough for TTS.",
+        "Unsupported currencies, same-currency requests, missing rate fields, provider HTTP failures, and malformed provider data return structured FX failures and do not fall back to chat speculation.",
+        "Focused tests mock Frankfurter responses, cover parsing aliases, rounding, success and failure paths, verify text-debug/answer-path behavior, update documentation examples, and pass final ./init.sh recovery verification."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F023"
+      ]
+    },
+    {
+      "id": "F026",
+      "title": "Implement Finnhub stock quote tool",
+      "description": "Replace the stock not-configured result with a Finnhub-backed stock quote provider that uses a configured API key, conservative symbol extraction, and concise quote answers with market-data caveats.",
+      "acceptance": [
+        "Stock routing extracts uppercase ticker symbols and a small conservative company-name alias map, while preserving ambiguity handling for ordinary phrases such as 苹果怎么样 that should not become stock quote requests.",
+        "Configuration and diagnostics load FINNHUB_API_KEY as an optional secret, report missing credentials clearly for stock quotes, and never print or log the key value.",
+        "The stock provider calls Finnhub's quote endpoint and maps current price, change, percent change, high, low, open, previous close, timestamp, source=finnhub, and freshness or delay wording into structured ToolResult data.",
+        "Missing API key, unknown symbols, zero or missing current price, provider HTTP failures, and malformed provider data return structured stock failures and do not fall back to chat speculation.",
+        "Focused tests mock Finnhub responses, cover aliases, missing key, unknown symbols, success and failure paths, verify text-debug/answer-path behavior, update documentation examples, and pass final ./init.sh recovery verification."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F023"
+      ]
     }
   ]
 }

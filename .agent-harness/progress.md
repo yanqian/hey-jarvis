@@ -50,13 +50,17 @@ F021 has been completed through the orchestrator entrypoint, with Coding Agent i
 
 F022 has been implemented by manual Coding Agent fallback after the orchestrator-first run hit the known Codex provider behavior of hanging in `subprocess.communicate()` while waiting for the Coding Agent child process. The code now includes a structured local tool routing foundation before network-backed realtime providers: route/result schemas, deterministic router rules, realtime-sensitive refusal behavior, local time and safe calculator tools, not-configured results for planned weather/FX/stock tools, `ENABLE_TOOLS`, `TOOL_ROUTER_DEBUG`, state-machine post-transcription routing, and `python -m src.main --text ...` for dependency-free inspection. Focused tests and `./init.sh` pass, and durable evidence is recorded in `runs/F022-manual-coding.md` and `runs/F022-evaluation.md`.
 
+Network-backed structured tools have been planned as four follow-up features. F023 adds the shared provider configuration, HTTP JSON boundary, diagnostics, and mocked failure handling required by all remote tools. F024 adds Open-Meteo weather using geocoding plus forecast data. F025 adds Frankfurter FX reference-rate conversion. F026 adds Finnhub stock quotes behind a user-provided API key. This decomposition keeps provider-specific parsing, credentials, freshness semantics, and caveats independently implementable and evaluatable.
+
+F023 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The code now includes shared provider configuration fields, optional Finnhub credential loading without secret disclosure, provider diagnostics/text-debug surfacing, a standard-library JSON GET boundary with structured recoverable provider errors, provider-aware planned-tool `not_configured` results, offline mocked tests, and documentation for provider settings plus no-live-network automated verification. Coding evidence is recorded in `runs/F023-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F023` in `runs/F023-evaluation.md`.
+
 ## Last Completed Feature
 
-F022 - Add structured tool routing foundation.
+F023 - Add shared network tool provider infrastructure.
 
 ## Next Feature
 
-None currently selected.
+F024 - Implement Open-Meteo weather tool.
 
 ## Known Issues
 

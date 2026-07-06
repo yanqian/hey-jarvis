@@ -179,6 +179,13 @@ TTS_INSTRUCTIONS=
 TTS_SPEED=1.0
 ENABLE_TOOLS=1
 TOOL_ROUTER_DEBUG=0
+WEATHER_PROVIDER=open-meteo
+FX_PROVIDER=frankfurter
+STOCK_PROVIDER=finnhub
+TOOL_HTTP_TIMEOUT_SECONDS=5
+DEFAULT_LOCATION=Singapore
+DEFAULT_BASE_CURRENCY=USD
+FINNHUB_API_KEY=
 WAKE_DEBUG=0
 ```
 
@@ -207,8 +214,17 @@ network-backed providers yet. Unsupported realtime-sensitive requests such as
 `今天有什么新闻` are refused instead of falling back to chat memory or model
 guessing.
 
+Network-backed tool provider infrastructure is configured but provider behavior
+is still split into follow-up features. `WEATHER_PROVIDER=open-meteo`,
+`FX_PROVIDER=frankfurter`, and `STOCK_PROVIDER=finnhub` name the planned
+providers. `TOOL_HTTP_TIMEOUT_SECONDS=5` is the shared JSON request timeout.
+`DEFAULT_LOCATION=Singapore` and `DEFAULT_BASE_CURRENCY=USD` are defaults future
+weather and FX tools will use when the user omits those details. `FINNHUB_API_KEY`
+is optional until stock quotes are enabled; diagnostics and text debug report it
+as configured or missing without printing the secret value.
+
 Use the text debug path to inspect the route, params, tool result summary, and
-final answer:
+final answer plus provider configuration:
 
 ```bash
 python -m src.main --text "2 + 2"
@@ -216,12 +232,16 @@ python -m src.main --text "苹果怎么样"
 python -m src.main --text "今天有什么新闻"
 ```
 
-Structured tools do not browse the web. F022 supports local time, safe local
-calculator expressions, conservative route detection for planned weather, stock,
-and FX providers, and refusal for unsupported realtime categories such as news,
-sports scores, product prices, or arbitrary live web facts.
+Structured tools do not browse the web during automated tests. F022 supports
+local time, safe local calculator expressions, conservative route detection for
+planned weather, stock, and FX providers, and refusal for unsupported realtime
+categories such as news, sports scores, product prices, or arbitrary live web
+facts. F023 adds the shared provider configuration and mocked JSON HTTP boundary
+only; manual real-provider smoke expectations begin with the provider-specific
+features F024 through F026.
 
-The automated recovery check uses fakes and dry-run paths, so it does not make live OpenAI API calls.
+The automated recovery check uses fakes and dry-run paths, so it does not make
+live OpenAI API calls or live provider network calls.
 
 ## Wake-Word Debugging
 
