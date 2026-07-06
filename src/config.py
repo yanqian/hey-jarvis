@@ -26,7 +26,7 @@ from .wake_word import (
 DEFAULT_WAKE_BACKEND = OPENWAKEWORD_BACKEND
 DEFAULT_WAKE_MODEL = OPENWAKEWORD_MODEL_NAME
 DEFAULT_WAKE_INFERENCE_FRAMEWORK = OPENWAKEWORD_INFERENCE_FRAMEWORK
-DEFAULT_WAKE_PHRASE = "alexa"
+DEFAULT_WAKE_PHRASE = "hey jarvis"
 DEFAULT_WAKE_THRESHOLD = 0.5
 DEFAULT_SILENCE_SECONDS = 1.5
 DEFAULT_MAX_RECORD_SECONDS = 20.0
@@ -37,6 +37,10 @@ DEFAULT_TTS_MODEL = "gpt-4o-mini-tts"
 DEFAULT_TTS_VOICE = "alloy"
 DEFAULT_TTS_INSTRUCTIONS: str | None = None
 DEFAULT_TTS_SPEED = 1.0
+DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED = True
+DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT = "在呢"
+DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH = Path("tmp/ack.mp3")
+DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS = 0.35
 DEFAULT_WAKE_DEBUG = False
 DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS = 1.0
 DEFAULT_POST_PLAYBACK_QUIET_SECONDS = 0.5
@@ -82,6 +86,10 @@ class Settings:
     tts_voice: str
     tts_instructions: str | None = DEFAULT_TTS_INSTRUCTIONS
     tts_speed: float = DEFAULT_TTS_SPEED
+    wake_acknowledgement_enabled: bool = DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED
+    wake_acknowledgement_text: str = DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT
+    wake_acknowledgement_audio_path: Path = DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH
+    wake_acknowledgement_drain_seconds: float = DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS
     wake_debug: bool = DEFAULT_WAKE_DEBUG
     post_playback_wake_cooldown_seconds: float = DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS
     post_playback_quiet_seconds: float = DEFAULT_POST_PLAYBACK_QUIET_SECONDS
@@ -190,6 +198,31 @@ def load_settings(
         minimum=0.25,
         maximum=4.0,
     )
+    wake_acknowledgement_enabled = _bool_value(
+        raw_env,
+        "WAKE_ACKNOWLEDGEMENT_ENABLED",
+        DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED,
+        errors,
+    )
+    wake_acknowledgement_text = _text_value(
+        raw_env,
+        "WAKE_ACKNOWLEDGEMENT_TEXT",
+        DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
+        errors,
+    )
+    wake_acknowledgement_audio_path = _path_value(
+        raw_env,
+        "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH",
+        DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
+        errors,
+    )
+    wake_acknowledgement_drain_seconds = _float_value(
+        raw_env,
+        "WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS",
+        DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
+        errors,
+        minimum=0.0,
+    )
     wake_debug = _bool_value(raw_env, "WAKE_DEBUG", DEFAULT_WAKE_DEBUG, errors)
     post_playback_wake_cooldown_seconds = _float_value(
         raw_env,
@@ -254,6 +287,10 @@ def load_settings(
         tts_voice=tts_voice,
         tts_instructions=tts_instructions,
         tts_speed=tts_speed,
+        wake_acknowledgement_enabled=wake_acknowledgement_enabled,
+        wake_acknowledgement_text=wake_acknowledgement_text,
+        wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
+        wake_acknowledgement_drain_seconds=wake_acknowledgement_drain_seconds,
         wake_debug=wake_debug,
         post_playback_wake_cooldown_seconds=post_playback_wake_cooldown_seconds,
         post_playback_quiet_seconds=post_playback_quiet_seconds,
@@ -335,6 +372,7 @@ def collect_diagnostics(
         checks.extend(_wake_runtime_dependency_checks(settings))
 
     checks.extend(_wake_word_model_checks(wake_word_model_paths, modules_to_check, settings))
+    checks.extend(_wake_acknowledgement_audio_checks(settings))
     checks.append(
         DiagnosticCheck(
             "microphone_permission",
@@ -344,6 +382,42 @@ def collect_diagnostics(
     )
 
     return DiagnosticReport(tuple(checks))
+
+
+def wake_acknowledgement_missing_message(settings: Settings) -> str | None:
+    """Return actionable guidance when the prepared acknowledgement audio is missing."""
+
+    if not settings.wake_acknowledgement_enabled:
+        return None
+    if settings.wake_acknowledgement_audio_path.is_file():
+        return None
+    return (
+        f"Wake acknowledgement audio file is missing at {settings.wake_acknowledgement_audio_path}; "
+        "run python -m src.main --prepare-acknowledgement before starting the assistant"
+    )
+
+
+def _wake_acknowledgement_audio_checks(settings: Settings | None) -> list[DiagnosticCheck]:
+    if settings is None:
+        return []
+    if not settings.wake_acknowledgement_enabled:
+        return [
+            DiagnosticCheck(
+                "wake_acknowledgement_audio",
+                "info",
+                "Wake acknowledgement playback is disabled",
+            )
+        ]
+    missing_message = wake_acknowledgement_missing_message(settings)
+    if missing_message is not None:
+        return [DiagnosticCheck("wake_acknowledgement_audio", "error", missing_message)]
+    return [
+        DiagnosticCheck(
+            "wake_acknowledgement_audio",
+            "ok",
+            f"Wake acknowledgement audio file is present at {settings.wake_acknowledgement_audio_path}",
+        )
+    ]
 
 
 def _wake_word_model_checks(
@@ -528,6 +602,14 @@ def _optional_text_value(env: Mapping[str, str], name: str) -> str | None:
         return None
     value = raw_value.strip()
     return value or None
+
+
+def _path_value(env: Mapping[str, str], name: str, default: Path, errors: list[str]) -> Path:
+    value = env.get(name, str(default)).strip()
+    if not value:
+        errors.append(f"{name} must not be empty")
+        return default
+    return Path(value)
 
 
 def _float_value(

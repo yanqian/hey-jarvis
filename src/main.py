@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
+import tempfile
 import wave
 from pathlib import Path
 from typing import TextIO
 
 from .audio_input import open_microphone_stream
 from .config import Settings
-from .config import collect_diagnostics, format_diagnostics, load_settings
+from .config import collect_diagnostics, format_diagnostics, load_settings, wake_acknowledgement_missing_message
 from .openai_client import build_openai_client
 from .player import MacOSPlayer
 from .recorder import RecordingResult
@@ -61,18 +62,24 @@ def run_fake_backend_smoke() -> int:
     """Exercise the full state machine with deterministic fakes."""
 
     logger = logging.getLogger(LOGGER_NAME)
-    settings = load_settings(env={}, env_file=None)
-    microphone = _FakeMicrophone([_FAKE_SILENCE_CHUNK, _FAKE_WAKE_CHUNK, _FAKE_WAKE_CHUNK])
-    machine = VoiceAssistantStateMachine(
-        settings=settings,
-        audio_source=microphone,
-        wake_detector=_FakeWakeDetector(),
-        openai_client=_FakeOpenAIClient(),
-        player=_FakePlayer(),
-        record_audio=_fake_record_audio,
-        logger=logger,
-    )
-    result = machine.run_once()
+    base_settings = load_settings(env={}, env_file=None)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        acknowledgement_path = Path(tmp_dir) / "ack.mp3"
+        acknowledgement_path.write_bytes(b"fake-ack")
+        settings = replace(base_settings, wake_acknowledgement_audio_path=acknowledgement_path)
+        microphone = _FakeMicrophone(
+            [_FAKE_SILENCE_CHUNK, _FAKE_WAKE_CHUNK, _FAKE_WAKE_CHUNK, _FAKE_SILENCE_CHUNK]
+        )
+        machine = VoiceAssistantStateMachine(
+            settings=settings,
+            audio_source=microphone,
+            wake_detector=_FakeWakeDetector(),
+            openai_client=_FakeOpenAIClient(),
+            player=_FakePlayer(),
+            record_audio=_fake_record_audio,
+            logger=logger,
+        )
+        result = machine.run_once()
     print("Assistant started")
     print(f"Fake backend answered: {result.answer}")
     print(f"Returned to {result.final_state.value}")
@@ -95,6 +102,23 @@ def run_prepare_wake_word() -> int:
     return 0
 
 
+def run_prepare_acknowledgement(
+    *,
+    settings: Settings | None = None,
+    openai_client: object | None = None,
+) -> int:
+    """Generate the configured wake acknowledgement audio once."""
+
+    resolved_settings = settings or load_settings(require_openai_api_key=True)
+    client = openai_client or build_openai_client(settings=resolved_settings)
+    client.text_to_speech(
+        resolved_settings.wake_acknowledgement_text,
+        str(resolved_settings.wake_acknowledgement_audio_path),
+    )
+    print(f"Prepared wake acknowledgement audio: {resolved_settings.wake_acknowledgement_audio_path}")
+    return 0
+
+
 def run_wake_debug(
     *,
     max_frames: int | None = None,
@@ -110,9 +134,9 @@ def run_wake_debug(
     resolved_settings = settings or load_settings()
     detector = wake_detector or _build_wake_detector(resolved_settings, logger=logger)
     if hasattr(detector, "preload"):
-        logger.info("Preparing Alexa wake-word detector")
+        logger.info("Preparing %s wake-word detector", resolved_settings.wake_phrase)
         detector.preload()
-        logger.info("Alexa wake-word detector ready")
+        logger.info("%s wake-word detector ready", resolved_settings.wake_phrase.title())
 
     if audio_source is not None:
         summary = _print_live_wake_debug(
@@ -154,9 +178,9 @@ def run_wake_file_debug(
     resolved_settings = settings or load_settings()
     detector = wake_detector or _build_wake_detector(resolved_settings, logger=logger)
     if hasattr(detector, "preload"):
-        logger.info("Preparing Alexa wake-word detector")
+        logger.info("Preparing %s wake-word detector", resolved_settings.wake_phrase)
         detector.preload()
-        logger.info("Alexa wake-word detector ready")
+        logger.info("%s wake-word detector ready", resolved_settings.wake_phrase.title())
 
     summary = WakeDebugSummary()
     target = output or None
@@ -202,12 +226,16 @@ def run_assistant_forever() -> int:
 
     logger.info("Assistant started")
     logger.info("Say %s, ask a question, and wait for playback", settings.wake_phrase)
+    missing_acknowledgement = wake_acknowledgement_missing_message(settings)
+    if missing_acknowledgement is not None:
+        logger.error(missing_acknowledgement)
+        return 1
     wake_detector: object | None = None
     try:
         wake_detector = _build_wake_detector(settings, logger=logger)
-        logger.info("Preparing Alexa wake-word detector")
+        logger.info("Preparing %s wake-word detector", settings.wake_phrase)
         wake_detector.preload()
-        logger.info("Alexa wake-word detector ready")
+        logger.info("%s wake-word detector ready", settings.wake_phrase.title())
         with open_microphone_stream(
             sample_rate=settings.sample_rate,
             block_frames=_detector_frame_length(wake_detector),
@@ -258,6 +286,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="download the configured wake-word models required by the real assistant",
     )
     mode.add_argument(
+        "--prepare-acknowledgement",
+        action="store_true",
+        help="generate the configured wake acknowledgement audio file once",
+    )
+    mode.add_argument(
         "--wake-debug",
         action="store_true",
         help="print live microphone wake-word scores without OpenAI or playback",
@@ -297,6 +330,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_fake_backend_smoke()
     if args.prepare_wake_word:
         return run_prepare_wake_word()
+    if args.prepare_acknowledgement:
+        return run_prepare_acknowledgement()
     if args.wake_debug:
         return run_wake_debug(
             max_frames=args.wake_debug_frames or None,

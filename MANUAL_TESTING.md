@@ -16,11 +16,18 @@ python -m src.main --diagnose
 All diagnostic errors should be fixed before running the real assistant. The
 real path also requires macOS microphone permission for the launching app,
 prepared wake-word models, `afplay`, and a valid `OPENAI_API_KEY`.
+When `WAKE_ACKNOWLEDGEMENT_ENABLED=1`, it also requires prepared acknowledgement
+audio from:
+
+```bash
+python -m src.main --prepare-acknowledgement
+```
 
 ## Recording Behavior
 
-The MVP records after the wake word is detected and stops when either condition
-is reached:
+The MVP records after the wake word is detected, the acknowledgement plays, and
+the acknowledgement drain window completes. Recording then stops when either
+condition is reached:
 
 - `SILENCE_SECONDS`, default `1.5`, of consecutive audio below the built-in RMS
   silence threshold.
@@ -73,6 +80,8 @@ The MVP is acceptable when:
 - Wake-word detection succeeds at least 8 out of 10 attempts in a normal local
   environment.
 - Five complete question-answer loops run without restarting the process.
+- The assistant plays the configured wake acknowledgement after wake detection
+  and does not include that acknowledgement audio in `tmp/input.wav`.
 - Empty transcription, network/API failures, and no-speech-after-wake cases
   return to `WAIT_WAKE` without crashing.
 - `tmp/input.wav` contains the complete spoken question for normal and long
@@ -84,18 +93,18 @@ The MVP is acceptable when:
 
 | ID | Area | Steps | Expected result |
 | --- | --- | --- | --- |
-| M001 | Full MVP loop | Start `python -m src.main`, say `Alexa, what is two plus two?` | Assistant wakes, records, transcribes, answers, plays audio, and returns to `WAIT_WAKE`. |
-| M002 | Consecutive loops | After M001 completes, ask `Alexa, what is the capital of France?` without restarting. | Second loop completes and returns to `WAIT_WAKE`. |
+| M001 | Full MVP loop | Start `python -m src.main`, say `Hey Jarvis`, wait for the acknowledgement such as `在呢`, then ask `what is two plus two?` | Assistant wakes, plays acknowledgement, drains microphone residue, records, transcribes, answers, plays audio, and returns to `WAIT_WAKE`. |
+| M002 | Consecutive loops | After M001 completes, say `Hey Jarvis`, wait for acknowledgement, then ask `what is the capital of France?` without restarting. | Second loop completes and returns to `WAIT_WAKE`. |
 | M003 | Long question | Ask a 10-15 second question with natural speech. | Recording includes the full question and does not stop before the question is complete. |
-| M004 | Short question | Ask `Alexa, time?` or `Alexa, hello?` | Assistant records enough audio to transcribe or returns cleanly to `WAIT_WAKE` on empty transcription. |
-| M005 | Wake normal distance | Say `Alexa` from roughly 0.5-1 meter away. | Wake word triggers reliably. |
-| M006 | Wake far distance | Say `Alexa` from roughly 2-3 meters away. | Wake behavior is understandable from debug scores; failure should show low RMS/score rather than a crash. |
-| M007 | Wake background noise | Play light background audio and say `Alexa`. | Clear wake phrases trigger; unrelated background speech should not frequently trigger. |
-| M008 | No false wake | Speak several sentences without saying `Alexa`. | Assistant stays in `WAIT_WAKE`. |
-| M009 | Wake success rate | Try 10 clear `Alexa` wake attempts. | At least 8 attempts trigger. |
+| M004 | Short question | Ask `Hey Jarvis, time?` or `Hey Jarvis, hello?` | Assistant records enough audio to transcribe or returns cleanly to `WAIT_WAKE` on empty transcription. |
+| M005 | Wake normal distance | Say `Hey Jarvis` from roughly 0.5-1 meter away. | Wake word triggers reliably. |
+| M006 | Wake far distance | Say `Hey Jarvis` from roughly 2-3 meters away. | Wake behavior is understandable from debug scores; failure should show low RMS/score rather than a crash. |
+| M007 | Wake background noise | Play light background audio and say `Hey Jarvis`. | Clear wake phrases trigger; unrelated background speech should not frequently trigger. |
+| M008 | No false wake | Speak several sentences without saying `Hey Jarvis`. | Assistant stays in `WAIT_WAKE`. |
+| M009 | Wake success rate | Try 10 clear `Hey Jarvis` wake attempts. | At least 8 attempts trigger. |
 | M010 | Natural stop | Ask a normal question, then stay quiet. | Recording stops after a short silence and logs `stopped_by=silence`. |
 | M011 | Max duration | Speak continuously longer than `MAX_RECORD_SECONDS`. | Recording stops with `stopped_by=max_duration`; process keeps running. |
-| M012 | Wake then silence | Say only `Alexa`, then remain silent. | Empty or unusable transcription is logged as recoverable and the assistant returns to `WAIT_WAKE`. |
+| M012 | Wake then silence | Say only `Hey Jarvis`, then remain silent. | Empty or unusable transcription is logged as recoverable and the assistant returns to `WAIT_WAKE`. |
 | M013 | Input WAV quality | After any question, inspect or play `tmp/input.wav`. | File contains the current question, in mono 16 kHz 16-bit WAV format, with usable volume. |
 | M014 | Temporary network failure | Disconnect network after wake and ask a question. | OpenAI failure is logged as recoverable and assistant returns to `WAIT_WAKE`. |
 | M015 | Invalid API key | Run with an invalid `OPENAI_API_KEY`. | Error is clear and does not leave the app in an ambiguous state. |
@@ -106,6 +115,7 @@ The MVP is acceptable when:
 | M020 | Playback overlap | Speak during answer playback. | Current MVP may not interrupt playback, but it should not crash. |
 | M021 | Restart recovery | Stop the process and start it again without cleaning `tmp/`. | Assistant starts normally and can complete another loop. |
 | M022 | Post-playback false wake | Complete a successful answer, then say nothing after playback finishes. | The assistant drains the post-playback microphone window, waits for quiet audio, stays in `WAIT_WAKE`, and does not enter `RECORDING`. |
+| M023 | Wake acknowledgement boundary | Say only `Hey Jarvis`, wait for acknowledgement, then remain silent. Inspect `tmp/input.wav`. | The acknowledgement plays from the prepared local file, the recorder starts only after the drain window, and `tmp/input.wav` does not contain the acknowledgement audio. |
 
 ## Known Manual Failures
 
@@ -117,7 +127,7 @@ Observed failure:
 State PLAYING: playback finished
 Transition PLAYING -> WAIT_WAKE
 State WAIT_WAKE: ready for the next wake word
-State WAIT_WAKE: listening for the alexa wake word
+State WAIT_WAKE: listening for the hey jarvis wake word
 Microphone input overflowed; the current audio chunk may be incomplete
 State WAIT_WAKE: wake word detected
 Transition WAIT_WAKE -> RECORDING
@@ -141,7 +151,7 @@ State WAIT_WAKE: suppressing post-playback wake detection for 1.00s
 Microphone input overflowed; the current audio chunk may be incomplete
 State WAIT_WAKE: discarded 13 post-playback microphone chunks
 State WAIT_WAKE: ready for the next wake word
-State WAIT_WAKE: listening for the alexa wake word
+State WAIT_WAKE: listening for the hey jarvis wake word
 State WAIT_WAKE: wake word candidate 1/2
 State WAIT_WAKE: wake word detected
 Transition WAIT_WAKE -> RECORDING
@@ -170,3 +180,5 @@ For each manual test, record:
 - Any post-playback settings such as `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS`,
   `POST_PLAYBACK_QUIET_SECONDS`, `POST_PLAYBACK_QUIET_RMS`,
   `POST_PLAYBACK_MAX_SUPPRESSION_SECONDS`, or `WAKE_CONFIRMATION_FRAMES`.
+- Any acknowledgement settings such as `WAKE_ACKNOWLEDGEMENT_ENABLED`,
+  `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH`, or `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`.

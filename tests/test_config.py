@@ -17,6 +17,10 @@ from src.config import (
     DEFAULT_TTS_MODEL,
     DEFAULT_TTS_SPEED,
     DEFAULT_TTS_VOICE,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
     DEFAULT_WAKE_DEBUG,
     DEFAULT_WAKE_BACKEND,
     DEFAULT_WAKE_INFERENCE_FRAMEWORK,
@@ -36,12 +40,12 @@ class ConfigTests(unittest.TestCase):
 
         self.assertIsNone(settings.openai_api_key)
         self.assertEqual(settings.wake_backend, "openwakeword")
-        self.assertEqual(settings.wake_model, "alexa")
+        self.assertEqual(settings.wake_model, "hey_jarvis")
         self.assertEqual(settings.wake_inference_framework, "tflite")
         self.assertEqual(settings.wake_backend, DEFAULT_WAKE_BACKEND)
         self.assertEqual(settings.wake_model, DEFAULT_WAKE_MODEL)
         self.assertEqual(settings.wake_inference_framework, DEFAULT_WAKE_INFERENCE_FRAMEWORK)
-        self.assertEqual(DEFAULT_WAKE_PHRASE, "alexa")
+        self.assertEqual(DEFAULT_WAKE_PHRASE, "hey jarvis")
         self.assertEqual(settings.wake_phrase, DEFAULT_WAKE_PHRASE)
         self.assertEqual(settings.wake_threshold, DEFAULT_WAKE_THRESHOLD)
         self.assertEqual(settings.silence_seconds, DEFAULT_SILENCE_SECONDS)
@@ -54,6 +58,10 @@ class ConfigTests(unittest.TestCase):
         self.assertIsNone(DEFAULT_TTS_INSTRUCTIONS)
         self.assertIsNone(settings.tts_instructions)
         self.assertEqual(settings.tts_speed, DEFAULT_TTS_SPEED)
+        self.assertEqual(settings.wake_acknowledgement_enabled, DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED)
+        self.assertEqual(settings.wake_acknowledgement_text, DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT)
+        self.assertEqual(settings.wake_acknowledgement_audio_path, DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH)
+        self.assertEqual(settings.wake_acknowledgement_drain_seconds, DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS)
         self.assertEqual(settings.wake_debug, DEFAULT_WAKE_DEBUG)
         self.assertEqual(settings.post_playback_wake_cooldown_seconds, DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS)
         self.assertEqual(settings.post_playback_quiet_seconds, DEFAULT_POST_PLAYBACK_QUIET_SECONDS)
@@ -66,7 +74,7 @@ class ConfigTests(unittest.TestCase):
             env={
                 "OPENAI_API_KEY": "sk-test",
                 "WAKE_BACKEND": "openwakeword",
-                "WAKE_MODEL": "alexa",
+                "WAKE_MODEL": "timer",
                 "WAKE_INFERENCE_FRAMEWORK": "tflite",
                 "WAKE_PHRASE": "computer",
                 "WAKE_THRESHOLD": "0.65",
@@ -79,6 +87,10 @@ class ConfigTests(unittest.TestCase):
                 "TTS_VOICE": "verse",
                 "TTS_INSTRUCTIONS": "Speak with warm, quick, upbeat energy.",
                 "TTS_SPEED": "1.2",
+                "WAKE_ACKNOWLEDGEMENT_ENABLED": "0",
+                "WAKE_ACKNOWLEDGEMENT_TEXT": "yes?",
+                "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "tmp/custom-ack.mp3",
+                "WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS": "0.8",
                 "WAKE_DEBUG": "1",
                 "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS": "2.5",
                 "POST_PLAYBACK_QUIET_SECONDS": "0.75",
@@ -91,7 +103,7 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(settings.openai_api_key, "sk-test")
         self.assertEqual(settings.wake_backend, "openwakeword")
-        self.assertEqual(settings.wake_model, "alexa")
+        self.assertEqual(settings.wake_model, "timer")
         self.assertEqual(settings.wake_inference_framework, "tflite")
         self.assertEqual(settings.wake_phrase, "computer")
         self.assertEqual(settings.wake_threshold, 0.65)
@@ -104,6 +116,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.tts_voice, "verse")
         self.assertEqual(settings.tts_instructions, "Speak with warm, quick, upbeat energy.")
         self.assertEqual(settings.tts_speed, 1.2)
+        self.assertFalse(settings.wake_acknowledgement_enabled)
+        self.assertEqual(settings.wake_acknowledgement_text, "yes?")
+        self.assertEqual(settings.wake_acknowledgement_audio_path, Path("tmp/custom-ack.mp3"))
+        self.assertEqual(settings.wake_acknowledgement_drain_seconds, 0.8)
         self.assertTrue(settings.wake_debug)
         self.assertEqual(settings.post_playback_wake_cooldown_seconds, 2.5)
         self.assertEqual(settings.post_playback_quiet_seconds, 0.75)
@@ -143,6 +159,10 @@ class ConfigTests(unittest.TestCase):
                     "SAMPLE_RATE": "not-an-int",
                     "CHAT_MODEL": "",
                     "TTS_SPEED": "fast",
+                    "WAKE_ACKNOWLEDGEMENT_ENABLED": "maybe",
+                    "WAKE_ACKNOWLEDGEMENT_TEXT": "",
+                    "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "",
+                    "WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS": "-1",
                     "WAKE_DEBUG": "maybe",
                     "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS": "2",
                     "POST_PLAYBACK_QUIET_SECONDS": "-0.1",
@@ -160,6 +180,10 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("SAMPLE_RATE must be an integer", message)
         self.assertIn("CHAT_MODEL must not be empty", message)
         self.assertIn("TTS_SPEED must be a number", message)
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_ENABLED must be a boolean value", message)
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_TEXT must not be empty", message)
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_AUDIO_PATH must not be empty", message)
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS must be at least 0.0", message)
         self.assertIn("WAKE_DEBUG must be a boolean value", message)
         self.assertIn("POST_PLAYBACK_QUIET_SECONDS must be at least 0.0", message)
         self.assertIn("POST_PLAYBACK_QUIET_RMS must be at least 0.0", message)
@@ -217,14 +241,14 @@ class ConfigTests(unittest.TestCase):
 
     def test_diagnostics_report_missing_wake_word_model_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            missing_path = Path(tmp_dir) / "alexa_v0.1.tflite"
+            missing_path = Path(tmp_dir) / "hey_jarvis_v0.1.tflite"
             report = collect_diagnostics(
                 env={"OPENAI_API_KEY": "sk-test"},
                 env_file=None,
                 python_version=(3, 12),
                 afplay_path="/usr/bin/afplay",
                 dependency_modules={"json": "json"},
-                wake_word_model_paths={"alexa": missing_path},
+                wake_word_model_paths={"hey_jarvis": missing_path},
             )
 
         messages = {check.name: check.message for check in report.checks}
@@ -232,9 +256,48 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(statuses["wake_word_models"], "error")
         self.assertIn("prepare-wake-word", messages["wake_word_models"])
 
+    def test_diagnostics_report_missing_wake_acknowledgement_audio(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            report = collect_diagnostics(
+                env={
+                    "OPENAI_API_KEY": "sk-test",
+                    "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": str(ack_path),
+                },
+                env_file=None,
+                python_version=(3, 12),
+                afplay_path="/usr/bin/afplay",
+                dependency_modules={"json": "json"},
+                wake_word_model_paths={},
+            )
+
+        messages = {check.name: check.message for check in report.checks}
+        statuses = {check.name: check.status for check in report.checks}
+        self.assertEqual(statuses["wake_acknowledgement_audio"], "error")
+        self.assertIn("--prepare-acknowledgement", messages["wake_acknowledgement_audio"])
+
+    def test_diagnostics_accept_present_wake_acknowledgement_audio(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"ack")
+            report = collect_diagnostics(
+                env={
+                    "OPENAI_API_KEY": "sk-test",
+                    "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": str(ack_path),
+                },
+                env_file=None,
+                python_version=(3, 12),
+                afplay_path="/usr/bin/afplay",
+                dependency_modules={"json": "json"},
+                wake_word_model_paths={},
+            )
+
+        statuses = {check.name: check.status for check in report.checks}
+        self.assertEqual(statuses["wake_acknowledgement_audio"], "ok")
+
     def test_diagnostics_accept_present_wake_word_model_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model_path = Path(tmp_dir) / "alexa_v0.1.tflite"
+            model_path = Path(tmp_dir) / "hey_jarvis_v0.1.tflite"
             model_path.write_bytes(b"tflite")
             report = collect_diagnostics(
                 env={"OPENAI_API_KEY": "sk-test"},
@@ -242,7 +305,7 @@ class ConfigTests(unittest.TestCase):
                 python_version=(3, 12),
                 afplay_path="/usr/bin/afplay",
                 dependency_modules={"json": "json"},
-                wake_word_model_paths={"alexa": model_path},
+                wake_word_model_paths={"hey_jarvis": model_path},
             )
 
         statuses = {check.name: check.status for check in report.checks}

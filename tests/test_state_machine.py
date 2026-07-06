@@ -16,6 +16,9 @@ from src.config import (
     DEFAULT_TRANSCRIBE_MODEL,
     DEFAULT_TTS_MODEL,
     DEFAULT_TTS_VOICE,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
     DEFAULT_WAKE_BACKEND,
     DEFAULT_WAKE_INFERENCE_FRAMEWORK,
     DEFAULT_WAKE_MODEL,
@@ -37,6 +40,9 @@ def make_settings(
     post_playback_quiet_rms=DEFAULT_POST_PLAYBACK_QUIET_RMS,
     post_playback_max_suppression_seconds=DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
     wake_confirmation_frames=DEFAULT_WAKE_CONFIRMATION_FRAMES,
+    wake_acknowledgement_enabled=False,
+    wake_acknowledgement_audio_path=DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
+    wake_acknowledgement_drain_seconds=DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
 ):
     return Settings(
         openai_api_key="sk-test",
@@ -52,6 +58,10 @@ def make_settings(
         chat_model=DEFAULT_CHAT_MODEL,
         tts_model=DEFAULT_TTS_MODEL,
         tts_voice=DEFAULT_TTS_VOICE,
+        wake_acknowledgement_enabled=wake_acknowledgement_enabled,
+        wake_acknowledgement_text=DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
+        wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
+        wake_acknowledgement_drain_seconds=wake_acknowledgement_drain_seconds,
         wake_debug=wake_debug,
         post_playback_wake_cooldown_seconds=post_playback_wake_cooldown_seconds,
         post_playback_quiet_seconds=post_playback_quiet_seconds,
@@ -150,6 +160,54 @@ def fake_record_audio(source, *, sample_rate, output_path, **kwargs):
 
 
 class StateMachineTests(unittest.TestCase):
+    def test_wake_acknowledgement_plays_and_drains_before_recording(self):
+        logger = logging.getLogger("tests.state_machine.acknowledgement")
+        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, LOUD_CHUNK, QUIET_CHUNK])
+        wake_detector = FakeWakeDetector()
+        openai_client = FakeOpenAIClient()
+        player = FakePlayer()
+        recorded_first_chunk = []
+
+        def record_after_ack_drain(source, *, sample_rate, output_path, **kwargs):
+            recorded_first_chunk.append(source.read_chunk())
+            return fake_record_audio(source, sample_rate=sample_rate, output_path=output_path, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "input.wav"
+            output_path = Path(tmp_dir) / "output.mp3"
+            acknowledgement_path = Path(tmp_dir) / "ack.mp3"
+            acknowledgement_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=acknowledgement_path,
+                    wake_acknowledgement_drain_seconds=0.08,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=wake_detector,
+                openai_client=openai_client,
+                player=player,
+                record_audio=record_after_ack_drain,
+                input_path=input_path,
+                output_path=output_path,
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(player.played, [acknowledgement_path, output_path])
+        self.assertEqual(recorded_first_chunk, [QUIET_CHUNK])
+        self.assertEqual(openai_client.tts_calls, 1)
+        log_output = "\n".join(logs.output)
+        self.assertIn("Transition WAIT_WAKE -> ACK_PLAYING", log_output)
+        self.assertIn("State ACK_PLAYING: played wake acknowledgement", log_output)
+        self.assertIn("discarded 1 acknowledgement microphone chunks", log_output)
+        self.assertIn("Transition ACK_PLAYING -> RECORDING", log_output)
+
     def test_run_once_completes_full_loop_and_returns_to_wait_wake(self):
         logger = logging.getLogger("tests.state_machine")
         audio_source = FakeAudioSource()

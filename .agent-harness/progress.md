@@ -44,9 +44,13 @@ F018 has been implemented by manual Coding Agent fallback after the user reporte
 
 F019 has been implemented through the orchestrator entrypoint and evaluator-approved. The OpenAI TTS path now loads optional `TTS_INSTRUCTIONS` and validated `TTS_SPEED`, passes speed plus optional instructions to `audio.speech.with_streaming_response.create`, documents OpenAI.fm-style vibe mapping through `TTS_INSTRUCTIONS`, and adds focused config, OpenAI request-shape, and documentation tests. Coding evidence is recorded in `runs/F019-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F019` in `runs/F019-evaluation.md`.
 
+F020 has been implemented by manual Coding Agent fallback after the user validated the local Hey Jarvis TFLite wake path. The active wake-word default is now openWakeWord `hey_jarvis` with TFLite, `WAKE_PHRASE=hey jarvis`, configuration-aware preload logs, Hey Jarvis documentation and manual-test flows, focused regression tests, and recovery smoke output that listens for the hey jarvis wake word. Coding evidence is recorded in `runs/F020-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F020` in `runs/F020-evaluation.md`.
+
+F021 has been completed through the orchestrator entrypoint, with Coding Agent implementation and Evaluator Agent approval recorded. The assistant now supports configurable wake acknowledgement settings, `python -m src.main --prepare-acknowledgement` one-time audio generation through the existing OpenAI TTS boundary, startup/diagnostic missing-file guidance, an explicit `ACK_PLAYING` state after confirmed wake detection, acknowledgement microphone-residue draining before the existing recorder starts, fake-backend smoke coverage for `WAIT_WAKE -> ACK_PLAYING -> RECORDING`, and documentation/manual-test updates. Coding evidence is recorded in `runs/F021-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F021` in `runs/F021-evaluation.md`.
+
 ## Last Completed Feature
 
-F019 - Configure TTS vibe and speed.
+F021 - Add wake acknowledgement before recording.
 
 ## Next Feature
 
@@ -77,3 +81,5 @@ None currently selected.
 - F017 was completed by manual fallback because root `make work` is unavailable in this hidden-layout project (`make: *** No rule to make target 'work'. Stop.`). The user-observed failure was a post-playback false wake with microphone overflow and an empty transcription recovery. Implementation evidence is in `runs/F017-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F017` in `runs/F017-evaluation.md`.
 - F018 was completed by manual fallback because root `make work` is unavailable in this hidden-layout project (`make: *** No rule to make target 'work'. Stop.`). The user-observed failure was the same post-playback false wake recurring after F017's fixed cooldown, proving the app needed an observed quiet gate rather than only a timer. Implementation evidence is in `runs/F018-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F018` in `runs/F018-evaluation.md`.
 - F019 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `runs/F019-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F019` in `runs/F019-evaluation.md`.
+- F020 was completed by manual fallback because the user explicitly requested planning and implementation in this interactive session after confirming the local configured Hey Jarvis TFLite trial worked. Implementation evidence is in `runs/F020-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F020` in `runs/F020-evaluation.md`.
+- F021 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `runs/F021-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F021` in `runs/F021-evaluation.md`.

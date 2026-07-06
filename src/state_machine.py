@@ -20,6 +20,7 @@ DEFAULT_OUTPUT_MP3 = Path("tmp/output.mp3")
 
 class AssistantState(Enum):
     WAIT_WAKE = "WAIT_WAKE"
+    ACK_PLAYING = "ACK_PLAYING"
     RECORDING = "RECORDING"
     TRANSCRIBE = "TRANSCRIBE"
     ASK_OPENAI = "ASK_OPENAI"
@@ -101,6 +102,15 @@ class VoiceAssistantStateMachine:
         self._set_state(AssistantState.WAIT_WAKE)
         self._logger.info("State WAIT_WAKE: listening for the %s wake word", self.settings.wake_phrase)
         self._wait_for_wake_word()
+
+        if self.settings.wake_acknowledgement_enabled:
+            self._set_state(AssistantState.ACK_PLAYING)
+            self.player.play(self.settings.wake_acknowledgement_audio_path)
+            self._logger.info(
+                "State ACK_PLAYING: played wake acknowledgement from %s",
+                self.settings.wake_acknowledgement_audio_path,
+            )
+            self._drain_wake_acknowledgement_audio()
 
         self._set_state(AssistantState.RECORDING)
         recording = self._record_question()
@@ -231,6 +241,31 @@ class VoiceAssistantStateMachine:
             max_record_seconds=self.settings.max_record_seconds,
             output_path=self.input_path,
             logger=self._logger,
+        )
+
+    def _drain_wake_acknowledgement_audio(self) -> None:
+        drain_seconds = self.settings.wake_acknowledgement_drain_seconds
+        if drain_seconds <= 0:
+            return
+
+        minimum_chunk_seconds = 1.0 / self.settings.sample_rate
+        expected_frame_seconds = _detector_frame_seconds(self.wake_detector, self.settings.sample_rate)
+        max_chunks = max(1, math.ceil(drain_seconds / expected_frame_seconds))
+        drained_seconds = 0.0
+        drained_chunks = 0
+
+        self._logger.info(
+            "State ACK_PLAYING: draining acknowledgement microphone residue for %.2fs",
+            drain_seconds,
+        )
+        while drained_chunks < max_chunks and drained_seconds < drain_seconds:
+            chunk = self.audio_source.read_chunk()
+            drained_chunks += 1
+            drained_seconds += max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+
+        self._logger.info(
+            "State ACK_PLAYING: discarded %s acknowledgement microphone chunks",
+            drained_chunks,
         )
 
     def _drain_post_playback_audio(self) -> None:

@@ -388,6 +388,50 @@
       "depends_on": [
         "F005"
       ]
+    },
+    {
+      "id": "F020",
+      "title": "Restore Hey Jarvis TFLite wake word",
+      "description": "Replace the active Alexa/openWakeWord default with the user-validated built-in Hey Jarvis TFLite model and phrase, keeping the existing openWakeWord/TFLite runtime, diagnostics, debug tooling, documentation, and tests aligned.",
+      "acceptance": [
+        "Configuration defaults and .env.example use WAKE_BACKEND=openwakeword, WAKE_MODEL=hey_jarvis, WAKE_INFERENCE_FRAMEWORK=tflite, WAKE_PHRASE=hey jarvis, and WAKE_THRESHOLD=0.5.",
+        "WakeWordDetector defaults to the hey_jarvis openWakeWord model, extracts the hey_jarvis score key, remains configurable for other built-in models, and keeps the macOS ARM64 ONNX guard.",
+        "Wake-word preparation, diagnostics, live/file debug metadata, runtime logs, and fake-backend smoke output refer to the configured Hey Jarvis model and phrase rather than hard-coded Alexa text.",
+        "README, DEPLOYMENT, and MANUAL_TESTING document Hey Jarvis as the accepted wake phrase, including prepare-wake-word, diagnose, wake-debug, wake-file, and two-plus-two demo flows.",
+        "Focused tests cover the Hey Jarvis defaults, model loader arguments, model preparation paths, debug metadata, documentation coverage, and recovery checks without requiring live microphone or OpenAI access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F015",
+        "F018"
+      ]
+    },
+    {
+      "id": "F021",
+      "title": "Add wake acknowledgement before recording",
+      "description": "Play a short pre-generated acknowledgement after the Hey Jarvis wake word before recording the user's actual question, with configuration, preparation, diagnostics, microphone-drain protection, documentation, and tests.",
+      "acceptance": [
+        "Configuration loads documented wake acknowledgement settings, including enabled state, acknowledgement text defaulting to \"在呢\", acknowledgement audio path defaulting to tmp/ack.mp3, and a validated microphone-drain duration before question recording.",
+        "A CLI preparation path generates the acknowledgement audio once at the configured path through the existing OpenAI TTS boundary, while normal wake handling reuses the local file and does not call TTS for the acknowledgement on every wake event.",
+        "Diagnostics and real startup report a missing acknowledgement audio file with actionable preparation guidance when acknowledgement playback is enabled, without hiding the error until after wake detection.",
+        "After a confirmed wake, the state machine plays the configured acknowledgement, drains acknowledgement playback residue from the microphone, then starts the existing recorder so silence and max-duration stop behavior remain unchanged and acknowledgement audio is not transcribed as the user's question.",
+        "Focused tests and fake-backend smoke coverage verify the new WAIT_WAKE -> ACK_PLAYING -> RECORDING flow, missing-file handling, no per-wake acknowledgement TTS call, documentation coverage, and final recovery through ./init.sh without real microphone, speaker, or live OpenAI access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F006",
+        "F018",
+        "F019",
+        "F020"
+      ]
     }
   ]
 }

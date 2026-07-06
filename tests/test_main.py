@@ -3,7 +3,7 @@ import struct
 import tempfile
 import unittest
 import wave
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +16,9 @@ from src.config import (
     DEFAULT_TRANSCRIBE_MODEL,
     DEFAULT_TTS_MODEL,
     DEFAULT_TTS_VOICE,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
     DEFAULT_WAKE_BACKEND,
     DEFAULT_WAKE_INFERENCE_FRAMEWORK,
     DEFAULT_WAKE_MODEL,
@@ -23,10 +26,21 @@ from src.config import (
     DEFAULT_WAKE_THRESHOLD,
     Settings,
 )
-from src.main import build_parser, main, run_assistant_forever, run_wake_debug, run_wake_file_debug
+from src.main import (
+    build_parser,
+    main,
+    run_assistant_forever,
+    run_prepare_acknowledgement,
+    run_wake_debug,
+    run_wake_file_debug,
+)
 
 
-def make_settings():
+def make_settings(
+    *,
+    wake_acknowledgement_enabled=False,
+    wake_acknowledgement_audio_path=DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
+):
     return Settings(
         openai_api_key="sk-test",
         wake_backend=DEFAULT_WAKE_BACKEND,
@@ -41,6 +55,10 @@ def make_settings():
         chat_model=DEFAULT_CHAT_MODEL,
         tts_model=DEFAULT_TTS_MODEL,
         tts_voice=DEFAULT_TTS_VOICE,
+        wake_acknowledgement_enabled=wake_acknowledgement_enabled,
+        wake_acknowledgement_text=DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
+        wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
+        wake_acknowledgement_drain_seconds=DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
     )
 
 
@@ -114,6 +132,16 @@ class FakeStateMachine:
         raise KeyboardInterrupt
 
 
+class FakePreparationClient:
+    def __init__(self):
+        self.tts_calls = []
+
+    def text_to_speech(self, text, output_path):
+        self.tts_calls.append((text, Path(output_path)))
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(output_path).write_bytes(b"ack")
+
+
 EVENTS = []
 
 
@@ -147,6 +175,44 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertIn("--wake-debug", help_text)
         self.assertIn("--wake-file", help_text)
         self.assertIn("--wake-debug-output", help_text)
+        self.assertIn("--prepare-acknowledgement", help_text)
+
+    def test_prepare_acknowledgement_uses_existing_tts_boundary_once(self):
+        client = FakePreparationClient()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            output = StringIO()
+            with redirect_stdout(output):
+                result = run_prepare_acknowledgement(
+                    settings=make_settings(
+                        wake_acknowledgement_enabled=True,
+                        wake_acknowledgement_audio_path=ack_path,
+                    ),
+                    openai_client=client,
+                )
+
+            self.assertEqual(result, 0)
+            self.assertTrue(ack_path.is_file())
+
+        self.assertEqual(client.tts_calls, [(DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT, ack_path)])
+        self.assertIn("Prepared wake acknowledgement audio:", output.getvalue())
+
+    def test_real_assistant_reports_missing_acknowledgement_before_microphone(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_ack = Path(tmp_dir) / "missing-ack.mp3"
+            settings = make_settings(
+                wake_acknowledgement_enabled=True,
+                wake_acknowledgement_audio_path=missing_ack,
+            )
+            with patch("src.main.load_settings", return_value=settings):
+                with patch("src.main.open_microphone_stream") as open_microphone:
+                    with self.assertLogs("hey_jarvis", level="ERROR") as logs:
+                        result = run_assistant_forever()
+
+        self.assertEqual(result, 1)
+        open_microphone.assert_not_called()
+        self.assertIn("--prepare-acknowledgement", "\n".join(logs.output))
 
     def test_live_wake_debug_prints_levels_overflow_score_and_threshold(self):
         output = StringIO()
@@ -164,7 +230,7 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(len(lines), 4)
         self.assertTrue(detector.preloaded)
-        self.assertEqual(lines[0], "wake_debug metadata model=alexa framework=tflite loaded_models=alexa")
+        self.assertEqual(lines[0], "wake_debug metadata model=hey_jarvis framework=tflite loaded_models=hey_jarvis")
         self.assertIn("wake_debug frame=1", lines[1])
         self.assertIn("rms=100.0", lines[1])
         self.assertIn("peak=100", lines[1])
@@ -177,7 +243,7 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertEqual(
             lines[3],
             "wake_debug summary frames=2 max_score=0.900000000 "
-            "max_scores={alexa:0.900000000} threshold=0.500000000 detected_frames=1",
+            "max_scores={hey_jarvis:0.900000000} threshold=0.500000000 detected_frames=1",
         )
 
     def test_live_wake_debug_writes_requested_wav_with_scored_chunks(self):
@@ -208,7 +274,7 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertEqual(
             lines[-1],
             "wake_debug summary frames=2 max_score=0.810000000 "
-            "max_scores={alexa:0.810000000} threshold=0.500000000 detected_frames=1",
+            "max_scores={hey_jarvis:0.810000000} threshold=0.500000000 detected_frames=1",
         )
 
     def test_wake_debug_output_requires_live_debug_mode(self):
@@ -236,7 +302,7 @@ class MainRuntimeTests(unittest.TestCase):
 
         lines = output.getvalue().splitlines()
         self.assertEqual(result, 0)
-        self.assertEqual(lines[0], "wake_file metadata model=alexa framework=tflite loaded_models=alexa")
+        self.assertEqual(lines[0], "wake_file metadata model=hey_jarvis framework=tflite loaded_models=hey_jarvis")
         self.assertIn("wake_file frame=1", lines[1])
         self.assertIn("rms=353.6", lines[1])
         self.assertIn("peak=500", lines[1])
@@ -245,7 +311,7 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertEqual(
             lines[2],
             "wake_file summary frames=1 max_score=0.450000000 "
-            "max_scores={alexa:0.450000000} threshold=0.500000000 detected_frames=0",
+            "max_scores={hey_jarvis:0.450000000} threshold=0.500000000 detected_frames=0",
         )
 
     def test_wake_file_debug_scores_short_final_chunk(self):
@@ -270,14 +336,14 @@ class MainRuntimeTests(unittest.TestCase):
         lines = output.getvalue().splitlines()
         self.assertEqual(result, 0)
         self.assertEqual(len(lines), 4)
-        self.assertEqual(lines[0], "wake_file metadata model=alexa framework=tflite loaded_models=alexa")
+        self.assertEqual(lines[0], "wake_file metadata model=hey_jarvis framework=tflite loaded_models=hey_jarvis")
         self.assertIn("wake_file frame=2", lines[2])
         self.assertIn("peak=777", lines[2])
         self.assertIn("score=0.000001234", lines[2])
         self.assertEqual(
             lines[3],
             "wake_file summary frames=2 max_score=0.000001234 "
-            "max_scores={alexa:0.000001234} threshold=0.500000000 detected_frames=0",
+            "max_scores={hey_jarvis:0.000001234} threshold=0.500000000 detected_frames=0",
         )
 
 

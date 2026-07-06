@@ -23,6 +23,7 @@ class DocumentationTests(unittest.TestCase):
             "--diagnose",
             "--fake-backend",
             "--prepare-wake-word",
+            "--prepare-acknowledgement",
             "--wake-debug",
             "--wake-file",
         ):
@@ -75,16 +76,14 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("afplay", deployment)
         self.assertIn("Hey Jarvis", readme)
         self.assertIn("Hey Jarvis", deployment)
-        self.assertIn("Alexa", readme)
-        self.assertIn("Alexa", deployment)
         self.assertIn("openWakeWord", readme)
         self.assertIn("openWakeWord", deployment)
         self.assertIn("ai-edge-litert", readme)
         self.assertIn("ai-edge-litert", deployment)
         self.assertIn("WAKE_BACKEND=openwakeword", readme)
         self.assertIn("WAKE_BACKEND=openwakeword", deployment)
-        self.assertIn("WAKE_MODEL=alexa", readme)
-        self.assertIn("WAKE_MODEL=alexa", deployment)
+        self.assertIn("WAKE_MODEL=hey_jarvis", readme)
+        self.assertIn("WAKE_MODEL=hey_jarvis", deployment)
         self.assertIn("WAKE_INFERENCE_FRAMEWORK=tflite", readme)
         self.assertIn("WAKE_INFERENCE_FRAMEWORK=tflite", deployment)
         self.assertIn("scripts/debug_oww_file.py", readme)
@@ -92,7 +91,17 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("wake_word_models", deployment)
         self.assertIn("WAKE_THRESHOLD=0.5", readme)
         self.assertIn("WAKE_THRESHOLD=0.5", deployment)
-        self.assertIn("WAKE_PHRASE=alexa", ENV_EXAMPLE.read_text(encoding="utf-8"))
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_ENABLED=1", readme)
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_ENABLED=1", deployment)
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_TEXT=在呢", ENV_EXAMPLE.read_text(encoding="utf-8"))
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_AUDIO_PATH=tmp/ack.mp3", readme)
+        self.assertIn("WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS=0.35", deployment)
+        self.assertIn("wake_acknowledgement_audio", readme)
+        self.assertIn("wake_acknowledgement_audio", deployment)
+        self.assertIn("tmp/ack.mp3", deployment)
+        self.assertIn("M023", manual_testing)
+        self.assertIn("WAKE_PHRASE=hey jarvis", ENV_EXAMPLE.read_text(encoding="utf-8"))
+        self.assertIn("WAKE_MODEL=hey_jarvis", ENV_EXAMPLE.read_text(encoding="utf-8"))
         self.assertIn("WAKE_INFERENCE_FRAMEWORK=tflite", ENV_EXAMPLE.read_text(encoding="utf-8"))
         self.assertIn("what is two plus two?", readme)
         self.assertIn("what is two plus two?", deployment)

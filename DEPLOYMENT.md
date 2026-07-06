@@ -2,7 +2,7 @@
 
 Hey Jarvis is deployed as a local macOS Python process. It is not a server
 deployment: the runtime needs the local microphone, the local speaker path
-through `afplay`, OpenAI credentials, and the openWakeWord Alexa TFLite model
+through `afplay`, OpenAI credentials, and the openWakeWord Hey Jarvis TFLite model
 files on the same machine that launches the assistant.
 
 ## Supported Target
@@ -13,14 +13,18 @@ files on the same machine that launches the assistant.
 - Network access during setup for Python packages and wake-word model downloads.
 - A valid `OPENAI_API_KEY` for real transcription, chat, and text-to-speech.
 
-The active wake-word path is openWakeWord's built-in Alexa model with TFLite:
+The active wake-word path is openWakeWord's built-in Hey Jarvis model with TFLite:
 
 ```text
 WAKE_BACKEND=openwakeword
-WAKE_MODEL=alexa
+WAKE_MODEL=hey_jarvis
 WAKE_INFERENCE_FRAMEWORK=tflite
-WAKE_PHRASE=alexa
+WAKE_PHRASE=hey jarvis
 WAKE_THRESHOLD=0.5
+WAKE_ACKNOWLEDGEMENT_ENABLED=1
+WAKE_ACKNOWLEDGEMENT_TEXT=在呢
+WAKE_ACKNOWLEDGEMENT_AUDIO_PATH=tmp/ack.mp3
+WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS=0.35
 POST_PLAYBACK_WAKE_COOLDOWN_SECONDS=1.0
 POST_PLAYBACK_QUIET_SECONDS=0.5
 POST_PLAYBACK_QUIET_RMS=500
@@ -31,8 +35,8 @@ WAKE_CONFIRMATION_FRAMES=2
 Manual acceptance cases are tracked in [MANUAL_TESTING.md](MANUAL_TESTING.md).
 
 On macOS ARM64, do not deploy with `WAKE_INFERENCE_FRAMEWORK=onnx`; the project
-intentionally uses TFLite there because local debugging found ONNX Alexa scores
-collapsed near zero while TFLite produced usable scores.
+intentionally uses TFLite there because local debugging found ONNX wake-word
+scores collapsed near zero while TFLite produced usable scores.
 
 ## Install
 
@@ -66,6 +70,12 @@ quickly, and with dry humor`; the assistant sends that value as speech API
 instructions rather than using a separate OpenAI.fm vibe parameter. `TTS_SPEED`
 controls generated-audio speed and must be from `0.25` through `4.0`.
 
+Wake acknowledgement playback is enabled by default. The assistant plays the
+prepared `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` file after `Hey Jarvis`, drains
+microphone residue for `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`, and then records
+the user's question. Normal wake handling reuses the local acknowledgement file
+and does not call TTS on every wake event.
+
 If the TFLite runtime is missing after installing requirements, run the same
 install command again from the active virtual environment and confirm
 `ai-edge-litert` is installed on macOS:
@@ -83,8 +93,21 @@ microphone capture:
 python -m src.main --prepare-wake-word
 ```
 
-This prepares the Alexa model plus the required feature models. Re-run the
+This prepares the Hey Jarvis model plus the required feature models. Re-run the
 command after changing `WAKE_MODEL` or `WAKE_INFERENCE_FRAMEWORK`.
+
+## Prepare Wake Acknowledgement
+
+Generate the configured local acknowledgement audio before starting the real
+assistant:
+
+```bash
+python -m src.main --prepare-acknowledgement
+```
+
+This writes `WAKE_ACKNOWLEDGEMENT_TEXT`, default `在呢`, to
+`WAKE_ACKNOWLEDGEMENT_AUDIO_PATH`, default `tmp/ack.mp3`, through the configured
+OpenAI TTS boundary.
 
 ## Verify
 
@@ -109,8 +132,8 @@ python -m src.main --diagnose
 
 Fix every `[ERROR]` before starting the real assistant. Common deployment
 blockers are missing `OPENAI_API_KEY`, missing `ai-edge-litert`, missing
-wake-word model files, or microphone permission not yet granted to the launching
-app.
+wake-word model files, missing `wake_acknowledgement_audio`, or microphone
+permission not yet granted to the launching app.
 
 For an end-to-end state-machine smoke test without hardware or OpenAI:
 
@@ -139,7 +162,7 @@ playback:
 python -m src.main --wake-debug --wake-debug-output tmp/wake-debug.wav
 ```
 
-Say `Alexa` clearly near the microphone. Stop the command with `Ctrl-C`, then
+Say `Hey Jarvis` clearly near the microphone. Stop the command with `Ctrl-C`, then
 replay the captured file through the same scorer:
 
 ```bash
@@ -162,12 +185,18 @@ python -m src.main
 For the accepted MVP demo, say:
 
 ```text
-Alexa, what is two plus two?
+Hey Jarvis
 ```
 
-The assistant should record the question to `tmp/input.wav`, transcribe it, ask
-the configured chat model, write speech to `tmp/output.mp3`, play it with
-`afplay`, and return to `WAIT_WAKE`.
+After the acknowledgement plays, ask:
+
+```text
+what is two plus two?
+```
+
+The assistant should drain acknowledgement audio residue, record the question to
+`tmp/input.wav`, transcribe it, ask the configured chat model, write speech to
+`tmp/output.mp3`, play it with `afplay`, and return to `WAIT_WAKE`.
 
 Stop the process with `Ctrl-C`.
 
@@ -179,6 +208,7 @@ After pulling new code:
 source .venv/bin/activate
 pip install -r requirements.txt
 python -m src.main --prepare-wake-word
+python -m src.main --prepare-acknowledgement
 ./init.sh
 python -m src.main --diagnose
 ```
@@ -191,6 +221,7 @@ Only start the real assistant after recovery and diagnostics pass.
 - `.env.example`: documented deployable defaults.
 - `tmp/input.wav`: latest normal question recording.
 - `tmp/output.mp3`: latest synthesized answer.
+- `tmp/ack.mp3`: prepared wake acknowledgement audio.
 - `tmp/wake-debug.wav`: optional wake-debug capture when requested.
 
 ## Troubleshooting
@@ -204,6 +235,9 @@ Only start the real assistant after recovery and diagnostics pass.
   ai-edge-litert`.
 - `wake_word_models` reports missing files: run `python -m src.main
   --prepare-wake-word`, then run `python -m src.main --diagnose` again.
+- `wake_acknowledgement_audio` reports a missing file: set `OPENAI_API_KEY`,
+  run `python -m src.main --prepare-acknowledgement`, then run `python -m
+  src.main --diagnose` again.
 - `WAKE_INFERENCE_FRAMEWORK=onnx` fails on macOS ARM64: keep
   `WAKE_INFERENCE_FRAMEWORK=tflite`.
 - `rms` and `peak` stay near zero during `--wake-debug`: grant microphone

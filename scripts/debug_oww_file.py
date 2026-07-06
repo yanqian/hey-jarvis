@@ -12,7 +12,7 @@ from pathlib import Path
 
 TARGET_RATE = 16000
 CHUNK_SAMPLES = 1280
-DEFAULT_WAKE_MODEL = "alexa"
+DEFAULT_WAKE_MODEL = "hey_jarvis"
 DEFAULT_FRAMEWORK = "tflite"
 
 

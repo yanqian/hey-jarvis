@@ -11,6 +11,9 @@ from scripts import debug_oww_file
 
 
 class DebugOpenWakeWordFileScriptTests(unittest.TestCase):
+    def test_script_defaults_to_hey_jarvis_model(self):
+        self.assertEqual(debug_oww_file.DEFAULT_WAKE_MODEL, "hey_jarvis")
+
     def test_script_prints_model_framework_loaded_keys_and_max_scores(self):
         class FakeAudio:
             shape = (debug_oww_file.CHUNK_SAMPLES,)

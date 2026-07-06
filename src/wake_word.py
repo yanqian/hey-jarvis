@@ -14,8 +14,8 @@ from urllib.request import urlretrieve
 
 
 OPENWAKEWORD_BACKEND = "openwakeword"
-OPENWAKEWORD_MODEL_NAME = "alexa"
-OPENWAKEWORD_MODEL_KEY = "alexa"
+OPENWAKEWORD_MODEL_NAME = "hey_jarvis"
+OPENWAKEWORD_MODEL_KEY = "hey_jarvis"
 OPENWAKEWORD_INFERENCE_FRAMEWORK = "tflite"
 SUPPORTED_WAKE_BACKENDS = (OPENWAKEWORD_BACKEND,)
 SUPPORTED_OPENWAKEWORD_INFERENCE_FRAMEWORKS = ("tflite", "onnx")
@@ -28,7 +28,7 @@ WAKEWORD_RECOVERY_GUIDANCE = (
 )
 MACOS_ARM64_ONNX_ERROR = (
     "WAKE_INFERENCE_FRAMEWORK=onnx is disabled on macOS ARM64 because openWakeWord ONNX "
-    "has produced near-zero Alexa scores on Apple Silicon; use WAKE_INFERENCE_FRAMEWORK=tflite."
+    "has produced near-zero wake-word scores on Apple Silicon; use WAKE_INFERENCE_FRAMEWORK=tflite."
 )
 
 
@@ -42,7 +42,7 @@ class WakeWordModel(Protocol):
 
 
 class WakeWordDetector:
-    """Detect the built-in Alexa wake word from int16 PCM chunks."""
+    """Detect the configured built-in openWakeWord wake word from int16 PCM chunks."""
 
     frame_length = OPENWAKEWORD_FRAME_SAMPLES
     sample_rate = OPENWAKEWORD_SAMPLE_RATE
@@ -76,12 +76,12 @@ class WakeWordDetector:
         self._last_scores: dict[str, float] = {}
 
     def detect(self, pcm_chunk: bytes) -> bool:
-        """Return true when the Alexa score crosses the configured threshold."""
+        """Return true when the configured wake-word score crosses the threshold."""
 
         return self.score(pcm_chunk) >= self.threshold
 
     def score(self, pcm_chunk: bytes) -> float:
-        """Return the Alexa score for one int16 PCM chunk."""
+        """Return the configured wake-word score for one int16 PCM chunk."""
 
         if len(pcm_chunk) % 2 != 0:
             raise ValueError("PCM chunks must contain complete int16 samples")

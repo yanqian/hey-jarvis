@@ -39,8 +39,8 @@ class WakeWordDetectorTests(unittest.TestCase):
     def test_detect_returns_false_below_threshold_and_true_at_threshold(self):
         model = FakeWakeWordModel(
             [
-                {"alexa": 0.49},
-                {"alexa": 0.5},
+                {"hey_jarvis": 0.49},
+                {"hey_jarvis": 0.5},
             ]
         )
         detector = WakeWordDetector(0.5, model=model)
@@ -49,8 +49,8 @@ class WakeWordDetectorTests(unittest.TestCase):
         self.assertTrue(detector.detect(pcm_samples(4, 5, 6)))
         self.assertEqual(len(model.frames), 2)
 
-    def test_score_returns_raw_alexa_score(self):
-        detector = WakeWordDetector(0.5, model=FakeWakeWordModel([{"alexa": 0.42}]))
+    def test_score_returns_raw_hey_jarvis_score(self):
+        detector = WakeWordDetector(0.5, model=FakeWakeWordModel([{"hey_jarvis": 0.42}]))
 
         self.assertEqual(detector.score(pcm_samples(1, 2, 3)), 0.42)
 
@@ -60,13 +60,13 @@ class WakeWordDetectorTests(unittest.TestCase):
         self.assertAlmostEqual(rms, 3.5355, places=3)
         self.assertEqual(peak, 4)
 
-    def test_detect_accepts_alexa_model_score_key(self):
+    def test_detect_accepts_hey_jarvis_model_score_key(self):
         detector = WakeWordDetector(0.6, model=FakeWakeWordModel([{OPENWAKEWORD_MODEL_KEY: 0.7}]))
 
         self.assertTrue(detector.detect(pcm_samples(10, -10)))
 
     def test_preload_warms_model_with_openwakeword_prediction_frame(self):
-        model = FakeWakeWordModel([{"alexa": 0.0}])
+        model = FakeWakeWordModel([{"hey_jarvis": 0.0}])
         detector = WakeWordDetector(0.5, model=model)
 
         detector.preload()
@@ -76,11 +76,11 @@ class WakeWordDetectorTests(unittest.TestCase):
         self.assertEqual(detector.frame_length, OPENWAKEWORD_FRAME_SAMPLES)
 
     def test_score_returns_safe_fallback_for_single_prediction_key(self):
-        detector = WakeWordDetector(0.5, model=FakeWakeWordModel([{"alexa_v0.1": 0.61}]))
+        detector = WakeWordDetector(0.5, model=FakeWakeWordModel([{"hey_jarvis_v0.1": 0.61}]))
 
         self.assertEqual(detector.score(pcm_samples(1, 2, 3)), 0.61)
 
-    def test_default_loader_uses_builtin_alexa_model_name_and_tflite(self):
+    def test_default_loader_uses_builtin_hey_jarvis_model_name_and_tflite(self):
         constructed_with = []
 
         class FakeOpenWakeWordModel:
@@ -88,7 +88,7 @@ class WakeWordDetectorTests(unittest.TestCase):
                 constructed_with.append((wakeword_models, inference_framework))
 
             def predict(self, frame):
-                return {"alexa": 0.9}
+                return {"hey_jarvis": 0.9}
 
         openwakeword_module = types.ModuleType("openwakeword")
         model_module = types.ModuleType("openwakeword.model")
@@ -115,7 +115,7 @@ class WakeWordDetectorTests(unittest.TestCase):
                 constructed_with.append((wakeword_models, inference_framework))
 
             def predict(self, frame):
-                return {"alexa": 0.9}
+                return {"hey_jarvis": 0.9}
 
         openwakeword_module = types.ModuleType("openwakeword")
         model_module = types.ModuleType("openwakeword.model")
@@ -159,8 +159,8 @@ class WakeWordDetectorTests(unittest.TestCase):
             }
             openwakeword_module.MODELS = {
                 OPENWAKEWORD_MODEL_KEY: {
-                    "model_path": str(model_dir / "alexa_v0.1.tflite"),
-                    "download_url": "https://example.test/alexa_v0.1.tflite",
+                    "model_path": str(model_dir / "hey_jarvis_v0.1.tflite"),
+                    "download_url": "https://example.test/hey_jarvis_v0.1.tflite",
                 }
             }
             downloaded_urls = []
@@ -191,8 +191,8 @@ class WakeWordDetectorTests(unittest.TestCase):
             }
             openwakeword_module.MODELS = {
                 OPENWAKEWORD_MODEL_KEY: {
-                    "model_path": str(model_dir / "alexa_v0.1.tflite"),
-                    "download_url": "https://example.test/alexa_v0.1.tflite",
+                    "model_path": str(model_dir / "hey_jarvis_v0.1.tflite"),
+                    "download_url": "https://example.test/hey_jarvis_v0.1.tflite",
                 }
             }
             downloaded_urls = []
@@ -240,7 +240,7 @@ class WakeWordDetectorTests(unittest.TestCase):
         self.assertIn("Wake-word inference failed", "\n".join(logs.output))
 
     def test_invalid_pcm_chunk_is_rejected(self):
-        detector = WakeWordDetector(0.5, model=FakeWakeWordModel([{"alexa": 1.0}]))
+        detector = WakeWordDetector(0.5, model=FakeWakeWordModel([{"hey_jarvis": 1.0}]))
 
         with self.assertRaises(ValueError):
             detector.detect(b"\x00")
