@@ -8,6 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Callable, Mapping
 
@@ -40,10 +41,14 @@ PROVIDER_ERROR_MISSING_RATE_FIELDS = "missing_rate_fields"
 PROVIDER_ERROR_UNSUPPORTED_CURRENCY = "unsupported_currency"
 PROVIDER_ERROR_SAME_CURRENCY = "same_currency"
 PROVIDER_ERROR_INVALID_AMOUNT = "invalid_amount"
+PROVIDER_ERROR_MISSING_CREDENTIALS = "missing_credentials"
+PROVIDER_ERROR_UNKNOWN_SYMBOL = "unknown_symbol"
+PROVIDER_ERROR_MISSING_QUOTE_FIELDS = "missing_quote_fields"
 
 OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 FRANKFURTER_RATE_URL_TEMPLATE = "https://api.frankfurter.dev/v2/rate/{base}/{quote}"
+FINNHUB_QUOTE_URL = "https://api.finnhub.io/api/v1/quote"
 DEFAULT_QUOTE_CURRENCY = "SGD"
 
 
@@ -278,6 +283,73 @@ def frankfurter_fx_result(
     )
 
 
+def finnhub_stock_quote_result(
+    route: ToolRoute,
+    *,
+    provider_config: ProviderConfig,
+    http_client: JsonHttpClient,
+) -> ToolResult:
+    """Resolve a routed stock quote request through Finnhub's quote API."""
+
+    api_key = provider_config.finnhub_api_key
+    if not api_key:
+        raise ProviderError(PROVIDER_ERROR_MISSING_CREDENTIALS, "FINNHUB_API_KEY is missing")
+
+    symbol = str(route.params.get("symbol") or "").strip().upper()
+    if not symbol:
+        raise ProviderError(PROVIDER_ERROR_UNKNOWN_SYMBOL, "no conservative ticker symbol was found")
+
+    data = http_client.get_json(
+        FINNHUB_QUOTE_URL,
+        params={"symbol": symbol, "token": api_key},
+        timeout_seconds=provider_config.http_timeout_seconds,
+    )
+    if not isinstance(data, Mapping):
+        raise ProviderError(PROVIDER_ERROR_MISSING_QUOTE_FIELDS, "Finnhub quote response was not an object")
+
+    current = _stock_number_field(data, "c")
+    change = _stock_number_field(data, "d")
+    percent_change = _stock_number_field(data, "dp")
+    high = _stock_number_field(data, "h")
+    low = _stock_number_field(data, "l")
+    open_price = _stock_number_field(data, "o")
+    previous_close = _stock_number_field(data, "pc")
+    timestamp = _stock_number_field(data, "t")
+    if current <= 0 or timestamp <= 0:
+        raise ProviderError(PROVIDER_ERROR_UNKNOWN_SYMBOL, f"Finnhub returned no current price for {symbol}")
+
+    quote_time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    quote_time_text = quote_time.strftime("%Y-%m-%d %H:%M UTC")
+    direction = "up" if change >= 0 else "down"
+    answer = (
+        f"{symbol} last traded at {_format_price(current)}, {direction} {_format_price(abs(change))} "
+        f"({_format_percent(abs(percent_change))}). Day range {_format_price(low)} to {_format_price(high)}. "
+        f"Finnhub quote at {quote_time_text}; market data may be delayed and is not trading advice."
+    )
+    summary = f"finnhub {symbol} quote {_format_price(current)}"
+    return ToolResult(
+        TOOL_STATUS_SUCCESS,
+        summary,
+        answer,
+        {
+            "category": ROUTE_STOCK,
+            "symbol": symbol,
+            "source": "finnhub",
+            "current_price": current,
+            "change": change,
+            "percent_change": percent_change,
+            "high": high,
+            "low": low,
+            "open": open_price,
+            "previous_close": previous_close,
+            "timestamp": timestamp,
+            "time": quote_time_text,
+            "freshness": f"quote timestamp {quote_time_text}; may be delayed",
+            "caveat": "market data may be delayed; not trading advice",
+        },
+    )
+
+
 def _url_with_params(url: str, params: Mapping[str, str | int | float]) -> str:
     if not params:
         return url
@@ -478,6 +550,13 @@ def _fx_string_field(values: Mapping[str, Any], name: str) -> str:
     raise ProviderError(PROVIDER_ERROR_MISSING_RATE_FIELDS, f"Frankfurter rate missing {name}")
 
 
+def _stock_number_field(values: Mapping[str, Any], name: str) -> float:
+    value = values.get(name)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    raise ProviderError(PROVIDER_ERROR_MISSING_QUOTE_FIELDS, f"Finnhub quote missing {name}")
+
+
 def _daily_number(daily: Mapping[str, Any], name: str, index: int, *, context: str) -> float:
     value = _daily_value(daily, name, index, context=context)
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -529,6 +608,14 @@ def _format_temperature(value: float | None) -> str:
     if value is None:
         return "unknown temperature"
     return f"{value:.0f}C" if value.is_integer() else f"{value:.1f}C"
+
+
+def _format_price(value: float) -> str:
+    return f"{value:.2f}"
+
+
+def _format_percent(value: float) -> str:
+    return f"{value:.2f}%"
 
 
 def _precipitation_text(

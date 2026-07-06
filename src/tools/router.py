@@ -97,12 +97,13 @@ def route_text(text: str) -> ToolRoute:
             "foreign exchange request",
         )
 
-    if _looks_like_stock_request(normalized):
+    if _looks_like_stock_request(text):
+        stock_params = _extract_stock_params(text)
         return ToolRoute(
             ROUTE_STOCK,
             "stock_provider",
-            {"query": text.strip()},
-            "stock or market request requires configured provider",
+            stock_params,
+            "stock quote request",
         )
 
     if is_realtime_sensitive(text):
@@ -142,7 +143,7 @@ def execute_route(
     if route.category == ROUTE_FX:
         return _fx_result(route, provider_config=provider_config, http_client=http_client)
     if route.category == ROUTE_STOCK:
-        return _not_configured_result(route, provider_config=provider_config)
+        return _stock_result(route, provider_config=provider_config, http_client=http_client)
     if route.category == ROUTE_UNSUPPORTED_REALTIME:
         return ToolResult(
             TOOL_STATUS_REFUSED,
@@ -325,6 +326,26 @@ def _fx_result(
         return provider_error_result(route, exc)
 
 
+def _stock_result(
+    route: ToolRoute,
+    *,
+    provider_config: object | None,
+    http_client: object | None,
+) -> ToolResult:
+    provider_name = _provider_name(route, provider_config)
+    if provider_name and provider_name.casefold() != "finnhub":
+        return _not_configured_result(route, provider_config=provider_config)
+
+    from .providers import JsonHttpClient, ProviderConfig, ProviderError, finnhub_stock_quote_result, provider_error_result
+
+    config = provider_config if provider_config is not None else ProviderConfig()
+    client = http_client if http_client is not None else JsonHttpClient()
+    try:
+        return finnhub_stock_quote_result(route, provider_config=config, http_client=client)
+    except ProviderError as exc:
+        return provider_error_result(route, exc)
+
+
 def _safe_eval_expression(expression: str) -> float:
     try:
         tree = ast.parse(expression, mode="eval")
@@ -426,9 +447,9 @@ def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
 
 
 def _looks_like_stock_request(text: str) -> bool:
-    if _contains_any(text, _STOCK_MARKERS):
+    if _contains_any(_normalize_text(text), _STOCK_MARKERS):
         return True
-    return bool(re.search(r"\b(aapl|tsla|nvda|msft|googl?)\b", text))
+    return _extract_stock_ticker(text) is not None
 
 
 def _extract_weather_params(text: str) -> Mapping[str, str]:
@@ -498,6 +519,46 @@ def _extract_fx_params(text: str) -> Mapping[str, str]:
         else:
             params["quote"] = mention.code
     return params
+
+
+def _extract_stock_params(text: str) -> Mapping[str, str]:
+    stripped = text.strip()
+    params = {"query": stripped}
+    symbol = _extract_stock_symbol(stripped)
+    if symbol:
+        params["symbol"] = symbol
+    return params
+
+
+def _extract_stock_symbol(text: str) -> str | None:
+    ticker = _extract_stock_ticker(text)
+    if ticker:
+        return ticker
+
+    normalized = _normalize_text(text)
+    occupied: list[tuple[int, int]] = []
+    for alias, symbol in _STOCK_ALIAS_PAIRS:
+        start = 0
+        while True:
+            index = normalized.find(alias, start)
+            if index < 0:
+                break
+            end = index + len(alias)
+            if _alias_has_word_boundaries(normalized, index, end, alias) and not _overlaps(index, end, occupied):
+                return symbol
+            occupied.append((index, end))
+            start = index + 1
+    return None
+
+
+def _extract_stock_ticker(text: str) -> str | None:
+    ticker_match = re.search(r"\b[A-Z]{1,5}(?:\.[A-Z])?\b", text)
+    if not ticker_match:
+        return None
+    ticker = ticker_match.group(0)
+    if ticker in _STOCK_TICKER_STOPWORDS:
+        return None
+    return ticker
 
 
 @dataclass(frozen=True)
@@ -757,6 +818,39 @@ _STOCK_MARKERS = (
     "股价",
     "股價",
     "美股",
+)
+_STOCK_TICKER_STOPWORDS = {
+    "A",
+    "I",
+    "US",
+    "USA",
+    "USD",
+    "ETF",
+    "IPO",
+    "CEO",
+    "CFO",
+    "AI",
+}
+_STOCK_ALIAS_PAIRS = (
+    ("alphabet", "GOOGL"),
+    ("google", "GOOGL"),
+    ("microsoft", "MSFT"),
+    ("nvidia", "NVDA"),
+    ("tesla", "TSLA"),
+    ("amazon", "AMZN"),
+    ("apple", "AAPL"),
+    ("meta", "META"),
+    ("facebook", "META"),
+    ("苹果", "AAPL"),
+    ("蘋果", "AAPL"),
+    ("特斯拉", "TSLA"),
+    ("英伟达", "NVDA"),
+    ("英偉達", "NVDA"),
+    ("微软", "MSFT"),
+    ("微軟", "MSFT"),
+    ("谷歌", "GOOGL"),
+    ("亚马逊", "AMZN"),
+    ("亞馬遜", "AMZN"),
 )
 _UNSUPPORTED_REALTIME_MARKERS = (
     "news",

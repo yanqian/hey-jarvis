@@ -214,9 +214,9 @@ and before chat generation. `TOOL_ROUTER_DEBUG=1` logs the selected route, tool,
 params, and rule reason during the voice loop. Local time requests and simple
 arithmetic are answered without asking the chat model. Weather requests are
 answered through Open-Meteo when `WEATHER_PROVIDER=open-meteo`. FX requests are
-answered through Frankfurter when `FX_PROVIDER=frankfurter`. Stock requests
-still return clear provider-not-configured answers until their provider-specific
-follow-up feature lands. Unsupported realtime-sensitive requests such as
+answered through Frankfurter when `FX_PROVIDER=frankfurter`. Stock requests are
+answered through Finnhub when `STOCK_PROVIDER=finnhub` and `FINNHUB_API_KEY` is
+configured. Unsupported realtime-sensitive requests such as
 `今天有什么新闻` are refused instead of falling back to chat memory or model
 guessing.
 
@@ -238,10 +238,14 @@ the Frankfurter rate date and state that the result is a reference rate, not a
 bank cash rate or executable trade quote. Unsupported currencies and malformed
 provider data return structured tool errors without chat speculation.
 
-`STOCK_PROVIDER=finnhub` names the planned stock provider for a later feature.
+`STOCK_PROVIDER=finnhub` enables Finnhub-backed stock quote requests.
 `TOOL_HTTP_TIMEOUT_SECONDS=5` is the shared JSON request timeout.
-`FINNHUB_API_KEY` is optional until stock quotes are enabled; diagnostics and
-text debug report it as configured or missing without printing the secret value.
+`FINNHUB_API_KEY` is required for stock quotes; diagnostics and text debug report
+it as configured or missing without printing the secret value.
+Stock quote answers include current price, change, percent change, day high and
+low, open, previous close, the Finnhub quote timestamp, plus caveats that market data may be delayed and the result is not trading advice. Unknown symbols, zero
+current prices, provider failures, and malformed Finnhub responses return
+structured tool errors without chat speculation.
 
 Use the text debug path to inspect the route, params, tool result summary, and
 final answer plus provider configuration:
@@ -252,6 +256,8 @@ python -m src.main --text "明天天气怎么样"
 python -m src.main --text "weather in Tokyo today"
 python -m src.main --text "100 USD to SGD"
 python -m src.main --text "100美元兑人民币汇率是多少"
+python -m src.main --text "AAPL stock price"
+python -m src.main --text "苹果股价多少"
 python -m src.main --text "苹果怎么样"
 python -m src.main --text "今天有什么新闻"
 ```
@@ -263,8 +269,10 @@ conservative route detection for provider-backed weather, stock, and FX
 requests, and refusal for unsupported realtime categories such as news, sports
 scores, product prices, or arbitrary live web facts. F023 adds the shared
 provider configuration and mocked JSON HTTP boundary. F024 enables Open-Meteo
-weather. F025 enables Frankfurter FX reference-rate conversion. Manual
-real-provider smoke expectations for stock begin with F026.
+weather. F025 enables Frankfurter FX reference-rate conversion. F026 enables
+Finnhub stock quotes for uppercase ticker symbols and a small conservative
+company-name alias map. Non-Finnhub stock providers still return
+provider-not-configured answers.
 
 The automated recovery check uses fakes and dry-run paths, so it does not make
 live OpenAI API calls or live provider network calls.
@@ -365,6 +373,11 @@ Common outcomes:
   and requires consecutive wake-positive frames. Increase
   `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` or `POST_PLAYBACK_QUIET_SECONDS` if room
   echo or speaker bleed still retriggers wake detection.
+- `FINNHUB_API_KEY` is reported as missing: set a real Finnhub key in `.env`
+  before asking stock quote questions. The key is used only as the Finnhub
+  `token` query parameter and is not printed in diagnostics or text debug.
+- Stock quote errors such as unknown symbols or missing current prices return a
+  structured tool error and do not fall back to chat speculation.
 - Wake-word detection does not trigger: use the accepted phrase `Hey Jarvis`,
   speak clearly near the microphone, confirm the app is still in `WAIT_WAKE`,
   then run `python -m src.main --wake-debug` or set `WAKE_DEBUG=1` to inspect

@@ -526,9 +526,9 @@
         "Missing API key, unknown symbols, zero or missing current price, provider HTTP failures, and malformed provider data return structured stock failures and do not fall back to chat speculation.",
         "Focused tests mock Finnhub responses, cover aliases, missing key, unknown symbols, success and failure paths, verify text-debug/answer-path behavior, update documentation examples, and pass final ./init.sh recovery verification."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

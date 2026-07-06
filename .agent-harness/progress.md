@@ -58,13 +58,15 @@ F024 has been completed through the orchestrator entrypoint after approving the 
 
 F025 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The structured FX route now extracts amount/base/quote from English and Chinese aliases for USD, SGD, CNY, EUR, JPY, HKD, GBP, and AUD, applies documented defaults for omitted currencies, calls Frankfurter's v2 single-pair rate endpoint through the shared JSON HTTP boundary, calculates converted amounts locally, and returns short reference-rate answers with rate date, source, freshness, and bank/trade-quote caveats. Unsupported currencies, same-currency requests, missing rate fields, provider HTTP failures, and malformed provider data map to structured FX errors without chat fallback. Focused mocked tests and CLI text-debug checks pass, coding evidence is recorded in `runs/F025-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F025` in `runs/F025-evaluation.md`.
 
+F026 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The structured stock route now extracts uppercase ticker symbols and conservative company aliases such as Apple/AAPL while preserving ambiguous ordinary phrases like `苹果怎么样` as non-stock routes. The Finnhub provider uses `FINNHUB_API_KEY` only as the request token, returns current price, change, percent change, high, low, open, previous close, timestamp, source, freshness, and market-data caveats, and maps missing keys, unknown symbols, zero or missing current prices, provider failures, and malformed data to structured tool errors without chat speculation. After an initial evaluator requirement-gap failure, the durable normalized SPEC entry for F026 was restored with goal, scope, flows, constraints, assumptions, capabilities, implementation paths, verification surface, and decomposition rationale. Focused mocked tests, documentation tests, CLI text-debug checks, full project tests, and `./init.sh` pass, coding evidence is recorded in `runs/F026-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F026` in `runs/F026-evaluation.md`.
+
 ## Last Completed Feature
 
-F025 - Implement Frankfurter FX tool.
+F026 - Implement Finnhub stock quote tool.
 
 ## Next Feature
 
-F026 - Implement Finnhub stock quote tool.
+No currently planned todo feature. The F023-F026 network-backed structured tool batch is complete.
 
 ## Known Issues
 

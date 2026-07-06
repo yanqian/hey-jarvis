@@ -4,6 +4,7 @@ import unittest
 import urllib.error
 
 from src.tools.providers import (
+    FINNHUB_QUOTE_URL,
     FRANKFURTER_RATE_URL_TEMPLATE,
     JsonHttpClient,
     OPEN_METEO_FORECAST_URL,
@@ -427,6 +428,112 @@ class ToolProviderTests(unittest.TestCase):
         from src.tools import execute_route
 
         result = execute_route(route, provider_config=ProviderConfig(fx_provider="other-fx"))
+
+        self.assertEqual(result.status, "not_configured")
+        self.assertIn("provider behavior is not implemented", result.answer)
+
+    def test_finnhub_stock_quote_success_uses_token_and_maps_quote_fields(self):
+        client = FakeJsonClient([{"c": 193.12, "d": 1.23, "dp": 0.64, "h": 194.0, "l": 190.0, "o": 191.0, "pc": 191.89, "t": 1783306800}])
+        route = ToolRoute("stock", "stock_provider", {"query": "AAPL stock price", "symbol": "AAPL"})
+
+        from src.tools import execute_route
+
+        result = execute_route(
+            route,
+            provider_config=ProviderConfig(finnhub_api_key="fh-secret", http_timeout_seconds=2.5),
+            http_client=client,
+        )
+
+        self.assertEqual(result.status, "success")
+        self.assertIn("AAPL last traded at 193.12", result.answer)
+        self.assertIn("market data may be delayed", result.answer)
+        self.assertIn("not trading advice", result.answer)
+        self.assertEqual(result.data["source"], "finnhub")
+        self.assertEqual(result.data["symbol"], "AAPL")
+        self.assertEqual(result.data["current_price"], 193.12)
+        self.assertEqual(result.data["change"], 1.23)
+        self.assertEqual(result.data["percent_change"], 0.64)
+        self.assertEqual(result.data["high"], 194.0)
+        self.assertEqual(result.data["low"], 190.0)
+        self.assertEqual(result.data["open"], 191.0)
+        self.assertEqual(result.data["previous_close"], 191.89)
+        self.assertEqual(result.data["timestamp"], 1783306800.0)
+        self.assertEqual(result.data["source"], "finnhub")
+        self.assertEqual(
+            client.calls,
+            [(FINNHUB_QUOTE_URL, {"symbol": "AAPL", "token": "fh-secret"}, 2.5)],
+        )
+        self.assertNotIn("fh-secret", result.answer)
+        self.assertNotIn("fh-secret", str(result.data))
+
+    def test_finnhub_stock_quote_missing_key_returns_structured_error_without_provider_call(self):
+        client = FakeJsonClient([])
+        route = ToolRoute("stock", "stock_provider", {"query": "AAPL stock price", "symbol": "AAPL"})
+
+        from src.tools import execute_route
+
+        result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key=None), http_client=client)
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: missing_credentials")
+        self.assertIn("FINNHUB_API_KEY is missing", result.answer)
+        self.assertEqual(client.calls, [])
+
+    def test_finnhub_stock_quote_unknown_symbol_without_provider_call(self):
+        client = FakeJsonClient([])
+        route = ToolRoute("stock", "stock_provider", {"query": "stock market today"})
+
+        from src.tools import execute_route
+
+        result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key="fh-secret"), http_client=client)
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: unknown_symbol")
+        self.assertIn("no conservative ticker symbol", result.answer)
+        self.assertEqual(client.calls, [])
+
+    def test_finnhub_stock_quote_zero_current_price_is_unknown_symbol(self):
+        client = FakeJsonClient([{"c": 0, "d": 0, "dp": 0, "h": 0, "l": 0, "o": 0, "pc": 0, "t": 0}])
+        route = ToolRoute("stock", "stock_provider", {"query": "ZZZZZ stock price", "symbol": "ZZZZZ"})
+
+        from src.tools import execute_route
+
+        result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key="fh-secret"), http_client=client)
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: unknown_symbol")
+        self.assertEqual(result.data["provider_error"], "unknown_symbol")
+
+    def test_finnhub_stock_quote_missing_fields_returns_structured_error(self):
+        client = FakeJsonClient([{"c": 193.12, "d": 1.23}])
+        route = ToolRoute("stock", "stock_provider", {"query": "AAPL stock price", "symbol": "AAPL"})
+
+        from src.tools import execute_route
+
+        result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key="fh-secret"), http_client=client)
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: missing_quote_fields")
+        self.assertEqual(result.data["provider_error"], "missing_quote_fields")
+
+    def test_finnhub_stock_quote_http_failure_returns_structured_error(self):
+        client = FakeJsonClient([ProviderError("http_status", "provider returned an HTTP error", status_code=429)])
+        route = ToolRoute("stock", "stock_provider", {"query": "AAPL stock price", "symbol": "AAPL"})
+
+        from src.tools import execute_route
+
+        result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key="fh-secret"), http_client=client)
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: http_status")
+        self.assertEqual(result.data["status_code"], 429.0)
+
+    def test_non_finnhub_stock_provider_remains_not_configured(self):
+        route = ToolRoute("stock", "stock_provider", {"query": "AAPL stock price", "symbol": "AAPL"})
+
+        from src.tools import execute_route
+
+        result = execute_route(route, provider_config=ProviderConfig(stock_provider="other-stock"))
 
         self.assertEqual(result.status, "not_configured")
         self.assertIn("provider behavior is not implemented", result.answer)

@@ -48,6 +48,10 @@ def weather_daily_response():
     }
 
 
+def stock_quote_response():
+    return {"c": 193.12, "d": 1.23, "dp": 0.64, "h": 194.0, "l": 190.0, "o": 191.0, "pc": 191.89, "t": 1783306800}
+
+
 class FakeChatClient:
     def __init__(self):
         self.calls = []
@@ -129,19 +133,27 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(unsupported_route.params["unsupported_currency"], "CHF")
         self.assertEqual(unsupported_route.params["quote"], "USD")
 
-    def test_routes_remaining_planned_provider_categories_to_not_configured(self):
+    def test_routes_stock_tickers_and_conservative_aliases(self):
         cases = {
-            "苹果股价多少": "stock",
-            "AAPL stock price": "stock",
+            "苹果股价多少": "AAPL",
+            "AAPL stock price": "AAPL",
+            "what is Tesla stock price": "TSLA",
         }
 
-        for text, expected_category in cases.items():
+        for text, expected_symbol in cases.items():
             with self.subTest(text=text):
                 route = route_text(text)
-                result = execute_route(route)
-                self.assertEqual(route.category, expected_category)
-                self.assertEqual(result.status, "not_configured")
-                self.assertIn("provider behavior is not implemented", result.answer)
+                self.assertEqual(route.category, "stock")
+                self.assertEqual(route.params["symbol"], expected_symbol)
+
+    def test_stock_marker_without_symbol_returns_structured_unknown_symbol_error(self):
+        route = route_text("stock market today")
+        result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key="fh-secret"))
+
+        self.assertEqual(route.category, "stock")
+        self.assertNotIn("symbol", route.params)
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: unknown_symbol")
 
     def test_weather_answer_path_uses_provider_and_skips_chat(self):
         chat_client = FakeChatClient()
@@ -227,13 +239,58 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(chat_client.calls, [])
         self.assertEqual(history, [])
 
+    def test_stock_answer_path_uses_provider_and_skips_chat(self):
+        chat_client = FakeChatClient()
+        client = FakeJsonClient([stock_quote_response()])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "AAPL stock price",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            provider_config=ProviderConfig(finnhub_api_key="fh-secret"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "stock")
+        self.assertEqual(route.params["symbol"], "AAPL")
+        self.assertEqual(result.status, "success")
+        self.assertIn("AAPL last traded at 193.12", answer)
+        self.assertIn("market data may be delayed", answer)
+        self.assertIn("not trading advice", answer)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
+    def test_stock_provider_failure_does_not_fall_back_to_chat(self):
+        chat_client = FakeChatClient()
+        client = FakeJsonClient([{"c": 0, "d": 0, "dp": 0, "h": 0, "l": 0, "o": 0, "pc": 0, "t": 0}])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "AAPL stock price",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            provider_config=ProviderConfig(finnhub_api_key="fh-secret"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "stock")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: unknown_symbol")
+        self.assertIn("could not get stock market data", answer)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
     def test_stock_provider_route_reports_missing_finnhub_key(self):
         route = route_text("AAPL stock price")
         result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key=None))
 
         self.assertEqual(route.category, "stock")
-        self.assertEqual(result.status, "not_configured")
-        self.assertEqual(result.summary, "stock market provider credentials are missing")
+        self.assertEqual(route.params["symbol"], "AAPL")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: missing_credentials")
         self.assertIn("FINNHUB_API_KEY is missing", result.answer)
         self.assertNotIn("sk-", result.answer)
 
@@ -265,7 +322,9 @@ class ToolRoutingTests(unittest.TestCase):
         result = execute_route(route)
 
         self.assertEqual(route.category, "stock")
-        self.assertEqual(result.status, "not_configured")
+        self.assertEqual(route.params["symbol"], "AAPL")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "stock market provider error: missing_credentials")
 
     def test_none_route_uses_chat_when_tools_enabled(self):
         chat_client = FakeChatClient()
@@ -341,6 +400,22 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertIn("params={amount:25,base:EUR,query:25 EUR to JPY,quote:JPY}", debug)
         self.assertIn("result_status=success", debug)
         self.assertIn("25 EUR is about 4280.86 JPY", debug)
+
+    def test_text_debug_can_show_mocked_stock_result_without_secret(self):
+        client = FakeJsonClient([stock_quote_response()])
+
+        debug = format_text_debug(
+            "Apple stock price",
+            provider_config=ProviderConfig(finnhub_api_key="fh-secret"),
+            http_client=client,
+        )
+
+        self.assertIn("route=stock", debug)
+        self.assertIn("params={query:Apple stock price,symbol:AAPL}", debug)
+        self.assertIn("finnhub_api_key:configured", debug)
+        self.assertNotIn("fh-secret", debug)
+        self.assertIn("result_status=success", debug)
+        self.assertIn("AAPL last traded at 193.12", debug)
 
 
 if __name__ == "__main__":

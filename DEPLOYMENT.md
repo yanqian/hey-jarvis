@@ -87,8 +87,8 @@ FINNHUB_API_KEY=
 `ENABLE_TOOLS` routes local time and simple calculator requests before chat
 generation. Weather requests use Open-Meteo when `WEATHER_PROVIDER=open-meteo`.
 FX requests use Frankfurter reference rates when `FX_PROVIDER=frankfurter`.
-Stock requests are recognized but return provider-not-configured answers until
-their provider-specific feature is implemented.
+Stock requests use Finnhub when `STOCK_PROVIDER=finnhub` and a real
+`FINNHUB_API_KEY` is configured.
 `TOOL_ROUTER_DEBUG=1` logs route, tool, params, and rule reason during the voice
 loop.
 
@@ -100,8 +100,11 @@ endpoint. `TOOL_HTTP_TIMEOUT_SECONDS` is the shared JSON request timeout.
 when the quote is omitted, the configured default base is used as the quote
 unless that would match the base, in which case SGD is used. Frankfurter FX
 answers are reference rates, not bank cash rates or executable trade quotes.
-`FINNHUB_API_KEY` is optional until stock quotes are enabled; diagnostics report
-configured or missing without printing the value.
+`FINNHUB_API_KEY` is required for Finnhub stock quotes. Diagnostics report
+configured or missing without printing the value. Stock quote answers include
+current price, change, percent change, day high and low, open, previous close,
+the Finnhub quote timestamp, plus caveats that market data may be delayed and
+the result is not trading advice.
 
 Wake acknowledgement playback is enabled by default. The assistant plays the
 prepared `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` file after `Hey Jarvis`, drains
@@ -197,9 +200,16 @@ python -m src.main --text "100 USD to SGD"
 python -m src.main --text "100美元兑人民币汇率是多少"
 ```
 
+For a manual Finnhub stock smoke with live network access and
+`FINNHUB_API_KEY` set, run:
+
+```bash
+python -m src.main --text "AAPL stock price"
+python -m src.main --text "苹果股价多少"
+```
+
 Automated tests mock the shared JSON HTTP boundary and must not call live
-weather, FX, or stock services. Manual real-provider smoke tests for stock
-remain expected when F026 adds provider-specific behavior.
+weather, FX, or stock services.
 
 ## Microphone Permission
 
@@ -306,8 +316,12 @@ Only start the real assistant after recovery and diagnostics pass.
   prepared before listening.
 - Playback fails: run `python -m src.main --diagnose` and confirm `afplay` is
   available.
-- `FINNHUB_API_KEY` is reported as missing: stock quote routing is visible, but
-  live Finnhub stock quotes are not enabled until the stock provider feature.
+- `FINNHUB_API_KEY` is reported as missing: set a real Finnhub key in `.env`
+  before asking stock quote questions. Diagnostics and text debug never print
+  the key value.
+- Stock quote requests for unknown symbols, zero current prices, provider
+  failures, or malformed Finnhub responses return structured tool errors and do
+  not fall back to chat speculation.
 - Playback finishes and immediately wakes again: keep
   `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` enabled, keep
   `POST_PLAYBACK_QUIET_SECONDS` enabled, keep `WAKE_CONFIRMATION_FRAMES` at `2`

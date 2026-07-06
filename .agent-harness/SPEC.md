@@ -684,6 +684,76 @@ share one boundary: recoverable OpenAI client errors inside a single
 question-answer loop. Splitting by transcription/chat/TTS would duplicate the
 same recovery behavior without adding independently useful user value.
 
+### Finnhub Stock Quote Tool
+
+Goal: replace the structured stock route's placeholder result with a
+Finnhub-backed quote tool that can answer explicit stock-price requests through
+the local tool router without falling back to general chat speculation.
+
+Included scope: conservative stock intent detection, uppercase ticker extraction,
+a small explicit company-alias map, optional `FINNHUB_API_KEY` loading,
+provider diagnostics, Finnhub quote endpoint integration, concise stock quote
+answers, structured tool result data, market-data delay caveats, documentation,
+manual smoke guidance, and deterministic mocked tests.
+
+Excluded scope: live trading, portfolio management, investment advice, order
+placement, full company search, broad news/web search, streaming market data,
+historical charts, analyst ratings, watchlists, automatic live-network tests, or
+guessing ambiguous ordinary phrases as stock quote requests.
+
+Core flows: a user asks `AAPL stock price`, the router selects the `stock`
+route, extracts symbol `AAPL`, calls the configured Finnhub quote provider with
+the API token kept secret, maps Finnhub fields `c`, `d`, `dp`, `h`, `l`, `o`,
+`pc`, and `t` into `ToolResult` data, and returns a short answer naming the
+symbol, current price, change, percent change, previous close, source, and
+freshness caveat. A user asks an explicit Chinese stock phrase such as
+`苹果股价多少`, the alias map resolves Apple to `AAPL`. A user asks an ambiguous
+ordinary phrase such as `苹果怎么样`, the router does not treat it as a stock
+request. Missing credentials, unknown symbols, zero or missing current price,
+HTTP failures, timeouts, network failures, and malformed provider data return
+structured stock failures and do not fall back to chat-generated prices.
+
+Constraints: `FINNHUB_API_KEY` is optional configuration and must never be
+printed, logged, committed, or exposed in diagnostics. Automated verification
+must not require live network access or a real Finnhub key; tests use real-shaped
+Finnhub quote fixtures through the shared HTTP JSON boundary. Stock answers must
+include market-data delay or freshness wording and must not present themselves as
+financial advice or executable trade quotes. The assistant remains a local macOS
+MVP and should keep text-debug behavior deterministic.
+
+Ambiguities or assumptions: the first stock implementation supports explicit
+ticker symbols and a deliberately small alias map for common companies instead
+of general company-name search. Finnhub free-tier data freshness may vary by
+market and account; the tool should describe data as market data that may be
+delayed unless a future requirement adds provider-specific entitlement handling.
+Currency selection and exchange-specific disambiguation are out of scope for
+this feature.
+
+Required capabilities: shared provider configuration from F023, shared HTTP JSON
+fetching with timeout/error mapping, optional Finnhub API key in environment or
+`.env`, deterministic provider fakes, router text-debug coverage, documentation
+tests, and manual live-smoke instructions for users who provide a key.
+
+Implementation paths: `src/tools/router.py`, `src/tools/providers.py`,
+`src/config.py` only if the existing provider config cannot already load the
+key, `.env.example` if key documentation is not already present, `README.md`,
+`DEPLOYMENT.md`, `MANUAL_TESTING.md`, `tests/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `runs/`.
+
+Verification surface: focused router tests for ticker extraction, aliases, and
+ambiguous non-stock phrases; provider tests for success, missing key, unknown
+symbol, zero/missing price, HTTP errors, network errors, and malformed data;
+documentation tests for configuration and manual smoke examples; CLI text-debug
+checks for `AAPL stock price`, `苹果怎么样`, and `苹果股价多少`; full
+`python3 -m unittest discover -s tests`; final root `./init.sh`; and optional
+manual live smoke with a real `FINNHUB_API_KEY`.
+
+Decomposition decision: this is one independently verifiable provider feature
+because routing, credential handling, provider parsing, stock-specific caveats,
+and tests share one external capability boundary. It depends on the shared
+provider infrastructure from F023 but remains independent from the weather and
+FX tools.
+
 ## 5. Verification Plan
 
 Run:
