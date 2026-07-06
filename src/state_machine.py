@@ -12,6 +12,7 @@ from typing import Any, MutableSequence, Protocol
 from .config import Settings
 from .openai_client import OpenAIClientError
 from .recorder import DEFAULT_INPUT_WAV, RecordingResult, record_to_wav
+from .tools import answer_with_tools
 from .wake_word import pcm_rms_and_peak
 
 
@@ -130,10 +131,31 @@ class VoiceAssistantStateMachine:
 
         self._set_state(AssistantState.ASK_OPENAI)
         try:
-            answer = self.openai_client.ask_chatgpt(transcription, self.history)
+            answer, tool_route, tool_result = answer_with_tools(
+                transcription,
+                chat_client=self.openai_client,
+                history=self.history,
+                tools_enabled=self.settings.enable_tools,
+            )
         except OpenAIClientError as exc:
             return self._recover_from_openai_error(recording, exc, transcription=transcription)
-        self._logger.info("State ASK_OPENAI: received assistant answer")
+        if self.settings.tool_router_debug:
+            self._logger.info(
+                "Tool router debug: route=%s tool=%s params=%s reason=%s",
+                tool_route.category,
+                tool_route.tool_name,
+                dict(tool_route.params),
+                tool_route.reason,
+            )
+        if tool_result is None:
+            self._logger.info("State ASK_OPENAI: received assistant answer")
+        else:
+            self._logger.info(
+                "State ASK_OPENAI: tool route=%s status=%s summary=%s",
+                tool_route.category,
+                tool_result.status,
+                tool_result.summary,
+            )
 
         self._set_state(AssistantState.TTS)
         try:

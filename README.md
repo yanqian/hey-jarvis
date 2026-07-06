@@ -6,7 +6,7 @@ The accepted first demo flow is:
 
 ```text
 User: "Hey Jarvis, what is two plus two?"
-Assistant: "Two plus two is four."
+Assistant: "The answer is 4."
 ```
 
 ## Status
@@ -75,6 +75,13 @@ For the dependency-free full-loop smoke path, run:
 python -m src.main --fake-backend
 ```
 
+To inspect structured tool routing for typed text without microphone,
+wake-word detection, OpenAI, TTS, playback, or network access, run:
+
+```bash
+python -m src.main --text "现在几点"
+```
+
 To inspect wake-word behavior without OpenAI or playback, run a wake debug
 probe:
 
@@ -118,9 +125,9 @@ python -m src.main
 
 Say `Hey Jarvis`, wait for the short acknowledgement such as `在呢`, then ask
 `what is two plus two?`. The app drains acknowledgement speaker residue before
-recording the question, transcribes it, asks the configured chat model, writes
-`tmp/output.mp3`, plays it through `afplay`, and returns to `WAIT_WAKE` for the
-next wake phrase.
+recording the question, transcribes it, answers through the local calculator
+tool, writes `tmp/output.mp3`, plays it through `afplay`, and returns to
+`WAIT_WAKE` for the next wake phrase.
 
 The accepted first MVP wake phrase is `Hey Jarvis`; custom wake-word model
 loading is deferred to a later iteration.
@@ -170,6 +177,8 @@ TTS_MODEL=gpt-4o-mini-tts
 TTS_VOICE=alloy
 TTS_INSTRUCTIONS=
 TTS_SPEED=1.0
+ENABLE_TOOLS=1
+TOOL_ROUTER_DEBUG=0
 WAKE_DEBUG=0
 ```
 
@@ -186,6 +195,31 @@ src.main --prepare-acknowledgement`, defaulting to `在呢`.
 TTS request for every wake event. `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS` controls
 how long microphone residue is discarded after acknowledgement playback before
 the normal recorder starts.
+
+## Structured Tool Routing
+
+`ENABLE_TOOLS=1` enables a deterministic routing boundary after transcription
+and before chat generation. `TOOL_ROUTER_DEBUG=1` logs the selected route, tool,
+params, and rule reason during the voice loop. Local time requests and simple
+arithmetic are answered without asking the chat model. Weather, stock, and FX
+requests return a clear provider-not-configured answer because the MVP has no
+network-backed providers yet. Unsupported realtime-sensitive requests such as
+`今天有什么新闻` are refused instead of falling back to chat memory or model
+guessing.
+
+Use the text debug path to inspect the route, params, tool result summary, and
+final answer:
+
+```bash
+python -m src.main --text "2 + 2"
+python -m src.main --text "苹果怎么样"
+python -m src.main --text "今天有什么新闻"
+```
+
+Structured tools do not browse the web. F022 supports local time, safe local
+calculator expressions, conservative route detection for planned weather, stock,
+and FX providers, and refusal for unsupported realtime categories such as news,
+sports scores, product prices, or arbitrary live web facts.
 
 The automated recovery check uses fakes and dry-run paths, so it does not make live OpenAI API calls.
 

@@ -17,6 +17,7 @@ from .openai_client import build_openai_client
 from .player import MacOSPlayer
 from .recorder import RecordingResult
 from .state_machine import AssistantState, VoiceAssistantStateMachine
+from .tools.router import format_text_debug
 from .wake_word import (
     OPENWAKEWORD_FRAME_SAMPLES,
     WakeWordDetector,
@@ -116,6 +117,13 @@ def run_prepare_acknowledgement(
         str(resolved_settings.wake_acknowledgement_audio_path),
     )
     print(f"Prepared wake acknowledgement audio: {resolved_settings.wake_acknowledgement_audio_path}")
+    return 0
+
+
+def run_text_debug(text: str) -> int:
+    """Print deterministic structured-tool routing for text input."""
+
+    print(format_text_debug(text))
     return 0
 
 
@@ -300,6 +308,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="print wake-word scores for a 16-bit mono WAV file without microphone access",
     )
+    mode.add_argument(
+        "--text",
+        metavar="TEXT",
+        help="print structured tool routing for text input without audio, OpenAI, or playback",
+    )
     parser.add_argument(
         "--wake-debug-frames",
         type=int,
@@ -332,6 +345,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_prepare_wake_word()
     if args.prepare_acknowledgement:
         return run_prepare_acknowledgement()
+    if args.text is not None:
+        return run_text_debug(args.text)
     if args.wake_debug:
         return run_wake_debug(
             max_frames=args.wake_debug_frames or None,

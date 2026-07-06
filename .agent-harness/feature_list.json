@@ -432,6 +432,28 @@
         "F019",
         "F020"
       ]
+    },
+    {
+      "id": "F022",
+      "title": "Add structured tool routing foundation",
+      "description": "Add a deterministic structured-tool routing layer between transcription and answer generation so the assistant can identify realtime-sensitive questions, answer local time and simple calculator requests without model guessing, and refuse unsupported realtime data until a configured provider exists.",
+      "acceptance": [
+        "src/tools defines ToolRoute and ToolResult schemas, a deterministic rule-based router, local time and safe calculator tools, and explicit not-configured results for planned weather, FX, and stock tools without adding network calls.",
+        "The router classifies calculator, time, weather, stock, FX, none, and unsupported realtime-sensitive requests with tested handling for ambiguous phrases such as \"苹果怎么样\" and unsupported realtime phrases such as \"今天有什么新闻\".",
+        "The post-transcription answer path uses the structured routing boundary when tools are enabled, returns local tool answers for time/calculator, returns configured tool failure messages for unimplemented providers, and does not fall back to chat memory for unsupported realtime-sensitive questions.",
+        "A text debug mode such as python -m src.main --text \"现在几点\" prints the input, route, params, tool result summary, and final answer without microphone, wake-word detection, TTS, playback, OpenAI, or external network access.",
+        ".env.example, README or manual testing docs, and focused tests cover ENABLE_TOOLS, router debug behavior, supported versus unsupported realtime tool categories, safe calculator parsing, local time output, and final recovery through ./init.sh."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F005",
+        "F006",
+        "F021"
+      ]
     }
   ]
 }

@@ -19,7 +19,7 @@ class SkeletonSmokeTests(unittest.TestCase):
             self.assertEqual(run_fake_backend_smoke(), 0)
 
         text = output.getvalue()
-        self.assertIn("Fake backend answered: Two plus two is four.", text)
+        self.assertIn("Fake backend answered: The answer is 4.", text)
         self.assertIn("Returned to WAIT_WAKE", text)
 
     def test_main_fake_backend_mode_succeeds(self):

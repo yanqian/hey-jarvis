@@ -31,6 +31,7 @@ from src.main import (
     main,
     run_assistant_forever,
     run_prepare_acknowledgement,
+    run_text_debug,
     run_wake_debug,
     run_wake_file_debug,
 )
@@ -176,6 +177,7 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertIn("--wake-file", help_text)
         self.assertIn("--wake-debug-output", help_text)
         self.assertIn("--prepare-acknowledgement", help_text)
+        self.assertIn("--text", help_text)
 
     def test_prepare_acknowledgement_uses_existing_tts_boundary_once(self):
         client = FakePreparationClient()
@@ -197,6 +199,20 @@ class MainRuntimeTests(unittest.TestCase):
 
         self.assertEqual(client.tts_calls, [(DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT, ack_path)])
         self.assertIn("Prepared wake acknowledgement audio:", output.getvalue())
+
+    def test_text_debug_prints_router_output_without_runtime_backends(self):
+        output = StringIO()
+
+        with redirect_stdout(output):
+            result = run_text_debug("2 + 2")
+
+        self.assertEqual(result, 0)
+        text = output.getvalue()
+        self.assertIn("input=2 + 2", text)
+        self.assertIn("route=calculator", text)
+        self.assertIn("tool=safe_calculator", text)
+        self.assertIn("result_status=success", text)
+        self.assertIn("final_answer=The answer is 4.", text)
 
     def test_real_assistant_reports_missing_acknowledgement_before_microphone(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

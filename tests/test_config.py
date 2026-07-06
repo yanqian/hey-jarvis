@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from src.config import (
     DEFAULT_CHAT_MODEL,
+    DEFAULT_ENABLE_TOOLS,
     DEFAULT_MAX_RECORD_SECONDS,
     DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
     DEFAULT_POST_PLAYBACK_QUIET_RMS,
@@ -13,6 +14,7 @@ from src.config import (
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_SECONDS,
     DEFAULT_TRANSCRIBE_MODEL,
+    DEFAULT_TOOL_ROUTER_DEBUG,
     DEFAULT_TTS_INSTRUCTIONS,
     DEFAULT_TTS_MODEL,
     DEFAULT_TTS_SPEED,
@@ -58,6 +60,8 @@ class ConfigTests(unittest.TestCase):
         self.assertIsNone(DEFAULT_TTS_INSTRUCTIONS)
         self.assertIsNone(settings.tts_instructions)
         self.assertEqual(settings.tts_speed, DEFAULT_TTS_SPEED)
+        self.assertEqual(settings.enable_tools, DEFAULT_ENABLE_TOOLS)
+        self.assertEqual(settings.tool_router_debug, DEFAULT_TOOL_ROUTER_DEBUG)
         self.assertEqual(settings.wake_acknowledgement_enabled, DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED)
         self.assertEqual(settings.wake_acknowledgement_text, DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT)
         self.assertEqual(settings.wake_acknowledgement_audio_path, DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH)
@@ -87,6 +91,8 @@ class ConfigTests(unittest.TestCase):
                 "TTS_VOICE": "verse",
                 "TTS_INSTRUCTIONS": "Speak with warm, quick, upbeat energy.",
                 "TTS_SPEED": "1.2",
+                "ENABLE_TOOLS": "0",
+                "TOOL_ROUTER_DEBUG": "1",
                 "WAKE_ACKNOWLEDGEMENT_ENABLED": "0",
                 "WAKE_ACKNOWLEDGEMENT_TEXT": "yes?",
                 "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "tmp/custom-ack.mp3",
@@ -116,6 +122,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.tts_voice, "verse")
         self.assertEqual(settings.tts_instructions, "Speak with warm, quick, upbeat energy.")
         self.assertEqual(settings.tts_speed, 1.2)
+        self.assertFalse(settings.enable_tools)
+        self.assertTrue(settings.tool_router_debug)
         self.assertFalse(settings.wake_acknowledgement_enabled)
         self.assertEqual(settings.wake_acknowledgement_text, "yes?")
         self.assertEqual(settings.wake_acknowledgement_audio_path, Path("tmp/custom-ack.mp3"))
@@ -159,6 +167,8 @@ class ConfigTests(unittest.TestCase):
                     "SAMPLE_RATE": "not-an-int",
                     "CHAT_MODEL": "",
                     "TTS_SPEED": "fast",
+                    "ENABLE_TOOLS": "maybe",
+                    "TOOL_ROUTER_DEBUG": "maybe",
                     "WAKE_ACKNOWLEDGEMENT_ENABLED": "maybe",
                     "WAKE_ACKNOWLEDGEMENT_TEXT": "",
                     "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "",
@@ -180,6 +190,8 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("SAMPLE_RATE must be an integer", message)
         self.assertIn("CHAT_MODEL must not be empty", message)
         self.assertIn("TTS_SPEED must be a number", message)
+        self.assertIn("ENABLE_TOOLS must be a boolean value", message)
+        self.assertIn("TOOL_ROUTER_DEBUG must be a boolean value", message)
         self.assertIn("WAKE_ACKNOWLEDGEMENT_ENABLED must be a boolean value", message)
         self.assertIn("WAKE_ACKNOWLEDGEMENT_TEXT must not be empty", message)
         self.assertIn("WAKE_ACKNOWLEDGEMENT_AUDIO_PATH must not be empty", message)

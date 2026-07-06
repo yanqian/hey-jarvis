@@ -37,6 +37,8 @@ DEFAULT_TTS_MODEL = "gpt-4o-mini-tts"
 DEFAULT_TTS_VOICE = "alloy"
 DEFAULT_TTS_INSTRUCTIONS: str | None = None
 DEFAULT_TTS_SPEED = 1.0
+DEFAULT_ENABLE_TOOLS = True
+DEFAULT_TOOL_ROUTER_DEBUG = False
 DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED = True
 DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT = "在呢"
 DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH = Path("tmp/ack.mp3")
@@ -86,6 +88,8 @@ class Settings:
     tts_voice: str
     tts_instructions: str | None = DEFAULT_TTS_INSTRUCTIONS
     tts_speed: float = DEFAULT_TTS_SPEED
+    enable_tools: bool = DEFAULT_ENABLE_TOOLS
+    tool_router_debug: bool = DEFAULT_TOOL_ROUTER_DEBUG
     wake_acknowledgement_enabled: bool = DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED
     wake_acknowledgement_text: str = DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT
     wake_acknowledgement_audio_path: Path = DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH
@@ -198,6 +202,8 @@ def load_settings(
         minimum=0.25,
         maximum=4.0,
     )
+    enable_tools = _bool_value(raw_env, "ENABLE_TOOLS", DEFAULT_ENABLE_TOOLS, errors)
+    tool_router_debug = _bool_value(raw_env, "TOOL_ROUTER_DEBUG", DEFAULT_TOOL_ROUTER_DEBUG, errors)
     wake_acknowledgement_enabled = _bool_value(
         raw_env,
         "WAKE_ACKNOWLEDGEMENT_ENABLED",
@@ -287,6 +293,8 @@ def load_settings(
         tts_voice=tts_voice,
         tts_instructions=tts_instructions,
         tts_speed=tts_speed,
+        enable_tools=enable_tools,
+        tool_router_debug=tool_router_debug,
         wake_acknowledgement_enabled=wake_acknowledgement_enabled,
         wake_acknowledgement_text=wake_acknowledgement_text,
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,

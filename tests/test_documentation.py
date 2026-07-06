@@ -24,6 +24,7 @@ class DocumentationTests(unittest.TestCase):
             "--fake-backend",
             "--prepare-wake-word",
             "--prepare-acknowledgement",
+            "--text",
             "--wake-debug",
             "--wake-file",
         ):
@@ -116,6 +117,16 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("TTS_INSTRUCTIONS", deployment)
         self.assertIn("TTS_SPEED=1.0", readme)
         self.assertIn("TTS_SPEED=1.0", deployment)
+        self.assertIn("ENABLE_TOOLS=1", readme)
+        self.assertIn("ENABLE_TOOLS=1", deployment)
+        self.assertIn("TOOL_ROUTER_DEBUG=0", readme)
+        self.assertIn("TOOL_ROUTER_DEBUG=0", deployment)
+        self.assertIn("Structured Tool Routing", readme)
+        self.assertIn("provider-not-configured", readme)
+        self.assertIn("python -m src.main --text", readme)
+        self.assertIn("python -m src.main --text", deployment)
+        self.assertIn("今天有什么新闻", readme)
+        self.assertIn("今天有什么新闻", deployment)
         self.assertIn("OpenAI.fm-style vibe", readme)
         self.assertIn("OpenAI.fm-style vibe", deployment)
         self.assertIn("Interrupt playback", readme)

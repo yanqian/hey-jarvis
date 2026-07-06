@@ -70,6 +70,19 @@ quickly, and with dry humor`; the assistant sends that value as speech API
 instructions rather than using a separate OpenAI.fm vibe parameter. `TTS_SPEED`
 controls generated-audio speed and must be from `0.25` through `4.0`.
 
+Structured local tools are enabled by default:
+
+```text
+ENABLE_TOOLS=1
+TOOL_ROUTER_DEBUG=0
+```
+
+`ENABLE_TOOLS` routes local time and simple calculator requests before chat
+generation. Weather, stock, and FX requests are recognized but return
+provider-not-configured answers until network-backed providers are implemented.
+`TOOL_ROUTER_DEBUG=1` logs route, tool, params, and rule reason during the voice
+loop.
+
 Wake acknowledgement playback is enabled by default. The assistant plays the
 prepared `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` file after `Hey Jarvis`, drains
 microphone residue for `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`, and then records
@@ -139,6 +152,15 @@ For an end-to-end state-machine smoke test without hardware or OpenAI:
 
 ```bash
 python -m src.main --fake-backend
+```
+
+For structured tool routing without microphone, wake-word detection, TTS,
+playback, OpenAI, or external network access:
+
+```bash
+python -m src.main --text "现在几点"
+python -m src.main --text "100加20是多少"
+python -m src.main --text "今天有什么新闻"
 ```
 
 ## Microphone Permission

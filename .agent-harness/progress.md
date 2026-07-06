@@ -48,9 +48,11 @@ F020 has been implemented by manual Coding Agent fallback after the user validat
 
 F021 has been completed through the orchestrator entrypoint, with Coding Agent implementation and Evaluator Agent approval recorded. The assistant now supports configurable wake acknowledgement settings, `python -m src.main --prepare-acknowledgement` one-time audio generation through the existing OpenAI TTS boundary, startup/diagnostic missing-file guidance, an explicit `ACK_PLAYING` state after confirmed wake detection, acknowledgement microphone-residue draining before the existing recorder starts, fake-backend smoke coverage for `WAIT_WAKE -> ACK_PLAYING -> RECORDING`, and documentation/manual-test updates. Coding evidence is recorded in `runs/F021-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F021` in `runs/F021-evaluation.md`.
 
+F022 has been implemented by manual Coding Agent fallback after the orchestrator-first run hit the known Codex provider behavior of hanging in `subprocess.communicate()` while waiting for the Coding Agent child process. The code now includes a structured local tool routing foundation before network-backed realtime providers: route/result schemas, deterministic router rules, realtime-sensitive refusal behavior, local time and safe calculator tools, not-configured results for planned weather/FX/stock tools, `ENABLE_TOOLS`, `TOOL_ROUTER_DEBUG`, state-machine post-transcription routing, and `python -m src.main --text ...` for dependency-free inspection. Focused tests and `./init.sh` pass, and durable evidence is recorded in `runs/F022-manual-coding.md` and `runs/F022-evaluation.md`.
+
 ## Last Completed Feature
 
-F021 - Add wake acknowledgement before recording.
+F022 - Add structured tool routing foundation.
 
 ## Next Feature
 
@@ -83,3 +85,4 @@ None currently selected.
 - F019 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `runs/F019-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F019` in `runs/F019-evaluation.md`.
 - F020 was completed by manual fallback because the user explicitly requested planning and implementation in this interactive session after confirming the local configured Hey Jarvis TFLite trial worked. Implementation evidence is in `runs/F020-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F020` in `runs/F020-evaluation.md`.
 - F021 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `runs/F021-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F021` in `runs/F021-evaluation.md`.
+- F022 was completed by manual fallback after the first unprivileged orchestrator run failed with a Codex state/app-server permission error, the escalated run entered `Round 1: F022`, and the Coding Agent child process hung inside `subprocess.communicate()`. The partial Coding Agent work was preserved, completed manually, and evaluator evidence recorded `EVAL_PASS: F022` in `runs/F022-evaluation.md`.

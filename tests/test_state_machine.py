@@ -34,6 +34,7 @@ from src.state_machine import AssistantState, VoiceAssistantStateMachine
 
 def make_settings(
     *,
+    enable_tools=False,
     wake_debug=False,
     post_playback_wake_cooldown_seconds=DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS,
     post_playback_quiet_seconds=DEFAULT_POST_PLAYBACK_QUIET_SECONDS,
@@ -58,6 +59,7 @@ def make_settings(
         chat_model=DEFAULT_CHAT_MODEL,
         tts_model=DEFAULT_TTS_MODEL,
         tts_voice=DEFAULT_TTS_VOICE,
+        enable_tools=enable_tools,
         wake_acknowledgement_enabled=wake_acknowledgement_enabled,
         wake_acknowledgement_text=DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
@@ -249,6 +251,45 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("Transition WAIT_WAKE -> RECORDING", log_output)
         self.assertIn("Transition PLAYING -> WAIT_WAKE", log_output)
         self.assertIn("suppressing post-playback wake detection", log_output)
+
+    def test_tool_route_answers_calculator_without_chat_history(self):
+        logger = logging.getLogger("tests.state_machine.tools")
+        audio_source = FakeAudioSource()
+        wake_detector = FakeWakeDetector()
+        openai_client = FakeOpenAIClient()
+        player = FakePlayer()
+        history = []
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "input.wav"
+            output_path = Path(tmp_dir) / "output.mp3"
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    enable_tools=True,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=wake_detector,
+                openai_client=openai_client,
+                player=player,
+                history=history,
+                record_audio=fake_record_audio,
+                input_path=input_path,
+                output_path=output_path,
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+            synthesized_text = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(result.answer, "The answer is 4.")
+        self.assertEqual(openai_client.chat_calls, 0)
+        self.assertEqual(openai_client.tts_calls, 1)
+        self.assertEqual(history, [])
+        self.assertEqual(synthesized_text, "The answer is 4.")
+        self.assertIn("tool route=calculator status=success", "\n".join(logs.output))
 
     def test_single_wake_candidate_does_not_enter_recording_until_confirmed(self):
         logger = logging.getLogger("tests.state_machine.wake_confirmation")
