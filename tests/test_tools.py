@@ -102,9 +102,35 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(chinese_route.params["intent"], "tomorrow")
         self.assertEqual(chinese_route.params["location"], "东京")
 
+    def test_routes_fx_with_english_and_chinese_aliases(self):
+        route = route_text("convert 100 US dollars to Singapore dollars")
+
+        self.assertEqual(route.category, "fx")
+        self.assertEqual(route.params["amount"], "100")
+        self.assertEqual(route.params["base"], "USD")
+        self.assertEqual(route.params["quote"], "SGD")
+
+        chinese_route = route_text("100美元兑人民币汇率是多少")
+        self.assertEqual(chinese_route.category, "fx")
+        self.assertEqual(chinese_route.params["amount"], "100")
+        self.assertEqual(chinese_route.params["base"], "USD")
+        self.assertEqual(chinese_route.params["quote"], "CNY")
+
+    def test_routes_fx_with_documented_single_currency_default_shape(self):
+        route = route_text("100 SGD exchange rate")
+
+        self.assertEqual(route.category, "fx")
+        self.assertEqual(route.params["amount"], "100")
+        self.assertEqual(route.params["base"], "SGD")
+        self.assertNotIn("quote", route.params)
+
+        unsupported_route = route_text("chf to usd exchange rate")
+        self.assertEqual(unsupported_route.category, "fx")
+        self.assertEqual(unsupported_route.params["unsupported_currency"], "CHF")
+        self.assertEqual(unsupported_route.params["quote"], "USD")
+
     def test_routes_remaining_planned_provider_categories_to_not_configured(self):
         cases = {
-            "美元兑新币汇率是多少": "fx",
             "苹果股价多少": "stock",
             "AAPL stock price": "stock",
         }
@@ -155,6 +181,49 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(route.category, "weather")
         self.assertEqual(result.status, "error")
         self.assertIn("could not get weather data", answer)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
+    def test_fx_answer_path_uses_provider_and_skips_chat(self):
+        chat_client = FakeChatClient()
+        client = FakeJsonClient([{"date": "2026-07-03", "base": "USD", "quote": "SGD", "rate": 1.34567}])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "100 USD to SGD",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            provider_config=ProviderConfig(default_base_currency="USD"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "fx")
+        self.assertEqual(result.status, "success")
+        self.assertIn("100 USD is about 134.57 SGD", answer)
+        self.assertIn("reference rate", answer)
+        self.assertIn("Not a bank cash or trade quote", answer)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
+    def test_fx_provider_failure_does_not_fall_back_to_chat(self):
+        chat_client = FakeChatClient()
+        client = FakeJsonClient([{"date": "2026-07-03", "base": "USD", "quote": "SGD"}])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "USD to SGD exchange rate",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            provider_config=ProviderConfig(default_base_currency="USD"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "fx")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "foreign exchange provider error: missing_rate_fields")
+        self.assertIn("could not get foreign exchange data", answer)
         self.assertEqual(chat_client.calls, [])
         self.assertEqual(history, [])
 
@@ -258,6 +327,20 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertIn("route=weather", debug)
         self.assertIn("result_status=success", debug)
         self.assertIn("Open-Meteo forecast for 2026-07-07", debug)
+
+    def test_text_debug_can_show_mocked_fx_result(self):
+        client = FakeJsonClient([{"date": "2026-07-03", "base": "EUR", "quote": "JPY", "rate": 171.2345}])
+
+        debug = format_text_debug(
+            "25 EUR to JPY",
+            provider_config=ProviderConfig(default_base_currency="USD"),
+            http_client=client,
+        )
+
+        self.assertIn("route=fx", debug)
+        self.assertIn("params={amount:25,base:EUR,query:25 EUR to JPY,quote:JPY}", debug)
+        self.assertIn("result_status=success", debug)
+        self.assertIn("25 EUR is about 4280.86 JPY", debug)
 
 
 if __name__ == "__main__":

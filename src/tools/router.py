@@ -89,11 +89,12 @@ def route_text(text: str) -> ToolRoute:
         )
 
     if _contains_any(normalized, _FX_MARKERS):
+        fx_params = _extract_fx_params(text)
         return ToolRoute(
             ROUTE_FX,
             "fx_provider",
-            {"query": text.strip()},
-            "FX request requires configured provider",
+            fx_params,
+            "foreign exchange request",
         )
 
     if _looks_like_stock_request(normalized):
@@ -138,7 +139,9 @@ def execute_route(
         return _calculator_result(expression)
     if route.category == ROUTE_WEATHER:
         return _weather_result(route, provider_config=provider_config, http_client=http_client)
-    if route.category in {ROUTE_STOCK, ROUTE_FX}:
+    if route.category == ROUTE_FX:
+        return _fx_result(route, provider_config=provider_config, http_client=http_client)
+    if route.category == ROUTE_STOCK:
         return _not_configured_result(route, provider_config=provider_config)
     if route.category == ROUTE_UNSUPPORTED_REALTIME:
         return ToolResult(
@@ -302,6 +305,26 @@ def _weather_result(
         return provider_error_result(route, exc)
 
 
+def _fx_result(
+    route: ToolRoute,
+    *,
+    provider_config: object | None,
+    http_client: object | None,
+) -> ToolResult:
+    provider_name = _provider_name(route, provider_config)
+    if provider_name and provider_name.casefold() != "frankfurter":
+        return _not_configured_result(route, provider_config=provider_config)
+
+    from .providers import JsonHttpClient, ProviderConfig, ProviderError, frankfurter_fx_result, provider_error_result
+
+    config = provider_config if provider_config is not None else ProviderConfig()
+    client = http_client if http_client is not None else JsonHttpClient()
+    try:
+        return frankfurter_fx_result(route, provider_config=config, http_client=client)
+    except ProviderError as exc:
+        return provider_error_result(route, exc)
+
+
 def _safe_eval_expression(expression: str) -> float:
     try:
         tree = ast.parse(expression, mode="eval")
@@ -452,6 +475,95 @@ def _clean_weather_location(value: str) -> str:
     return " ".join(cleaned.split()).strip(" ?!.，,。")
 
 
+def _extract_fx_params(text: str) -> Mapping[str, str]:
+    stripped = text.strip()
+    params: dict[str, str] = {"query": stripped, "amount": _extract_fx_amount(stripped)}
+    mentions = _find_currency_mentions(stripped)
+    unsupported = _find_unsupported_currency_codes(stripped)
+    if unsupported:
+        params["unsupported_currency"] = unsupported[0]
+
+    unique_mentions: list[_CurrencyMention] = []
+    for mention in mentions:
+        if not unique_mentions or unique_mentions[-1].code != mention.code or unique_mentions[-1].start != mention.start:
+            unique_mentions.append(mention)
+
+    if len(unique_mentions) >= 2:
+        params["base"] = unique_mentions[0].code
+        params["quote"] = unique_mentions[1].code
+    elif len(unique_mentions) == 1:
+        mention = unique_mentions[0]
+        if _single_currency_is_base(stripped, mention):
+            params["base"] = mention.code
+        else:
+            params["quote"] = mention.code
+    return params
+
+
+@dataclass(frozen=True)
+class _CurrencyMention:
+    code: str
+    start: int
+    end: int
+
+
+def _find_currency_mentions(text: str) -> list[_CurrencyMention]:
+    normalized = text.casefold()
+    mentions: list[_CurrencyMention] = []
+    occupied: list[tuple[int, int]] = []
+    for alias, code in _FX_ALIASES:
+        start = 0
+        while True:
+            index = normalized.find(alias, start)
+            if index < 0:
+                break
+            end = index + len(alias)
+            if _alias_has_word_boundaries(normalized, index, end, alias) and not _overlaps(index, end, occupied):
+                mentions.append(_CurrencyMention(code, index, end))
+                occupied.append((index, end))
+            start = index + 1
+    return sorted(mentions, key=lambda mention: (mention.start, -(mention.end - mention.start)))
+
+
+def _alias_has_word_boundaries(text: str, start: int, end: int, alias: str) -> bool:
+    if re.fullmatch(r"[a-z0-9 ]+", alias):
+        before = text[start - 1] if start > 0 else " "
+        after = text[end] if end < len(text) else " "
+        if alias[0].isalnum() and before.isalnum():
+            return False
+        if alias[-1].isalnum() and after.isalnum():
+            return False
+    return True
+
+
+def _overlaps(start: int, end: int, ranges: list[tuple[int, int]]) -> bool:
+    return any(start < existing_end and end > existing_start for existing_start, existing_end in ranges)
+
+
+def _find_unsupported_currency_codes(text: str) -> list[str]:
+    codes = [match.group(0).upper() for match in re.finditer(r"\b[A-Z]{3}\b", text)]
+    normalized_codes = [match.group(0).upper() for match in re.finditer(r"\b[a-zA-Z]{3}\b", text.casefold())]
+    for code in normalized_codes:
+        if code in _FX_KNOWN_UNSUPPORTED_CODES and code not in codes:
+            codes.append(code)
+    return [code for code in codes if code not in FX_SUPPORTED_CURRENCIES]
+
+
+def _extract_fx_amount(text: str) -> str:
+    match = re.search(r"(?<![A-Za-z])(?:\$|€|£|¥)?\s*(\d[\d,]*(?:\.\d+)?)", text)
+    if not match:
+        return "1"
+    return match.group(1).replace(",", "")
+
+
+def _single_currency_is_base(text: str, mention: _CurrencyMention) -> bool:
+    amount_match = re.search(r"(?<![A-Za-z])(?:\$|€|£|¥)?\s*\d[\d,]*(?:\.\d+)?", text)
+    if amount_match and 0 <= mention.start - amount_match.end() <= 8:
+        return True
+    before = text[: mention.start].casefold()
+    return bool(re.search(r"(convert|change|exchange|换|換|把)\s*$", before))
+
+
 def _format_mapping(values: Mapping[str, str]) -> str:
     if not values:
         return "{}"
@@ -596,15 +708,43 @@ _WEATHER_CN_STOP_MARKERS = (
 )
 _FX_MARKERS = (
     "exchange rate",
+    "currency exchange",
     "fx",
     "foreign exchange",
     "usd",
+    "sgd",
+    "cny",
     "eur",
+    "jpy",
+    "hkd",
+    "gbp",
+    "aud",
+    "dollar",
+    "euro",
+    "yen",
+    "pound",
+    "人民币",
+    "人民幣",
     "美元",
+    "美金",
+    "新币",
+    "新幣",
     "欧元",
     "歐元",
+    "日元",
+    "日圆",
+    "日圓",
+    "港币",
+    "港幣",
+    "英镑",
+    "英鎊",
+    "澳元",
+    "澳币",
+    "澳幣",
     "汇率",
     "匯率",
+    "兑换",
+    "兌換",
     "外汇",
     "外匯",
 )
@@ -648,3 +788,65 @@ _REALTIME_SENSITIVE_MARKERS = _UNSUPPORTED_REALTIME_MARKERS + (
     "价格",
     "價格",
 )
+
+FX_SUPPORTED_CURRENCIES = ("USD", "SGD", "CNY", "EUR", "JPY", "HKD", "GBP", "AUD")
+_FX_KNOWN_UNSUPPORTED_CODES = ("CAD", "CHF", "IDR", "INR", "KRW", "MYR", "NZD", "PHP", "THB", "TWD")
+_FX_ALIAS_PAIRS = (
+    ("singapore dollars", "SGD"),
+    ("singapore dollar", "SGD"),
+    ("australian dollars", "AUD"),
+    ("australian dollar", "AUD"),
+    ("hong kong dollars", "HKD"),
+    ("hong kong dollar", "HKD"),
+    ("british pounds", "GBP"),
+    ("british pound", "GBP"),
+    ("us dollars", "USD"),
+    ("u.s. dollars", "USD"),
+    ("u.s. dollar", "USD"),
+    ("american dollars", "USD"),
+    ("american dollar", "USD"),
+    ("dollars", "USD"),
+    ("dollar", "USD"),
+    ("euros", "EUR"),
+    ("euro", "EUR"),
+    ("japanese yen", "JPY"),
+    ("yen", "JPY"),
+    ("pounds sterling", "GBP"),
+    ("pound sterling", "GBP"),
+    ("sterling", "GBP"),
+    ("pounds", "GBP"),
+    ("pound", "GBP"),
+    ("aussie dollars", "AUD"),
+    ("aussie dollar", "AUD"),
+    ("usd", "USD"),
+    ("sgd", "SGD"),
+    ("cny", "CNY"),
+    ("rmb", "CNY"),
+    ("eur", "EUR"),
+    ("jpy", "JPY"),
+    ("hkd", "HKD"),
+    ("gbp", "GBP"),
+    ("aud", "AUD"),
+    ("人民币", "CNY"),
+    ("人民幣", "CNY"),
+    ("美元", "USD"),
+    ("美金", "USD"),
+    ("新加坡元", "SGD"),
+    ("新币", "SGD"),
+    ("新幣", "SGD"),
+    ("坡币", "SGD"),
+    ("坡幣", "SGD"),
+    ("欧元", "EUR"),
+    ("歐元", "EUR"),
+    ("日元", "JPY"),
+    ("日圆", "JPY"),
+    ("日圓", "JPY"),
+    ("港币", "HKD"),
+    ("港幣", "HKD"),
+    ("英镑", "GBP"),
+    ("英鎊", "GBP"),
+    ("澳元", "AUD"),
+    ("澳币", "AUD"),
+    ("澳幣", "AUD"),
+)
+_FX_ALIASES = tuple(sorted(_FX_ALIAS_PAIRS, key=lambda item: len(item[0]), reverse=True))

@@ -56,13 +56,15 @@ F023 has been completed through the orchestrator entrypoint after approving the 
 
 F024 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The structured weather route now extracts current/today/tomorrow intent and practical locations, falls back to `DEFAULT_LOCATION` when omitted, resolves places through Open-Meteo geocoding, fetches current and daily Open-Meteo forecast fields, returns source/freshness/temperature/apparent-temperature/weather-code/precipitation context in `ToolResult` data, and maps no-match, missing-field, HTTP, timeout, network, and malformed-data failures to structured tool errors without chat speculation. Focused mocked tests cover weather routing, text debug, success and failure paths, default location behavior, and non-Open-Meteo provider fallback. Coding evidence is recorded in `runs/F024-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F024` in `runs/F024-evaluation.md`.
 
+F025 has been completed through the orchestrator entrypoint after approving the Codex provider runtime permission gap, with Coding Agent implementation and Evaluator Agent approval recorded. The structured FX route now extracts amount/base/quote from English and Chinese aliases for USD, SGD, CNY, EUR, JPY, HKD, GBP, and AUD, applies documented defaults for omitted currencies, calls Frankfurter's v2 single-pair rate endpoint through the shared JSON HTTP boundary, calculates converted amounts locally, and returns short reference-rate answers with rate date, source, freshness, and bank/trade-quote caveats. Unsupported currencies, same-currency requests, missing rate fields, provider HTTP failures, and malformed provider data map to structured FX errors without chat fallback. Focused mocked tests and CLI text-debug checks pass, coding evidence is recorded in `runs/F025-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F025` in `runs/F025-evaluation.md`.
+
 ## Last Completed Feature
 
-F024 - Implement Open-Meteo weather tool.
+F025 - Implement Frankfurter FX tool.
 
 ## Next Feature
 
-F025 - Implement Frankfurter FX tool.
+F026 - Implement Finnhub stock quote tool.
 
 ## Known Issues
 

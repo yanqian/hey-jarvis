@@ -86,8 +86,9 @@ FINNHUB_API_KEY=
 
 `ENABLE_TOOLS` routes local time and simple calculator requests before chat
 generation. Weather requests use Open-Meteo when `WEATHER_PROVIDER=open-meteo`.
-Stock and FX requests are recognized but return provider-not-configured answers
-until their provider-specific features are implemented.
+FX requests use Frankfurter reference rates when `FX_PROVIDER=frankfurter`.
+Stock requests are recognized but return provider-not-configured answers until
+their provider-specific feature is implemented.
 `TOOL_ROUTER_DEBUG=1` logs route, tool, params, and rule reason during the voice
 loop.
 
@@ -95,7 +96,10 @@ loop.
 and fetches current, today, or tomorrow weather from the Open-Meteo forecast
 endpoint. `TOOL_HTTP_TIMEOUT_SECONDS` is the shared JSON request timeout.
 `DEFAULT_LOCATION=Singapore` is used when the user omits a weather location.
-`DEFAULT_BASE_CURRENCY=USD` is the default future FX base currency.
+`DEFAULT_BASE_CURRENCY=USD` is used when an FX request omits the base currency;
+when the quote is omitted, the configured default base is used as the quote
+unless that would match the base, in which case SGD is used. Frankfurter FX
+answers are reference rates, not bank cash rates or executable trade quotes.
 `FINNHUB_API_KEY` is optional until stock quotes are enabled; diagnostics report
 configured or missing without printing the value.
 
@@ -186,9 +190,16 @@ python -m src.main --text "明天天气怎么样"
 python -m src.main --text "weather in Tokyo today"
 ```
 
+For a manual Frankfurter FX smoke with live network access, run:
+
+```bash
+python -m src.main --text "100 USD to SGD"
+python -m src.main --text "100美元兑人民币汇率是多少"
+```
+
 Automated tests mock the shared JSON HTTP boundary and must not call live
-weather, FX, or stock services. Manual real-provider smoke tests for FX and
-stock remain expected when F025 and F026 add provider-specific behavior.
+weather, FX, or stock services. Manual real-provider smoke tests for stock
+remain expected when F026 adds provider-specific behavior.
 
 ## Microphone Permission
 

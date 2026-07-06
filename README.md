@@ -83,7 +83,8 @@ python -m src.main --text "现在几点"
 ```
 
 Weather text-debug requests such as `python -m src.main --text "明天天气怎么样"`
-use the configured Open-Meteo provider and require network access.
+and FX text-debug requests such as `python -m src.main --text "100 USD to SGD"`
+use configured providers and require network access.
 
 To inspect wake-word behavior without OpenAI or playback, run a wake debug
 probe:
@@ -212,9 +213,10 @@ the normal recorder starts.
 and before chat generation. `TOOL_ROUTER_DEBUG=1` logs the selected route, tool,
 params, and rule reason during the voice loop. Local time requests and simple
 arithmetic are answered without asking the chat model. Weather requests are
-answered through Open-Meteo when `WEATHER_PROVIDER=open-meteo`. Stock and FX
-requests still return clear provider-not-configured answers until their
-provider-specific follow-up features land. Unsupported realtime-sensitive requests such as
+answered through Open-Meteo when `WEATHER_PROVIDER=open-meteo`. FX requests are
+answered through Frankfurter when `FX_PROVIDER=frankfurter`. Stock requests
+still return clear provider-not-configured answers until their provider-specific
+follow-up feature lands. Unsupported realtime-sensitive requests such as
 `今天有什么新闻` are refused instead of falling back to chat memory or model
 guessing.
 
@@ -223,10 +225,21 @@ and fetches current, today, or tomorrow weather from Open-Meteo forecast data.
 `DEFAULT_LOCATION=Singapore` is used when the user asks a weather question
 without naming a place. Weather answers include source, location, observation or
 forecast time, temperature, feels-like or weather-code context, and rain or
-precipitation probability where Open-Meteo provides it. `FX_PROVIDER=frankfurter`
-and `STOCK_PROVIDER=finnhub` name planned providers for later features.
+precipitation probability where Open-Meteo provides it.
+
+`FX_PROVIDER=frankfurter` calls Frankfurter's single-pair rate endpoint and
+calculates conversions locally. FX routing recognizes USD, SGD, CNY, EUR, JPY,
+HKD, GBP, and AUD aliases in English and Chinese, including examples like
+`100 USD to SGD`, `100 SGD exchange rate`, and `100美元兑人民币汇率是多少`.
+When the base currency is omitted, `DEFAULT_BASE_CURRENCY=USD` is used. When
+the quote currency is omitted, the configured default base is used as the quote
+unless that would match the base, in which case SGD is used. FX answers include
+the Frankfurter rate date and state that the result is a reference rate, not a
+bank cash rate or executable trade quote. Unsupported currencies and malformed
+provider data return structured tool errors without chat speculation.
+
+`STOCK_PROVIDER=finnhub` names the planned stock provider for a later feature.
 `TOOL_HTTP_TIMEOUT_SECONDS=5` is the shared JSON request timeout.
-`DEFAULT_BASE_CURRENCY=USD` is the default future FX base currency.
 `FINNHUB_API_KEY` is optional until stock quotes are enabled; diagnostics and
 text debug report it as configured or missing without printing the secret value.
 
@@ -237,6 +250,8 @@ final answer plus provider configuration:
 python -m src.main --text "2 + 2"
 python -m src.main --text "明天天气怎么样"
 python -m src.main --text "weather in Tokyo today"
+python -m src.main --text "100 USD to SGD"
+python -m src.main --text "100美元兑人民币汇率是多少"
 python -m src.main --text "苹果怎么样"
 python -m src.main --text "今天有什么新闻"
 ```
@@ -248,8 +263,8 @@ conservative route detection for provider-backed weather, stock, and FX
 requests, and refusal for unsupported realtime categories such as news, sports
 scores, product prices, or arbitrary live web facts. F023 adds the shared
 provider configuration and mocked JSON HTTP boundary. F024 enables Open-Meteo
-weather. Manual real-provider smoke expectations for FX and stock begin with
-F025 and F026.
+weather. F025 enables Frankfurter FX reference-rate conversion. Manual
+real-provider smoke expectations for stock begin with F026.
 
 The automated recovery check uses fakes and dry-run paths, so it does not make
 live OpenAI API calls or live provider network calls.

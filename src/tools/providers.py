@@ -8,9 +8,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Callable, Mapping
 
 from .router import (
+    FX_SUPPORTED_CURRENCIES,
     ROUTE_FX,
     ROUTE_STOCK,
     ROUTE_WEATHER,
@@ -34,9 +36,15 @@ PROVIDER_ERROR_NETWORK = "network"
 PROVIDER_ERROR_MALFORMED_JSON = "malformed_json"
 PROVIDER_ERROR_NO_MATCH = "no_location_match"
 PROVIDER_ERROR_MISSING_DATA = "missing_forecast_fields"
+PROVIDER_ERROR_MISSING_RATE_FIELDS = "missing_rate_fields"
+PROVIDER_ERROR_UNSUPPORTED_CURRENCY = "unsupported_currency"
+PROVIDER_ERROR_SAME_CURRENCY = "same_currency"
+PROVIDER_ERROR_INVALID_AMOUNT = "invalid_amount"
 
 OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+FRANKFURTER_RATE_URL_TEMPLATE = "https://api.frankfurter.dev/v2/rate/{base}/{quote}"
+DEFAULT_QUOTE_CURRENCY = "SGD"
 
 
 @dataclass(frozen=True)
@@ -207,6 +215,69 @@ def open_meteo_weather_result(
     return _daily_weather_result(location, forecast, intent=intent)
 
 
+def frankfurter_fx_result(
+    route: ToolRoute,
+    *,
+    provider_config: ProviderConfig,
+    http_client: JsonHttpClient,
+) -> ToolResult:
+    """Resolve a routed FX request through Frankfurter's single-pair rate API."""
+
+    amount = _fx_amount(route)
+    base, quote, default_note = _fx_pair(route, provider_config)
+    unsupported = str(route.params.get("unsupported_currency") or "").strip().upper()
+    if unsupported:
+        raise ProviderError(PROVIDER_ERROR_UNSUPPORTED_CURRENCY, f"{unsupported} is not supported by this FX tool")
+    if base not in FX_SUPPORTED_CURRENCIES:
+        raise ProviderError(PROVIDER_ERROR_UNSUPPORTED_CURRENCY, f"{base} is not supported by this FX tool")
+    if quote not in FX_SUPPORTED_CURRENCIES:
+        raise ProviderError(PROVIDER_ERROR_UNSUPPORTED_CURRENCY, f"{quote} is not supported by this FX tool")
+    if base == quote:
+        raise ProviderError(PROVIDER_ERROR_SAME_CURRENCY, f"base and quote are both {base}")
+
+    url = FRANKFURTER_RATE_URL_TEMPLATE.format(base=base, quote=quote)
+    data = http_client.get_json(url, timeout_seconds=provider_config.http_timeout_seconds)
+    if not isinstance(data, Mapping):
+        raise ProviderError(PROVIDER_ERROR_MISSING_RATE_FIELDS, "Frankfurter rate response was not an object")
+
+    response_base = _fx_string_field(data, "base").upper()
+    response_quote = _fx_string_field(data, "quote").upper()
+    if response_base != base or response_quote != quote:
+        raise ProviderError(PROVIDER_ERROR_MISSING_RATE_FIELDS, "Frankfurter returned an unexpected currency pair")
+    rate_date = _fx_string_field(data, "date")
+    rate = _fx_number_field(data, "rate")
+    if rate <= 0:
+        raise ProviderError(PROVIDER_ERROR_MISSING_RATE_FIELDS, "Frankfurter rate was not positive")
+
+    converted = (amount * Decimal(str(rate))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    amount_text = _format_decimal(amount)
+    converted_text = _format_decimal(converted)
+    rate_text = _format_rate(rate)
+    default_suffix = f" {default_note}" if default_note else ""
+    answer = (
+        f"{amount_text} {base} is about {converted_text} {quote} at Frankfurter reference rate "
+        f"{rate_text} from {rate_date}.{default_suffix} Not a bank cash or trade quote."
+    )
+    summary = f"frankfurter {amount_text} {base} to {quote} = {converted_text} {quote}"
+    return ToolResult(
+        TOOL_STATUS_SUCCESS,
+        summary,
+        answer,
+        {
+            "category": ROUTE_FX,
+            "source": "frankfurter",
+            "amount": float(amount),
+            "base": base,
+            "quote": quote,
+            "rate": rate,
+            "converted_amount": float(converted),
+            "date": rate_date,
+            "freshness": f"latest available reference rate dated {rate_date}",
+            "rate_type": "reference",
+        },
+    )
+
+
 def _url_with_params(url: str, params: Mapping[str, str | int | float]) -> str:
     if not params:
         return url
@@ -365,6 +436,48 @@ def _daily_value(daily: Mapping[str, Any], name: str, index: int, *, context: st
     raise ProviderError(PROVIDER_ERROR_MISSING_DATA, f"Open-Meteo {context} malformed {name}")
 
 
+def _fx_amount(route: ToolRoute) -> Decimal:
+    raw_amount = str(route.params.get("amount") or "1").strip()
+    try:
+        amount = Decimal(raw_amount)
+    except InvalidOperation as exc:
+        raise ProviderError(PROVIDER_ERROR_INVALID_AMOUNT, f"FX amount is invalid: {raw_amount}") from exc
+    if amount <= 0:
+        raise ProviderError(PROVIDER_ERROR_INVALID_AMOUNT, "FX amount must be greater than zero")
+    return amount
+
+
+def _fx_pair(route: ToolRoute, provider_config: ProviderConfig) -> tuple[str, str, str]:
+    configured_default = provider_config.default_base_currency.strip().upper() or DEFAULT_BASE_CURRENCY
+    base = str(route.params.get("base") or "").strip().upper()
+    quote = str(route.params.get("quote") or "").strip().upper()
+    notes: list[str] = []
+    if not base:
+        base = configured_default
+        notes.append(f"Defaulted base to {base}.")
+    if not quote:
+        if base != configured_default:
+            quote = configured_default
+        else:
+            quote = DEFAULT_QUOTE_CURRENCY
+        notes.append(f"Defaulted quote to {quote}.")
+    return base, quote, " ".join(notes)
+
+
+def _fx_number_field(values: Mapping[str, Any], name: str) -> float:
+    value = values.get(name)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    raise ProviderError(PROVIDER_ERROR_MISSING_RATE_FIELDS, f"Frankfurter rate missing {name}")
+
+
+def _fx_string_field(values: Mapping[str, Any], name: str) -> str:
+    value = values.get(name)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    raise ProviderError(PROVIDER_ERROR_MISSING_RATE_FIELDS, f"Frankfurter rate missing {name}")
+
+
 def _daily_number(daily: Mapping[str, Any], name: str, index: int, *, context: str) -> float:
     value = _daily_value(daily, name, index, context=context)
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -384,7 +497,7 @@ def _number_field(values: Mapping[str, Any], name: str, *, context: str) -> floa
     value = values.get(name)
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
-    raise ProviderError(PROVIDER_ERROR_MISSING_DATA, f"Open-Meteo {context} missing {name}")
+    raise ProviderError(PROVIDER_ERROR_MISSING_DATA, f"{context} missing {name}")
 
 
 def _optional_number_field(values: Mapping[str, Any], name: str) -> float | None:
@@ -398,7 +511,18 @@ def _string_field(values: Mapping[str, Any], name: str, *, context: str) -> str:
     value = values.get(name)
     if isinstance(value, str) and value.strip():
         return value.strip()
-    raise ProviderError(PROVIDER_ERROR_MISSING_DATA, f"Open-Meteo {context} missing {name}")
+    raise ProviderError(PROVIDER_ERROR_MISSING_DATA, f"{context} missing {name}")
+
+
+def _format_decimal(value: Decimal) -> str:
+    normalized = value.normalize()
+    if normalized == normalized.to_integral():
+        return str(normalized.quantize(Decimal("1")))
+    return format(normalized, "f")
+
+
+def _format_rate(value: float) -> str:
+    return f"{value:.8g}"
 
 
 def _format_temperature(value: float | None) -> str:

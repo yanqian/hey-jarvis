@@ -506,9 +506,9 @@
         "Unsupported currencies, same-currency requests, missing rate fields, provider HTTP failures, and malformed provider data return structured FX failures and do not fall back to chat speculation.",
         "Focused tests mock Frankfurter responses, cover parsing aliases, rounding, success and failure paths, verify text-debug/answer-path behavior, update documentation examples, and pass final ./init.sh recovery verification."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
