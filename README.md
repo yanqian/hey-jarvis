@@ -172,8 +172,14 @@ POST_PLAYBACK_QUIET_SECONDS=0.5
 POST_PLAYBACK_QUIET_RMS=500
 POST_PLAYBACK_MAX_SUPPRESSION_SECONDS=6.0
 WAKE_CONFIRMATION_FRAMES=2
+ARMED_NO_SPEECH_TIMEOUT_SECONDS=2.0
+ARMED_VOICE_RMS=750
+MIN_VALID_SPEECH_SECONDS=0.24
+MIN_TRANSCRIPT_LENGTH=2
+CANCEL_PHRASES=取消,没事,不用了,算了,stop,cancel,never mind
 SILENCE_SECONDS=1.5
 MAX_RECORD_SECONDS=20
+RECORDING_SILENCE_RMS=750
 SAMPLE_RATE=16000
 TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 CHAT_MODEL=gpt-4o-mini
@@ -206,7 +212,38 @@ src.main --prepare-acknowledgement`, defaulting to `在呢`.
 `tmp/ack.mp3`. Normal wake handling reuses that file and does not make a fresh
 TTS request for every wake event. `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS` controls
 how long microphone residue is discarded after acknowledgement playback before
-the normal recorder starts.
+the assistant enters `ARMED`.
+
+`ARMED_NO_SPEECH_TIMEOUT_SECONDS` controls how long the assistant waits after
+wake acknowledgement for user speech before quietly returning to `WAIT_WAKE`.
+`ARMED_VOICE_RMS` is the local RMS threshold for that speech check.
+`MIN_VALID_SPEECH_SECONDS` and `MIN_TRANSCRIPT_LENGTH` reject accidental,
+silent, or unusably short requests before chat/tool routing and TTS.
+`CANCEL_PHRASES` is a comma-separated local cancellation list; defaults include
+`取消`, `没事`, `不用了`, `算了`, `stop`, `cancel`, and `never mind`.
+Cancel matching also accepts conservative short noisy suffixes such as
+`没事了`, `没事不用了`, `没事 谢谢`, `没事 后面有声音`, `取消吧`,
+`算了算了`, `不用啦`, `不用不用`, `不用不用了`, `不要了`, `没事儿`,
+`没事没事儿`, and `stop please`
+without calling chat, tools, TTS, playback, or mutating history. Longer
+command-like continuations such as `不用了帮我查天气`, `没事的话帮我查天气`,
+`取消我明天的闹钟`, `不要取消我明天的闹钟`, or `cancel my alarm tomorrow`
+are not locally cancelled. Transcript-cancel logs include the normalized
+transcript and `match_mode` for diagnosis; short non-cancel transcripts log the
+normalized transcript, compact transcript, and `match_decision=not_cancelled`.
+After local cancellation, the assistant also suppresses wake detection and waits
+for observed quiet before becoming wake-ready again. This uses the same
+`POST_PLAYBACK_WAKE_COOLDOWN_SECONDS`, `POST_PLAYBACK_QUIET_SECONDS`,
+`POST_PLAYBACK_QUIET_RMS`, and `POST_PLAYBACK_MAX_SUPPRESSION_SECONDS` settings
+as post-playback suppression, and logs the cancellation reason, discarded chunk
+counts, quiet-gate status, and maximum suppressed wake score.
+
+`SILENCE_SECONDS` controls how much post-question quiet is required before the
+question recording stops. `RECORDING_SILENCE_RMS`, default `750`, is the RMS
+threshold used for question-recording end-of-speech detection. The recorder
+uses a recent-window rule so steady background below that threshold and
+occasional moderate noisy chunks do not force recording to wait for
+`MAX_RECORD_SECONDS`, while speech-like chunks still extend the recording.
 
 ## Structured Tool Routing
 
@@ -348,6 +385,11 @@ Common outcomes:
   `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` above `0`, keep
   `POST_PLAYBACK_QUIET_SECONDS` above `0`, keep `WAKE_CONFIRMATION_FRAMES` at
   `2` or higher, and rerun the playback-overlap manual test.
+- The assistant plays acknowledgement again immediately after `算了算了`,
+  `没事`, or an ARMED no-speech timeout: keep the same post-playback suppression
+  settings enabled. Local cancellation should log post-cancellation wake
+  suppression, consume residual wake-positive chunks, wait for quiet audio, and
+  only then report `ready for the next wake word`.
 
 ## Troubleshooting
 

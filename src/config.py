@@ -39,6 +39,7 @@ DEFAULT_WAKE_PHRASE = "hey jarvis"
 DEFAULT_WAKE_THRESHOLD = 0.5
 DEFAULT_SILENCE_SECONDS = 1.5
 DEFAULT_MAX_RECORD_SECONDS = 20.0
+DEFAULT_RECORDING_SILENCE_RMS = 750.0
 DEFAULT_SAMPLE_RATE = 16000
 DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
@@ -65,6 +66,11 @@ DEFAULT_POST_PLAYBACK_QUIET_SECONDS = 0.5
 DEFAULT_POST_PLAYBACK_QUIET_RMS = 500.0
 DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS = 6.0
 DEFAULT_WAKE_CONFIRMATION_FRAMES = 2
+DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS = 2.0
+DEFAULT_ARMED_VOICE_RMS = 750.0
+DEFAULT_MIN_VALID_SPEECH_SECONDS = 0.24
+DEFAULT_MIN_TRANSCRIPT_LENGTH = 2
+DEFAULT_CANCEL_PHRASES = ("取消", "没事", "不用了", "算了", "stop", "cancel", "never mind")
 
 SUPPORTED_PYTHON_VERSIONS = {(3, 11), (3, 12)}
 PLACEHOLDER_API_KEYS = {"", "your_api_key_here", "replace_me", "changeme"}
@@ -124,6 +130,12 @@ class Settings:
     post_playback_quiet_rms: float = DEFAULT_POST_PLAYBACK_QUIET_RMS
     post_playback_max_suppression_seconds: float = DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS
     wake_confirmation_frames: int = DEFAULT_WAKE_CONFIRMATION_FRAMES
+    armed_no_speech_timeout_seconds: float = DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS
+    armed_voice_rms: float = DEFAULT_ARMED_VOICE_RMS
+    min_valid_speech_seconds: float = DEFAULT_MIN_VALID_SPEECH_SECONDS
+    min_transcript_length: int = DEFAULT_MIN_TRANSCRIPT_LENGTH
+    cancel_phrases: tuple[str, ...] = DEFAULT_CANCEL_PHRASES
+    recording_silence_rms: float = DEFAULT_RECORDING_SILENCE_RMS
 
 
 @dataclass(frozen=True)
@@ -211,6 +223,13 @@ def load_settings(
         DEFAULT_MAX_RECORD_SECONDS,
         errors,
         minimum=0.1,
+    )
+    recording_silence_rms = _float_value(
+        raw_env,
+        "RECORDING_SILENCE_RMS",
+        DEFAULT_RECORDING_SILENCE_RMS,
+        errors,
+        minimum=0.0,
     )
     sample_rate = _int_value(raw_env, "SAMPLE_RATE", DEFAULT_SAMPLE_RATE, errors, minimum=1)
     transcribe_model = _text_value(raw_env, "TRANSCRIBE_MODEL", DEFAULT_TRANSCRIBE_MODEL, errors)
@@ -314,6 +333,35 @@ def load_settings(
         errors,
         minimum=1,
     )
+    armed_no_speech_timeout_seconds = _float_value(
+        raw_env,
+        "ARMED_NO_SPEECH_TIMEOUT_SECONDS",
+        DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS,
+        errors,
+        minimum=0.0,
+    )
+    armed_voice_rms = _float_value(
+        raw_env,
+        "ARMED_VOICE_RMS",
+        DEFAULT_ARMED_VOICE_RMS,
+        errors,
+        minimum=0.0,
+    )
+    min_valid_speech_seconds = _float_value(
+        raw_env,
+        "MIN_VALID_SPEECH_SECONDS",
+        DEFAULT_MIN_VALID_SPEECH_SECONDS,
+        errors,
+        minimum=0.0,
+    )
+    min_transcript_length = _int_value(
+        raw_env,
+        "MIN_TRANSCRIPT_LENGTH",
+        DEFAULT_MIN_TRANSCRIPT_LENGTH,
+        errors,
+        minimum=1,
+    )
+    cancel_phrases = _text_list_value(raw_env, "CANCEL_PHRASES", DEFAULT_CANCEL_PHRASES, errors)
 
     if max_record_seconds <= silence_seconds:
         errors.append("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS")
@@ -335,6 +383,7 @@ def load_settings(
         wake_threshold=wake_threshold,
         silence_seconds=silence_seconds,
         max_record_seconds=max_record_seconds,
+        recording_silence_rms=recording_silence_rms,
         sample_rate=sample_rate,
         transcribe_model=transcribe_model,
         chat_model=chat_model,
@@ -362,6 +411,11 @@ def load_settings(
         post_playback_quiet_rms=post_playback_quiet_rms,
         post_playback_max_suppression_seconds=post_playback_max_suppression_seconds,
         wake_confirmation_frames=wake_confirmation_frames,
+        armed_no_speech_timeout_seconds=armed_no_speech_timeout_seconds,
+        armed_voice_rms=armed_voice_rms,
+        min_valid_speech_seconds=min_valid_speech_seconds,
+        min_transcript_length=min_transcript_length,
+        cancel_phrases=cancel_phrases,
     )
 
 
@@ -708,6 +762,22 @@ def _optional_text_value(env: Mapping[str, str], name: str) -> str | None:
         return None
     value = raw_value.strip()
     return value or None
+
+
+def _text_list_value(
+    env: Mapping[str, str],
+    name: str,
+    default: Sequence[str],
+    errors: list[str],
+) -> tuple[str, ...]:
+    raw_value = env.get(name)
+    if raw_value is None or raw_value.strip() == "":
+        return tuple(default)
+    values = tuple(part.strip() for part in raw_value.split(",") if part.strip())
+    if not values:
+        errors.append(f"{name} must include at least one comma-separated phrase")
+        return tuple(default)
+    return values
 
 
 def _path_value(env: Mapping[str, str], name: str, default: Path, errors: list[str]) -> Path:

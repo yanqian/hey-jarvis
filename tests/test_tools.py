@@ -121,6 +121,24 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(chinese_route.params["intent"], "tomorrow")
         self.assertEqual(chinese_route.params["location"], "东京")
 
+    def test_weather_relative_location_uses_default_location(self):
+        for text in (
+            "今天这里天气怎么样",
+            "今天这边天气怎么样",
+            "今天我这里天气怎么样",
+            "本地天气如何",
+            "附近天气怎么样",
+            "weather nearby",
+            "weather in here",
+            "weather for current location",
+            "weather in the current location",
+        ):
+            with self.subTest(text=text):
+                route = route_text(text)
+
+                self.assertEqual(route.category, "weather")
+                self.assertNotIn("location", route.params)
+
     def test_routes_fx_with_english_and_chinese_aliases(self):
         route = route_text("convert 100 US dollars to Singapore dollars")
 
@@ -188,6 +206,29 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(route.params["intent"], "tomorrow")
         self.assertEqual(result.status, "success")
         self.assertIn("Tomorrow in Singapore, Singapore", answer)
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
+    def test_relative_weather_answer_path_uses_default_location(self):
+        chat_client = FakeChatClient()
+        client = FakeJsonClient([weather_geocoding_response(), weather_daily_response()])
+        history = []
+
+        answer, route, result = answer_with_tools(
+            "今天这里天气怎么样",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            provider_config=ProviderConfig(default_location="Singapore"),
+            http_client=client,
+        )
+
+        self.assertEqual(route.category, "weather")
+        self.assertEqual(route.params["intent"], "today")
+        self.assertNotIn("location", route.params)
+        self.assertEqual(client.calls[0][1]["name"], "Singapore")
+        self.assertEqual(result.status, "success")
+        self.assertIn("Today in Singapore, Singapore", answer)
         self.assertEqual(chat_client.calls, [])
         self.assertEqual(history, [])
 
@@ -325,6 +366,9 @@ class ToolRoutingTests(unittest.TestCase):
 
         self.assertEqual(route.category, "weather")
         self.assertEqual(result.status, "error")
+        self.assertEqual(result.data["query"], "weather in Atlantis")
+        self.assertEqual(result.data["intent"], "current")
+        self.assertEqual(result.data["attempted_location"], "atlantis")
         self.assertIn("could not get weather data", answer)
         self.assertEqual(chat_client.calls, [])
         self.assertEqual(history, [])

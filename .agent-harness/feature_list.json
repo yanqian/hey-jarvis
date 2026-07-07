@@ -557,6 +557,133 @@
         "F025",
         "F026"
       ]
+    },
+    {
+      "id": "F028",
+      "title": "Fix ambiguous weather location handling",
+      "description": "Fix weather routing so relative or ambiguous location phrases fall back to DEFAULT_LOCATION instead of being sent to Open-Meteo geocoding as concrete places, and make provider failures log safe route context for diagnosis.",
+      "acceptance": [
+        "Weather routing preserves concrete English and Chinese locations such as Tokyo or 东京 while treating relative phrases such as here, current location, 这里, 这边, 本地, and nearby as omitted locations.",
+        "Weather requests with omitted or relative locations use configured DEFAULT_LOCATION through the existing Open-Meteo provider path without adding GPS, OS location access, or live-network automated tests.",
+        "Structured provider error ToolResult data retains safe route context such as query, intent, attempted location, provider_error, and status_code where available, without including secrets.",
+        "State-machine provider-error logs include safe tool route params and result data so future no_location_match failures reveal the attempted location without requiring TOOL_ROUTER_DEBUG.",
+        "Focused mocked tests cover relative-location fallback, concrete-location preservation, provider-error context, weather answer-path behavior, and final ./init.sh recovery verification."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F024",
+        "F027"
+      ]
+    },
+    {
+      "id": "F029",
+      "title": "Cancel false wakes before AI response",
+      "description": "Add a post-wake ARMED intent-confirmation state and local speech/transcript gates so false or accidental wake events return quietly to WAIT_WAKE instead of completing a full OpenAI answer and TTS playback cycle.",
+      "acceptance": [
+        "Configuration loads and documents conservative defaults for the armed no-speech timeout, armed voice threshold, minimum valid speech duration, minimum transcript length, and English/Chinese cancel phrases without adding new runtime dependencies.",
+        "After wake detection and optional acknowledgement playback/drain, the state machine enters ARMED and returns to WAIT_WAKE without recording, transcription, chat/tool routing, TTS, playback, or chat-history changes when no speech is detected before the configured timeout.",
+        "When speech is detected within ARMED, the existing successful voice loop still records the user request, transcribes it, routes or asks OpenAI, synthesizes speech, plays the answer, and applies existing post-playback suppression.",
+        "Too-short or effectively silent recordings, empty or filler transcripts, and configured cancel phrases such as 取消, 没事, 不用了, 算了, stop, cancel, and never mind are treated as local cancellation and return to WAIT_WAKE without AI answer generation or TTS playback.",
+        "Focused fake-audio tests, documentation tests, fake-backend smoke coverage, run evidence, and final ./init.sh recovery verification prove false wakes cancel quietly and normal requests still work without real microphone, speaker, OpenAI, or live network access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F016",
+        "F018",
+        "F021"
+      ]
+    },
+    {
+      "id": "F030",
+      "title": "Make cancel phrases robust in noisy environments",
+      "description": "Improve local cancellation so short cancel phrases still return to WAIT_WAKE when transcription includes trailing noise artifacts, while guarding against legitimate requests that merely begin with a cancel word.",
+      "acceptance": [
+        "Transcript cancellation handles exact configured cancel phrases and conservative short cancel-prefixed variants such as 没事了, 没事不用了, 没事 谢谢, 没事 后面有声音, 取消吧, 算了算了, stop, cancel, and never mind without calling chat/tool routing, TTS, playback, or mutating chat history.",
+        "Legitimate requests that include a cancel word but continue into a real command, such as 没事的话帮我查天气 or 取消我明天的闹钟, are not locally cancelled by the noisy-cancel heuristic.",
+        "Local cancellation logs include enough safe context to diagnose match behavior, such as normalized transcript and match mode, without logging secrets or audio data.",
+        "The implementation remains deterministic and dependency-free, does not add VAD, streaming STT, wake-word changes, recorder threshold changes, or live-network/audio requirements to automated tests.",
+        "Focused tests cover exact cancel, noisy short cancel variants, non-cancel guard phrases, state-machine no-chat/no-TTS/no-history behavior, documentation/manual-test updates, and final ./init.sh recovery verification."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F029"
+      ]
+    },
+    {
+      "id": "F031",
+      "title": "Suppress wake detection after local cancellation",
+      "description": "Prevent local cancellation paths such as cancel phrases or armed no-speech timeouts from immediately re-entering wake detection on residual acknowledgement, user, or wake-model audio and looping through acknowledgement playback.",
+      "acceptance": [
+        "After transcript-level local cancellation such as 算了算了, the assistant suppresses wake detection and waits for observed quiet before becoming wake-ready, so wake-positive residual chunks do not cause an immediate second ACK_PLAYING cycle.",
+        "After ARMED no-speech local cancellation, the same post-cancel suppression prevents repeated wake/acknowledgement loops when residual wake-positive chunks remain in the microphone stream or wake detector state.",
+        "The fix preserves F029/F030 cancellation guarantees: local cancellation still skips chat/tool routing, answer TTS, answer playback, and chat-history mutation, and normal successful answer playback still uses the existing post-playback suppression path.",
+        "Suppression behavior is logged with safe context such as cancellation reason, discarded chunk counts, quiet-gate status, and maximum suppressed wake score, without logging secrets or raw audio.",
+        "Focused fake-audio tests and documentation/manual-test updates cover the reported hey jarvis -> acknowledgement -> 算了算了 loop, no-speech cancellation loops, later intentional wake after quiet, and final ./init.sh recovery verification without live microphone, OpenAI, speaker, or network access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F029",
+        "F030"
+      ]
+    },
+    {
+      "id": "F032",
+      "title": "Cover common spoken Chinese cancel variants",
+      "description": "Expand deterministic local cancellation to common spoken Chinese cancel variants that real STT can produce, such as 不用啦, 不用不用了, 不要了, 没事儿, and 没事没事儿, while preserving command-like guard phrases and adding safe diagnostics for missed short transcripts.",
+      "acceptance": [
+        "Transcript-level cancellation handles common short Chinese spoken cancel variants including 不用了, 不用啦, 不用不用, 不用不用了, 不用了谢谢, 不要了, 没事儿, 没事没事儿, and 没事儿没事儿 without calling chat/tool routing, answer TTS, playback, or mutating chat history.",
+        "Command-like continuations that begin with or contain cancel-like words, such as 不用了帮我查天气, 没事的话帮我查天气, 取消我明天的闹钟, and 不要取消我明天的闹钟, are not locally cancelled by the expanded matcher.",
+        "When a short transcript is not locally cancelled, logs include safe diagnostic context such as normalized transcript, compact form, and match decision, without logging secrets or audio data.",
+        "The implementation remains deterministic and dependency-free, does not add VAD, streaming STT, wake-word changes, recorder threshold changes, live-network/audio requirements, or general NLP intent classification.",
+        "Focused tests and documentation/manual-test updates cover colloquial cancel variants, command guards, no-chat/no-TTS/no-playback/no-history behavior, F031 post-cancellation path compatibility, and final ./init.sh recovery verification."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F029",
+        "F030",
+        "F031"
+      ]
+    },
+    {
+      "id": "F033",
+      "title": "Stop recording promptly in steady background noise",
+      "description": "Improve recorder end-of-speech detection so short user requests stop near SILENCE_SECONDS despite low or moderate steady background noise, instead of waiting until MAX_RECORD_SECONDS.",
+      "acceptance": [
+        "Configuration loads and documents a RECORDING_SILENCE_RMS setting with a conservative default near the existing ARMED voice threshold, supports environment overrides, and rejects invalid negative values.",
+        "Question recording passes the configured recording silence threshold from settings into the recorder without changing wake-word detection, ARMED speech detection, transcription, chat/tool routing, TTS, or playback behavior.",
+        "Recorder silence stopping uses a window-tolerant rule so steady background noise below the configured threshold and occasional noisy chunks do not reset end-of-speech indefinitely, while speech-like chunks still extend recording.",
+        "MAX_RECORD_SECONDS remains a safety cap for genuinely non-silent input, and recording results/logs preserve clear stopped_by values such as silence and max_duration without logging raw audio or secrets.",
+        "Focused config, recorder, state-machine wiring, documentation/manual-test tests, synthetic PCM fixtures, and final ./init.sh recovery verification prove 4-5 second utterances stop promptly in noisy-background scenarios without live microphone, OpenAI, speaker, or network access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F003",
+        "F029"
+      ]
     }
   ]
 }

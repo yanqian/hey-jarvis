@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import math
+import re
+import wave
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -23,6 +25,7 @@ DEFAULT_OUTPUT_MP3 = Path("tmp/output.mp3")
 class AssistantState(Enum):
     WAIT_WAKE = "WAIT_WAKE"
     ACK_PLAYING = "ACK_PLAYING"
+    ARMED = "ARMED"
     RECORDING = "RECORDING"
     TRANSCRIBE = "TRANSCRIBE"
     ASK_OPENAI = "ASK_OPENAI"
@@ -67,6 +70,15 @@ class AssistantLoopResult:
     answer: str
     final_state: AssistantState
     error: str | None = None
+    cancelled: bool = False
+    cancellation_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class _TranscriptCancellationMatch:
+    reason: str
+    normalized_transcript: str
+    match_mode: str
 
 
 class VoiceAssistantStateMachine:
@@ -114,21 +126,43 @@ class VoiceAssistantStateMachine:
             )
             self._drain_wake_acknowledgement_audio()
 
+        self._set_state(AssistantState.ARMED)
+        speech_start_chunk = self._wait_for_armed_speech()
+        if speech_start_chunk is None:
+            return self._cancel_to_wait_wake("no_speech_after_wake")
+
         self._set_state(AssistantState.RECORDING)
-        recording = self._record_question()
+        recording = self._record_question(initial_chunk=speech_start_chunk)
         self._logger.info(
             "State RECORDING: wrote %s chunks to %s; stopped_by=%s",
             recording.chunks_recorded,
             recording.path,
             recording.stopped_by,
         )
+        recording_cancel_reason = self._recording_cancellation_reason(recording)
+        if recording_cancel_reason is not None:
+            return self._cancel_to_wait_wake(recording_cancel_reason, recording=recording)
 
         self._set_state(AssistantState.TRANSCRIBE)
         try:
             transcription = self.openai_client.transcribe_audio(str(recording.path))
         except OpenAIClientError as exc:
+            if _is_empty_transcription_error(exc):
+                return self._cancel_to_wait_wake("empty_transcript", recording=recording)
             return self._recover_from_openai_error(recording, exc)
         self._logger.info("State TRANSCRIBE: received transcription")
+        transcript_cancel_match = self._transcript_cancellation_match(transcription)
+        if transcript_cancel_match is not None:
+            self._logger.info(
+                "State TRANSCRIBE: transcript cancellation normalized_transcript=%r match_mode=%s",
+                transcript_cancel_match.normalized_transcript,
+                transcript_cancel_match.match_mode,
+            )
+            return self._cancel_to_wait_wake(
+                transcript_cancel_match.reason,
+                recording=recording,
+                transcription=transcription,
+            )
 
         self._set_state(AssistantState.ASK_OPENAI)
         try:
@@ -153,12 +187,22 @@ class VoiceAssistantStateMachine:
         if tool_result is None:
             self._logger.info("State ASK_OPENAI: received assistant answer")
         else:
-            self._logger.info(
-                "State ASK_OPENAI: tool route=%s status=%s summary=%s",
-                tool_route.category,
-                tool_result.status,
-                tool_result.summary,
-            )
+            if tool_result.status == "error":
+                self._logger.info(
+                    "State ASK_OPENAI: tool route=%s status=%s summary=%s params=%s data=%s",
+                    tool_route.category,
+                    tool_result.status,
+                    tool_result.summary,
+                    dict(tool_route.params),
+                    dict(tool_result.data),
+                )
+            else:
+                self._logger.info(
+                    "State ASK_OPENAI: tool route=%s status=%s summary=%s",
+                    tool_route.category,
+                    tool_result.status,
+                    tool_result.summary,
+                )
 
         self._set_state(AssistantState.TTS)
         try:
@@ -205,6 +249,27 @@ class VoiceAssistantStateMachine:
             answer=answer,
             final_state=self.state,
             error=str(exc),
+        )
+
+    def _cancel_to_wait_wake(
+        self,
+        reason: str,
+        *,
+        recording: RecordingResult | None = None,
+        transcription: str = "",
+    ) -> AssistantLoopResult:
+        self._logger.info("State %s: local cancellation reason=%s", self.state.value, reason)
+        self._set_state(AssistantState.WAIT_WAKE)
+        self._drain_post_cancellation_audio(reason=reason)
+        self._logger.info("State WAIT_WAKE: ready for the next wake word")
+        return AssistantLoopResult(
+            recording_path=recording.path if recording is not None else self.input_path,
+            output_path=self.output_path,
+            transcription=transcription,
+            answer="",
+            final_state=self.state,
+            cancelled=True,
+            cancellation_reason=reason,
         )
 
     def _wait_for_wake_word(self) -> None:
@@ -258,15 +323,102 @@ class VoiceAssistantStateMachine:
         )
         return detected
 
-    def _record_question(self) -> RecordingResult:
+    def _wait_for_armed_speech(self) -> bytes | None:
+        timeout_seconds = self.settings.armed_no_speech_timeout_seconds
+        minimum_chunk_seconds = 1.0 / self.settings.sample_rate
+        elapsed_seconds = 0.0
+        chunks_checked = 0
+        self._logger.info(
+            "State ARMED: waiting up to %.2fs for speech above %.1f RMS",
+            timeout_seconds,
+            self.settings.armed_voice_rms,
+        )
+
+        while elapsed_seconds < timeout_seconds:
+            chunk = self.audio_source.read_chunk()
+            chunks_checked += 1
+            elapsed_seconds += max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+            if getattr(self.audio_source, "last_overflowed", False):
+                self._logger.info("State ARMED: ignoring overflowed microphone chunk")
+                continue
+            rms, _ = pcm_rms_and_peak(chunk)
+            if rms >= self.settings.armed_voice_rms:
+                self._logger.info(
+                    "State ARMED: speech detected after %.2fs using %s chunks; rms=%.1f",
+                    elapsed_seconds,
+                    chunks_checked,
+                    rms,
+                )
+                return chunk
+
+        self._logger.info(
+            "State ARMED: no speech detected in %.2fs using %s chunks",
+            elapsed_seconds,
+            chunks_checked,
+        )
+        return None
+
+    def _record_question(self, *, initial_chunk: bytes | None = None) -> RecordingResult:
+        source = self.audio_source
+        if initial_chunk is not None:
+            source = _PreloadedChunkSource(initial_chunk, self.audio_source)
         return self.record_audio(
-            self.audio_source,
+            source,
             sample_rate=self.settings.sample_rate,
             silence_seconds=self.settings.silence_seconds,
             max_record_seconds=self.settings.max_record_seconds,
+            silence_threshold=self.settings.recording_silence_rms,
             output_path=self.input_path,
             logger=self._logger,
         )
+
+    def _recording_cancellation_reason(self, recording: RecordingResult) -> str | None:
+        if recording.chunks_recorded <= 0:
+            return "empty_recording"
+        if recording.duration_seconds < self.settings.min_valid_speech_seconds:
+            return "too_short_recording"
+
+        voice_duration = _wav_voice_duration_seconds(
+            recording.path,
+            sample_rate=self.settings.sample_rate,
+            voice_rms=self.settings.armed_voice_rms,
+        )
+        if voice_duration < self.settings.min_valid_speech_seconds:
+            return "silent_recording"
+        return None
+
+    def _transcript_cancellation_match(self, transcription: str) -> _TranscriptCancellationMatch | None:
+        normalized = _normalize_transcript(transcription)
+        compact = normalized.replace(" ", "")
+        if not compact:
+            return _TranscriptCancellationMatch("empty_transcript", normalized, "empty")
+        if compact in _FILLER_TRANSCRIPTS:
+            return _TranscriptCancellationMatch("filler_transcript", normalized, "filler")
+
+        for phrase in self.settings.cancel_phrases:
+            normalized_phrase = _normalize_transcript(phrase)
+            phrase_compact = normalized_phrase.replace(" ", "")
+            if not phrase_compact:
+                continue
+            if normalized == normalized_phrase or compact == phrase_compact:
+                return _TranscriptCancellationMatch("cancel_phrase", normalized, "exact")
+            if _is_noisy_cancel_variant(
+                compact,
+                phrase_compact,
+                self.settings.cancel_phrases,
+            ):
+                return _TranscriptCancellationMatch("cancel_phrase", normalized, "noisy_suffix")
+        if _is_colloquial_chinese_cancel_variant(compact):
+            return _TranscriptCancellationMatch("cancel_phrase", normalized, "colloquial_variant")
+        if len(compact) < self.settings.min_transcript_length:
+            return _TranscriptCancellationMatch("short_transcript", normalized, "short")
+        if len(compact) <= _SHORT_TRANSCRIPT_DIAGNOSTIC_MAX_COMPACT_LENGTH:
+            self._logger.info(
+                "State TRANSCRIBE: transcript cancellation check normalized_transcript=%r compact_transcript=%r match_decision=not_cancelled",
+                normalized,
+                compact,
+            )
+        return None
 
     def _drain_wake_acknowledgement_audio(self) -> None:
         drain_seconds = self.settings.wake_acknowledgement_drain_seconds
@@ -324,6 +476,50 @@ class VoiceAssistantStateMachine:
             minimum_chunk_seconds=minimum_chunk_seconds,
         )
 
+    def _drain_post_cancellation_audio(self, *, reason: str) -> None:
+        cooldown_seconds = self.settings.post_playback_wake_cooldown_seconds
+        quiet_seconds_required = self.settings.post_playback_quiet_seconds
+        max_suppression_seconds = self.settings.post_playback_max_suppression_seconds
+        if cooldown_seconds <= 0 and quiet_seconds_required <= 0:
+            return
+
+        minimum_chunk_seconds = 1.0 / self.settings.sample_rate
+        expected_frame_seconds = _detector_frame_seconds(self.wake_detector, self.settings.sample_rate)
+        max_chunks = max(1, math.ceil(cooldown_seconds / expected_frame_seconds))
+        drained_seconds = 0.0
+        drained_chunks = 0
+        max_scores: list[float] = []
+
+        self._logger.info(
+            "State WAIT_WAKE: suppressing post-cancellation wake detection reason=%s for %.2fs",
+            reason,
+            cooldown_seconds,
+        )
+        while drained_chunks < max_chunks and drained_seconds < cooldown_seconds:
+            chunk = self.audio_source.read_chunk()
+            drained_chunks += 1
+            drained_seconds += max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+            score = self._suppressed_wake_score(
+                chunk,
+                overflowed=bool(getattr(self.audio_source, "last_overflowed", False)),
+                context="post-cancellation",
+            )
+            if score is not None:
+                max_scores.append(score)
+
+        self._logger.info(
+            "State WAIT_WAKE: discarded %s post-cancellation microphone chunks reason=%s max_suppressed_score=%.9f",
+            drained_chunks,
+            reason,
+            max(max_scores, default=0.0),
+        )
+        self._wait_for_post_cancellation_quiet(
+            reason=reason,
+            drained_seconds=drained_seconds,
+            minimum_chunk_seconds=minimum_chunk_seconds,
+            max_scores=max_scores,
+        )
+
     def _wait_for_post_playback_quiet(self, *, drained_seconds: float, minimum_chunk_seconds: float) -> None:
         quiet_seconds_required = self.settings.post_playback_quiet_seconds
         if quiet_seconds_required <= 0:
@@ -370,9 +566,64 @@ class VoiceAssistantStateMachine:
             max_score,
         )
 
-    def _suppressed_wake_score(self, chunk: bytes, *, overflowed: bool) -> float | None:
+    def _wait_for_post_cancellation_quiet(
+        self,
+        *,
+        reason: str,
+        drained_seconds: float,
+        minimum_chunk_seconds: float,
+        max_scores: list[float],
+    ) -> None:
+        quiet_seconds_required = self.settings.post_playback_quiet_seconds
+        if quiet_seconds_required <= 0:
+            return
+
+        max_suppression_seconds = self.settings.post_playback_max_suppression_seconds
+        quiet_seconds = 0.0
+        suppressed_chunks = 0
+        self._logger.info(
+            "State WAIT_WAKE: waiting for %.2fs of post-cancellation quiet audio reason=%s",
+            quiet_seconds_required,
+            reason,
+        )
+
+        while quiet_seconds < quiet_seconds_required:
+            if max_suppression_seconds > 0 and drained_seconds >= max_suppression_seconds:
+                self._logger.warning(
+                    "State WAIT_WAKE: post-cancellation quiet gate reached %.2fs maximum suppression before quiet reason=%s",
+                    max_suppression_seconds,
+                    reason,
+                )
+                break
+
+            chunk = self.audio_source.read_chunk()
+            chunk_seconds = max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+            drained_seconds += chunk_seconds
+            suppressed_chunks += 1
+
+            overflowed = bool(getattr(self.audio_source, "last_overflowed", False))
+            score = self._suppressed_wake_score(chunk, overflowed=overflowed, context="post-cancellation")
+            if score is not None:
+                max_scores.append(score)
+            rms, _ = pcm_rms_and_peak(chunk)
+            wake_score_is_quiet = score is None or score < self.settings.wake_threshold
+            if not overflowed and rms <= self.settings.post_playback_quiet_rms and wake_score_is_quiet:
+                quiet_seconds += chunk_seconds
+            else:
+                quiet_seconds = 0.0
+
+        max_score = max(max_scores, default=0.0)
+        self._logger.info(
+            "State WAIT_WAKE: post-cancellation quiet gate consumed %s chunks reason=%s quiet=%.2fs max_suppressed_score=%.9f",
+            suppressed_chunks,
+            reason,
+            quiet_seconds,
+            max_score,
+        )
+
+    def _suppressed_wake_score(self, chunk: bytes, *, overflowed: bool, context: str = "post-playback") -> float | None:
         if overflowed:
-            self._logger.info("State WAIT_WAKE: suppressing overflowed post-playback microphone chunk")
+            self._logger.info("State WAIT_WAKE: suppressing overflowed %s microphone chunk", context)
             return None
 
         score_method = getattr(self.wake_detector, "score", None)
@@ -408,3 +659,153 @@ def _detector_frame_seconds(wake_detector: object, sample_rate: int) -> float:
     if sample_rate <= 0 or frame_length <= 0:
         return 0.08
     return frame_length / sample_rate
+
+
+class _PreloadedChunkSource:
+    def __init__(self, first_chunk: bytes, source: ChunkSource) -> None:
+        self._first_chunk = first_chunk
+        self._source = source
+        self._used_first_chunk = False
+
+    @property
+    def last_overflowed(self) -> bool:
+        if not self._used_first_chunk:
+            return False
+        return bool(getattr(self._source, "last_overflowed", False))
+
+    def read_chunk(self) -> bytes:
+        if not self._used_first_chunk:
+            self._used_first_chunk = True
+            return self._first_chunk
+        return self._source.read_chunk()
+
+
+_FILLER_TRANSCRIPTS = {"um", "uh", "umm", "hmm", "hm", "嗯", "啊", "呃", "额"}
+_NOISY_CANCEL_SUFFIXES = {
+    "了",
+    "啦",
+    "吧",
+    "呀",
+    "啊",
+    "儿",
+    "哈",
+    "谢谢",
+    "多谢",
+    "不用",
+    "不用了",
+    "不用啦",
+    "不用吧",
+    "没事",
+    "没事了",
+    "取消",
+    "取消吧",
+    "算了",
+    "算了吧",
+    "please",
+    "thanks",
+    "thankyou",
+    "thx",
+    "now",
+    "it",
+    "that",
+    "有声音",
+    "有噪音",
+    "有杂音",
+    "后面有声音",
+    "背景有声音",
+    "背景噪音",
+}
+_COLLOQUIAL_CHINESE_CANCEL_SEGMENTS = {
+    "不用",
+    "不用了",
+    "不用啦",
+    "不用吧",
+    "不要",
+    "不要了",
+    "不要啦",
+    "不要吧",
+    "没事",
+    "没事了",
+    "没事儿",
+    "没事啦",
+    "没事吧",
+}
+_SHORT_TRANSCRIPT_DIAGNOSTIC_MAX_COMPACT_LENGTH = 12
+
+
+def _normalize_transcript(text: str) -> str:
+    lowered = text.strip().lower()
+    normalized = re.sub(r"[^\w\u4e00-\u9fff]+", " ", lowered)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _is_noisy_cancel_variant(transcript_compact: str, phrase_compact: str, cancel_phrases: tuple[str, ...]) -> bool:
+    if not transcript_compact.startswith(phrase_compact):
+        return False
+    suffix = transcript_compact[len(phrase_compact) :]
+    if not suffix:
+        return True
+    if suffix in _NOISY_CANCEL_SUFFIXES:
+        return True
+
+    compact_cancel_phrases = {
+        _normalize_transcript(phrase).replace(" ", "")
+        for phrase in cancel_phrases
+        if _normalize_transcript(phrase).replace(" ", "")
+    }
+    return _is_made_of_cancel_segments(suffix, compact_cancel_phrases)
+
+
+def _is_colloquial_chinese_cancel_variant(transcript_compact: str) -> bool:
+    if not transcript_compact:
+        return False
+    return _is_made_of_exact_segments(transcript_compact, _COLLOQUIAL_CHINESE_CANCEL_SEGMENTS)
+
+
+def _is_made_of_cancel_segments(text: str, segments: set[str]) -> bool:
+    if not text:
+        return True
+    for segment in sorted(segments | _NOISY_CANCEL_SUFFIXES, key=len, reverse=True):
+        if text.startswith(segment) and _is_made_of_cancel_segments(text[len(segment) :], segments):
+            return True
+    return False
+
+
+def _is_made_of_exact_segments(text: str, segments: set[str]) -> bool:
+    if not text:
+        return True
+    for segment in sorted(segments, key=len, reverse=True):
+        if text.startswith(segment) and _is_made_of_exact_segments(text[len(segment) :], segments):
+            return True
+    return False
+
+
+def _is_empty_transcription_error(exc: OpenAIClientError) -> bool:
+    message = str(exc).lower()
+    return "transcription" in message and "empty" in message
+
+
+def _wav_voice_duration_seconds(path: Path, *, sample_rate: int, voice_rms: float) -> float:
+    if not path.is_file():
+        return 0.0
+
+    try:
+        with wave.open(str(path), "rb") as wav_file:
+            channels = max(1, wav_file.getnchannels())
+            sample_width = wav_file.getsampwidth()
+            frame_rate = wav_file.getframerate() or sample_rate
+            window_frames = max(1, min(1280, frame_rate))
+            voice_seconds = 0.0
+            while True:
+                pcm = wav_file.readframes(window_frames)
+                if not pcm:
+                    break
+                if sample_width != 2:
+                    continue
+                rms, _ = pcm_rms_and_peak(pcm)
+                if rms >= voice_rms:
+                    frame_count = len(pcm) / (sample_width * channels)
+                    voice_seconds += frame_count / frame_rate
+            return voice_seconds
+    except wave.Error:
+        return 0.0

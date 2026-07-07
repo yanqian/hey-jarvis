@@ -206,7 +206,11 @@ class ToolProviderTests(unittest.TestCase):
         self.assertEqual(caught.exception.kind, "malformed_json")
 
     def test_provider_error_maps_to_recoverable_tool_result(self):
-        route = ToolRoute("weather", "weather_provider", {"query": "weather"})
+        route = ToolRoute(
+            "weather",
+            "weather_provider",
+            {"query": "weather in Atlantis", "location": "Atlantis", "attempted_location": "Atlantis"},
+        )
         error = ProviderError("timeout", "provider request timed out")
 
         result = provider_error_result(route, error)
@@ -214,6 +218,9 @@ class ToolProviderTests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertEqual(result.summary, "weather provider error: timeout")
         self.assertIn("could not get weather data", result.answer)
+        self.assertEqual(result.data["query"], "weather in Atlantis")
+        self.assertEqual(result.data["location"], "Atlantis")
+        self.assertEqual(result.data["attempted_location"], "Atlantis")
 
     def test_open_meteo_current_weather_success(self):
         client = FakeJsonClient([geocoding_response(), current_forecast_response()])
@@ -295,6 +302,29 @@ class ToolProviderTests(unittest.TestCase):
 
         self.assertEqual(result.status, "error")
         self.assertEqual(result.summary, "weather provider error: no_location_match")
+        self.assertEqual(result.data["provider_error"], "no_location_match")
+        self.assertEqual(result.data["location"], "Nowhere")
+        self.assertEqual(result.data["attempted_location"], "Nowhere")
+
+    def test_open_meteo_relative_location_failure_reports_attempted_default_location(self):
+        client = FakeJsonClient([{"results": []}])
+        route = ToolRoute("weather", "weather_provider", {"query": "今天这里天气怎么样", "intent": "today"})
+
+        from src.tools import execute_route
+
+        result = execute_route(
+            route,
+            provider_config=ProviderConfig(default_location="Singapore"),
+            http_client=client,
+        )
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.summary, "weather provider error: no_location_match")
+        self.assertEqual(client.calls[0][1]["name"], "Singapore")
+        self.assertEqual(result.data["query"], "今天这里天气怎么样")
+        self.assertEqual(result.data["intent"], "today")
+        self.assertEqual(result.data["attempted_location"], "Singapore")
+        self.assertEqual(result.data["location_source"], "default")
         self.assertEqual(result.data["provider_error"], "no_location_match")
 
     def test_open_meteo_missing_forecast_fields_returns_structured_error(self):

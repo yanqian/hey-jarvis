@@ -70,7 +70,17 @@ def run_fake_backend_smoke() -> int:
         acknowledgement_path.write_bytes(b"fake-ack")
         settings = replace(base_settings, wake_acknowledgement_audio_path=acknowledgement_path)
         microphone = _FakeMicrophone(
-            [_FAKE_SILENCE_CHUNK, _FAKE_WAKE_CHUNK, _FAKE_WAKE_CHUNK, _FAKE_SILENCE_CHUNK]
+            [
+                _FAKE_SILENCE_CHUNK,
+                _FAKE_WAKE_CHUNK,
+                _FAKE_WAKE_CHUNK,
+                _FAKE_SILENCE_CHUNK,
+                _FAKE_SILENCE_CHUNK,
+                _FAKE_SILENCE_CHUNK,
+                _FAKE_SILENCE_CHUNK,
+                _FAKE_SILENCE_CHUNK,
+                _FAKE_SPEECH_CHUNK,
+            ]
         )
         machine = VoiceAssistantStateMachine(
             settings=settings,
@@ -366,6 +376,7 @@ def configure_logging() -> None:
 
 _FAKE_SILENCE_CHUNK = b"\x00\x00" * OPENWAKEWORD_FRAME_SAMPLES
 _FAKE_WAKE_CHUNK = b"\x01\x00" * OPENWAKEWORD_FRAME_SAMPLES
+_FAKE_SPEECH_CHUNK = (2000).to_bytes(2, byteorder="little", signed=True) * OPENWAKEWORD_FRAME_SAMPLES
 
 
 class _FakeMicrophone:
@@ -425,8 +436,8 @@ def _fake_record_audio(
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
-        wav_file.writeframes(b"\x00\x00" * 160)
-    return RecordingResult(path=path, duration_seconds=0.01, chunks_recorded=1, stopped_by="fake_backend")
+        wav_file.writeframes(_FAKE_SPEECH_CHUNK * 4)
+    return RecordingResult(path=path, duration_seconds=0.32, chunks_recorded=4, stopped_by="fake_backend")
 
 
 def _print_live_wake_debug(

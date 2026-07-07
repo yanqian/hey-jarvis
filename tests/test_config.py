@@ -4,16 +4,22 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.config import (
+    DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS,
+    DEFAULT_ARMED_VOICE_RMS,
     DEFAULT_CHAT_MODEL,
+    DEFAULT_CANCEL_PHRASES,
     DEFAULT_ENABLE_TOOLS,
     DEFAULT_BASE_CURRENCY,
     DEFAULT_MAX_RECORD_SECONDS,
     DEFAULT_FX_PROVIDER,
     DEFAULT_LOCATION,
+    DEFAULT_MIN_TRANSCRIPT_LENGTH,
+    DEFAULT_MIN_VALID_SPEECH_SECONDS,
     DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
     DEFAULT_POST_PLAYBACK_QUIET_RMS,
     DEFAULT_POST_PLAYBACK_QUIET_SECONDS,
     DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS,
+    DEFAULT_RECORDING_SILENCE_RMS,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_SECONDS,
     DEFAULT_STOCK_PROVIDER,
@@ -59,6 +65,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_threshold, DEFAULT_WAKE_THRESHOLD)
         self.assertEqual(settings.silence_seconds, DEFAULT_SILENCE_SECONDS)
         self.assertEqual(settings.max_record_seconds, DEFAULT_MAX_RECORD_SECONDS)
+        self.assertEqual(settings.recording_silence_rms, DEFAULT_RECORDING_SILENCE_RMS)
         self.assertEqual(settings.sample_rate, DEFAULT_SAMPLE_RATE)
         self.assertEqual(settings.transcribe_model, DEFAULT_TRANSCRIBE_MODEL)
         self.assertEqual(settings.chat_model, DEFAULT_CHAT_MODEL)
@@ -87,6 +94,11 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.post_playback_quiet_rms, DEFAULT_POST_PLAYBACK_QUIET_RMS)
         self.assertEqual(settings.post_playback_max_suppression_seconds, DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS)
         self.assertEqual(settings.wake_confirmation_frames, DEFAULT_WAKE_CONFIRMATION_FRAMES)
+        self.assertEqual(settings.armed_no_speech_timeout_seconds, DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS)
+        self.assertEqual(settings.armed_voice_rms, DEFAULT_ARMED_VOICE_RMS)
+        self.assertEqual(settings.min_valid_speech_seconds, DEFAULT_MIN_VALID_SPEECH_SECONDS)
+        self.assertEqual(settings.min_transcript_length, DEFAULT_MIN_TRANSCRIPT_LENGTH)
+        self.assertEqual(settings.cancel_phrases, DEFAULT_CANCEL_PHRASES)
 
     def test_environment_overrides_are_typed(self):
         settings = load_settings(
@@ -99,6 +111,7 @@ class ConfigTests(unittest.TestCase):
                 "WAKE_THRESHOLD": "0.65",
                 "SILENCE_SECONDS": "2.25",
                 "MAX_RECORD_SECONDS": "30",
+                "RECORDING_SILENCE_RMS": "850",
                 "SAMPLE_RATE": "24000",
                 "TRANSCRIBE_MODEL": "transcribe-test",
                 "CHAT_MODEL": "chat-test",
@@ -126,6 +139,11 @@ class ConfigTests(unittest.TestCase):
                 "POST_PLAYBACK_QUIET_RMS": "650",
                 "POST_PLAYBACK_MAX_SUPPRESSION_SECONDS": "5",
                 "WAKE_CONFIRMATION_FRAMES": "3",
+                "ARMED_NO_SPEECH_TIMEOUT_SECONDS": "1.25",
+                "ARMED_VOICE_RMS": "900",
+                "MIN_VALID_SPEECH_SECONDS": "0.4",
+                "MIN_TRANSCRIPT_LENGTH": "3",
+                "CANCEL_PHRASES": "stop,no thanks,算了",
             },
             env_file=None,
         )
@@ -138,6 +156,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_threshold, 0.65)
         self.assertEqual(settings.silence_seconds, 2.25)
         self.assertEqual(settings.max_record_seconds, 30.0)
+        self.assertEqual(settings.recording_silence_rms, 850.0)
         self.assertEqual(settings.sample_rate, 24000)
         self.assertEqual(settings.transcribe_model, "transcribe-test")
         self.assertEqual(settings.chat_model, "chat-test")
@@ -165,6 +184,11 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.post_playback_quiet_rms, 650.0)
         self.assertEqual(settings.post_playback_max_suppression_seconds, 5.0)
         self.assertEqual(settings.wake_confirmation_frames, 3)
+        self.assertEqual(settings.armed_no_speech_timeout_seconds, 1.25)
+        self.assertEqual(settings.armed_voice_rms, 900.0)
+        self.assertEqual(settings.min_valid_speech_seconds, 0.4)
+        self.assertEqual(settings.min_transcript_length, 3)
+        self.assertEqual(settings.cancel_phrases, ("stop", "no thanks", "算了"))
 
     def test_env_file_values_are_loaded_and_environment_wins(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -195,6 +219,7 @@ class ConfigTests(unittest.TestCase):
                     "WAKE_INFERENCE_FRAMEWORK": "bad-framework",
                     "SILENCE_SECONDS": "10",
                     "MAX_RECORD_SECONDS": "5",
+                    "RECORDING_SILENCE_RMS": "-1",
                     "SAMPLE_RATE": "not-an-int",
                     "CHAT_MODEL": "",
                     "TTS_SPEED": "fast",
@@ -217,6 +242,10 @@ class ConfigTests(unittest.TestCase):
                     "POST_PLAYBACK_QUIET_RMS": "-1",
                     "POST_PLAYBACK_MAX_SUPPRESSION_SECONDS": "0.5",
                     "WAKE_CONFIRMATION_FRAMES": "0",
+                    "ARMED_NO_SPEECH_TIMEOUT_SECONDS": "-1",
+                    "ARMED_VOICE_RMS": "-1",
+                    "MIN_VALID_SPEECH_SECONDS": "-0.1",
+                    "MIN_TRANSCRIPT_LENGTH": "0",
                 },
                 env_file=None,
             )
@@ -226,6 +255,7 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("WAKE_BACKEND must be one of openwakeword", message)
         self.assertIn("WAKE_INFERENCE_FRAMEWORK must be one of tflite, onnx", message)
         self.assertIn("SAMPLE_RATE must be an integer", message)
+        self.assertIn("RECORDING_SILENCE_RMS must be at least 0.0", message)
         self.assertIn("CHAT_MODEL must not be empty", message)
         self.assertIn("TTS_SPEED must be a number", message)
         self.assertIn("ENABLE_TOOLS must be a boolean value", message)
@@ -246,6 +276,10 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("POST_PLAYBACK_QUIET_RMS must be at least 0.0", message)
         self.assertIn("POST_PLAYBACK_MAX_SUPPRESSION_SECONDS must be greater than or equal", message)
         self.assertIn("WAKE_CONFIRMATION_FRAMES must be at least 1", message)
+        self.assertIn("ARMED_NO_SPEECH_TIMEOUT_SECONDS must be at least 0.0", message)
+        self.assertIn("ARMED_VOICE_RMS must be at least 0.0", message)
+        self.assertIn("MIN_VALID_SPEECH_SECONDS must be at least 0.0", message)
+        self.assertIn("MIN_TRANSCRIPT_LENGTH must be at least 1", message)
         self.assertIn("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS", message)
 
     def test_tts_speed_range_is_validated(self):

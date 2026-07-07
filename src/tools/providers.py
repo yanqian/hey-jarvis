@@ -172,15 +172,30 @@ def provider_error_result(route: ToolRoute, error: ProviderError) -> ToolResult:
     """Map a provider exception to a recoverable tool result."""
 
     label = _route_label(route)
+    data: dict[str, str | float] = {
+        "category": route.category,
+        "provider_error": error.kind,
+        "status_code": float(error.status_code) if error.status_code is not None else "",
+    }
+    for key in (
+        "query",
+        "intent",
+        "location",
+        "attempted_location",
+        "location_source",
+        "symbol",
+        "amount",
+        "base",
+        "quote",
+    ):
+        value = route.params.get(key)
+        if value:
+            data[key] = str(value)
     return ToolResult(
         TOOL_STATUS_ERROR,
         f"{label} provider error: {error.kind}",
         f"I could not get {label} data: {error.message}",
-        {
-            "category": route.category,
-            "provider_error": error.kind,
-            "status_code": float(error.status_code) if error.status_code is not None else "",
-        },
+        data,
     )
 
 

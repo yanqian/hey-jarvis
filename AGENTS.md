@@ -23,6 +23,14 @@ Before planning, coding, evaluating, or resuming work:
 Full harness rules live in `.agent-harness/AGENTS.md`.
 Project-specific implementation should live in project-owned source and test paths, not in `.agent-harness/` unless the selected feature explicitly changes the harness.
 
+For one-feature implementation and evaluation, the orchestrator Makefile lives under `.agent-harness/`, not at the repository root. Use:
+
+```bash
+make -C .agent-harness work
+```
+
+Do not treat a missing root `make work` target as an orchestrator capability gap. Only use manual fallback after the `.agent-harness` orchestrator entrypoint or configured role adapters are actually unavailable, blocked, or explicitly bypassed by the user.
+
 Root `./init.sh` starts as harness verification only. Before a minspec exists, it proves the harness can plan and resume. After minspec acceptance, plan a runnable-skeleton feature that turns root `./init.sh` into the project recovery contract described in `.agent-harness/docs/project-recovery-init.md`.
 
 Spec Normalization rules live in `.agent-harness/docs/spec-normalization.md`. Planning must define goal, included scope, excluded scope, core flows, constraints, ambiguities or assumptions, required capabilities, implementation paths, and verification surface before appending feature entries.

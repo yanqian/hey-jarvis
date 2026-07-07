@@ -1,7 +1,12 @@
 .agent-harness/agent-provider.json
 .env
 .venv/
+.DS_Store
 __pycache__/
 *.pyc
+debug/
+tmp/*.wav
+tmp/*.mp3
+tmp/*.m4a
 tmp/input.wav
 tmp/output.mp3

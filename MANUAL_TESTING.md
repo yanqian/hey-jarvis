@@ -25,17 +25,21 @@ python -m src.main --prepare-acknowledgement
 
 ## Recording Behavior
 
-The MVP records after the wake word is detected, the acknowledgement plays, and
-the acknowledgement drain window completes. Recording then stops when either
-condition is reached:
+The MVP enters `ARMED` after the wake word is detected, the acknowledgement
+plays, and the acknowledgement drain window completes. Recording starts only
+after audio crosses `ARMED_VOICE_RMS`. If speech is not detected within
+`ARMED_NO_SPEECH_TIMEOUT_SECONDS`, the assistant returns to `WAIT_WAKE` without
+recording, transcription, chat/tool routing, TTS, or playback. Once recording
+starts, it stops when either condition is reached:
 
-- `SILENCE_SECONDS`, default `1.5`, of consecutive audio below the built-in RMS
-  silence threshold.
+- `SILENCE_SECONDS`, default `1.5`, of recent-window audio mostly below
+  `RECORDING_SILENCE_RMS`, default `750`.
 - `MAX_RECORD_SECONDS`, default `20`, total recording duration.
 
 This means recording is not expected to always wait for 20 seconds. It should
-stop shortly after the user finishes speaking. If a 10-15 second question is
-cut off early, check the runtime log line:
+stop shortly after the user finishes speaking, even with steady low or moderate
+background noise. If a 10-15 second question is cut off early, check the
+runtime log line:
 
 ```text
 State RECORDING: wrote ... chunks to tmp/input.wav; stopped_by=...
@@ -43,9 +47,9 @@ State RECORDING: wrote ... chunks to tmp/input.wav; stopped_by=...
 
 Interpretation:
 
-- `stopped_by=silence`: the recorder heard enough consecutive low-level audio
-  to treat the question as finished. This can happen during long pauses, when
-  the speaker is too quiet, or when the microphone level is low.
+- `stopped_by=silence`: the recorder heard enough recent low-level audio to
+  treat the question as finished. This can happen during long pauses, when the
+  speaker is too quiet, or when the microphone level is low.
 - `stopped_by=max_duration`: the question reached `MAX_RECORD_SECONDS`.
 - `stopped_by=source_exhausted`: the audio source ended unexpectedly; this is
   not expected during real microphone operation.
@@ -56,22 +60,24 @@ nearly silent, or missing the later part of the question, record the test as a
 failure and note the `stopped_by` value.
 
 If the recorder waits a long time after the user stops speaking, the room or
-microphone may still be above the built-in silence threshold, so the silence
-timer does not complete and recording continues until `MAX_RECORD_SECONDS`. If
-the recorder cuts off a long question, the opposite happened: a pause or
-low-volume section was counted as `SILENCE_SECONDS` of silence.
+microphone may still be above `RECORDING_SILENCE_RMS`, so the recent-window
+silence rule does not complete and recording continues until
+`MAX_RECORD_SECONDS`. If the recorder cuts off a long question, the opposite
+happened: a pause or low-volume section was counted as `SILENCE_SECONDS` of
+silence.
 
 For M003 retesting, temporarily try:
 
 ```text
 SILENCE_SECONDS=3.0
 MAX_RECORD_SECONDS=30
+RECORDING_SILENCE_RMS=750
 ```
 
 This gives long questions more room for natural pauses. If the question still
-cuts off with `stopped_by=silence`, record the result as a failure; the next
-product change should make recording silence behavior more observable and
-configurable.
+cuts off with `stopped_by=silence`, lower `RECORDING_SILENCE_RMS` only if the
+room is genuinely quiet and the speaker is loud enough; otherwise record the
+result as a failure.
 
 ## Acceptance Standard
 
@@ -104,7 +110,7 @@ The MVP is acceptable when:
 | M009 | Wake success rate | Try 10 clear `Hey Jarvis` wake attempts. | At least 8 attempts trigger. |
 | M010 | Natural stop | Ask a normal question, then stay quiet. | Recording stops after a short silence and logs `stopped_by=silence`. |
 | M011 | Max duration | Speak continuously longer than `MAX_RECORD_SECONDS`. | Recording stops with `stopped_by=max_duration`; process keeps running. |
-| M012 | Wake then silence | Say only `Hey Jarvis`, then remain silent. | Empty or unusable transcription is logged as recoverable and the assistant returns to `WAIT_WAKE`. |
+| M012 | Wake then silence | Say only `Hey Jarvis`, wait for acknowledgement, then remain silent. | Assistant enters `ARMED`, logs local cancellation such as `no_speech_after_wake`, and returns to `WAIT_WAKE` without recording, transcription, answer generation, TTS, or playback. |
 | M013 | Input WAV quality | After any question, inspect or play `tmp/input.wav`. | File contains the current question, in mono 16 kHz 16-bit WAV format, with usable volume. |
 | M014 | Temporary network failure | Disconnect network after wake and ask a question. | OpenAI failure is logged as recoverable and assistant returns to `WAIT_WAKE`. |
 | M015 | Invalid API key | Run with an invalid `OPENAI_API_KEY`. | Error is clear and does not leave the app in an ambiguous state. |
@@ -115,11 +121,15 @@ The MVP is acceptable when:
 | M020 | Playback overlap | Speak during answer playback. | Current MVP may not interrupt playback, but it should not crash. |
 | M021 | Restart recovery | Stop the process and start it again without cleaning `tmp/`. | Assistant starts normally and can complete another loop. |
 | M022 | Post-playback false wake | Complete a successful answer, then say nothing after playback finishes. | The assistant drains the post-playback microphone window, waits for quiet audio, stays in `WAIT_WAKE`, and does not enter `RECORDING`. |
-| M023 | Wake acknowledgement boundary | Say only `Hey Jarvis`, wait for acknowledgement, then remain silent. Inspect `tmp/input.wav`. | The acknowledgement plays from the prepared local file, the recorder starts only after the drain window, and `tmp/input.wav` does not contain the acknowledgement audio. |
+| M023 | Wake acknowledgement boundary | Say `Hey Jarvis`, wait for acknowledgement, then ask a normal question. Inspect `tmp/input.wav`. | The acknowledgement plays from the prepared local file, `ARMED` starts after the drain window, and `tmp/input.wav` contains the user question without acknowledgement audio. |
 | M024 | Open-Meteo weather | Run `python -m src.main --text "明天天气怎么样"` and `python -m src.main --text "weather in Tokyo today"` with network access. Optionally ask the same questions through the voice loop. | Text debug routes to `weather`, returns `result_status=success`, names `Open-Meteo`, uses `DEFAULT_LOCATION=Singapore` when no location is spoken, and does not fall back to chat speculation on provider errors. |
 | M025 | Frankfurter FX | Run `python -m src.main --text "100 USD to SGD"` and `python -m src.main --text "100美元兑人民币汇率是多少"` with network access. Optionally ask the same questions through the voice loop. | Text debug routes to `fx`, returns `result_status=success`, names Frankfurter, includes rate date and converted amount, says the answer is a reference rate rather than a bank cash or trade quote, and does not fall back to chat speculation on provider errors. |
 | M026 | Finnhub stock quote | Set `FINNHUB_API_KEY`, then run `python -m src.main --text "AAPL stock price"` and `python -m src.main --text "苹果股价多少"` with network access. Optionally ask the same questions through the voice loop. | Text debug routes to `stock`, returns `result_status=success`, uses symbol `AAPL`, names Finnhub, includes current price, change, percent change, timestamp, and market-data caveats, and does not fall back to chat speculation on provider errors. |
 | M027 | Tool answer naturalization | With `TOOL_ANSWER_NATURALIZATION=1`, ask successful weather, FX, and stock questions through the voice loop. Also run the same questions with `python -m src.main --text ...`. | Voice answers may be worded more naturally but preserve provider numbers, units, timestamps, sources, caveats, and advice disclaimers. Text debug prints `raw_answer` and `naturalization_status=not_run_text_debug` without calling OpenAI. Failures, realtime refusals, local time, and calculator answers remain raw. |
+| M028 | Cancel phrases | Say `Hey Jarvis`, wait for acknowledgement, then say `取消`, `没事`, `不用了`, `算了`, `stop`, `cancel`, or `never mind`. | Assistant treats the transcript as local cancellation and returns to `WAIT_WAKE` without chat/tool routing, answer TTS, playback, or chat-history changes. |
+| M030 | Noisy cancel phrases | Say `Hey Jarvis`, wait for acknowledgement, then say short noisy variants such as `没事了`, `没事不用了`, `没事 谢谢`, `没事 后面有声音`, `取消吧`, `算了算了`, or `stop please`. Then try `没事的话帮我查天气`, `取消我明天的闹钟`, or `cancel my alarm tomorrow`. | Short noisy cancel variants return to `WAIT_WAKE` without chat/tool routing, answer TTS, playback, or chat-history changes, and logs show `match_mode=noisy_suffix`. Command-like continuations are not locally cancelled. |
+| M031 | Post-cancel wake suppression | Say `Hey Jarvis`, wait for acknowledgement, then say `算了算了` or remain silent through the ARMED timeout. Say nothing while speaker/microphone residue settles, then later say `Hey Jarvis` again and ask a normal question. | Local cancellation logs post-cancellation suppression, discarded chunks, quiet-gate status, and `max_suppressed_score`; residual wake-positive chunks do not trigger a second acknowledgement loop, and the later intentional wake works after quiet. |
+| M032 | Spoken Chinese cancel variants | Say `Hey Jarvis`, wait for acknowledgement, then say `不用啦`, `不用不用`, `不用不用了`, `不要了`, `没事儿`, `没事没事儿`, or `没事儿没事儿`. Then try `不用了帮我查天气`, `没事的话帮我查天气`, `取消我明天的闹钟`, or `不要取消我明天的闹钟`. | Colloquial cancel variants return through local cancellation and F031 post-cancellation suppression without chat/tool routing, answer TTS, playback, or chat-history changes. Command-like continuations are not locally cancelled and short non-cancel transcripts log `match_decision=not_cancelled`. |
 
 ## Known Manual Failures
 
@@ -170,6 +180,29 @@ Increase `POST_PLAYBACK_QUIET_SECONDS` or
 `POST_PLAYBACK_MAX_SUPPRESSION_SECONDS` if the room or speaker echo stays loud
 after playback.
 
+### F031 Post-Cancel Residual Wake
+
+Observed failure after F030:
+
+```text
+State TRANSCRIBE: transcript cancellation normalized_transcript='算了算了' match_mode=noisy_suffix
+State TRANSCRIBE: local cancellation reason=cancel_phrase
+Transition TRANSCRIBE -> WAIT_WAKE
+State WAIT_WAKE: ready for the next wake word
+State WAIT_WAKE: listening for the hey jarvis wake word
+State WAIT_WAKE: wake word detected
+Transition WAIT_WAKE -> ACK_PLAYING
+State ACK_PLAYING: played wake acknowledgement from tmp/ack.mp3
+Transition ACK_PLAYING -> ARMED
+State ARMED: no speech detected
+```
+
+Expected retest after F031: after local cancellation, the app should log
+post-cancellation suppression and continue suppressing wake decisions until it
+observes quiet audio. Residual wake-positive chunks should appear in the
+`max_suppressed_score` summary and must not trigger another acknowledgement
+cycle. A fresh `Hey Jarvis` after the quiet gate should still wake normally.
+
 ## Running One Test At A Time
 
 For each manual test, record:
@@ -181,6 +214,9 @@ For each manual test, record:
 - Whether `tmp/input.wav` and `tmp/output.mp3` match the expected current run.
 - Any environment changes such as `SILENCE_SECONDS`, `MAX_RECORD_SECONDS`, or
   `WAKE_THRESHOLD`.
+- Any armed/cancellation settings such as `ARMED_NO_SPEECH_TIMEOUT_SECONDS`,
+  `ARMED_VOICE_RMS`, `MIN_VALID_SPEECH_SECONDS`, `MIN_TRANSCRIPT_LENGTH`, or
+  `CANCEL_PHRASES`.
 - Any post-playback settings such as `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS`,
   `POST_PLAYBACK_QUIET_SECONDS`, `POST_PLAYBACK_QUIET_RMS`,
   `POST_PLAYBACK_MAX_SUPPRESSION_SECONDS`, or `WAKE_CONFIRMATION_FRAMES`.

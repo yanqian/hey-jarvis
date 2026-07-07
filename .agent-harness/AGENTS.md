@@ -84,8 +84,10 @@ Default entrypoint:
 - For one-feature implementation and evaluation, use the orchestrator first:
 
   ```bash
-  make work
+  make -C .agent-harness work
   ```
+
+  In this hidden-layout repository, the orchestrator Makefile lives under `.agent-harness/`; do not treat a missing root `make work` target as an orchestrator capability gap.
 
 - Use manual or interactive Coding Agent work only as an explicit fallback when role adapters are not configured, unavailable, or the user explicitly asks for manual work.
 - Manual fallback must be recorded in `progress.md` or `runs/` and must not bypass evaluator pass, evaluator evidence, attempts, failure records, or final `./init.sh` verification.
@@ -379,5 +381,5 @@ python3 orchestrator.py --dry-run
 Default one-feature work uses:
 
 ```bash
-make work
+make -C .agent-harness work
 ```

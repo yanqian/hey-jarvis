@@ -58,6 +58,49 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual(result.stopped_by, "max_duration")
         self.assertAlmostEqual(result.duration_seconds, 0.3)
 
+    def test_record_to_wav_tolerates_occasional_noise_after_speech(self):
+        sample_rate = 16000
+        chunk_frames = 1600
+        speech = repeated_sample(1300, chunk_frames)
+        background = repeated_sample(650, chunk_frames)
+        short_noise = repeated_sample(900, chunk_frames)
+        chunks = [speech, speech, background, background, short_noise, background, background, speech]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = record_to_wav(
+                chunks,
+                sample_rate=sample_rate,
+                silence_seconds=0.5,
+                max_record_seconds=2.0,
+                silence_threshold=750,
+                output_path=Path(tmp_dir) / "input.wav",
+            )
+
+        self.assertEqual(result.chunks_recorded, 7)
+        self.assertEqual(result.stopped_by, "silence")
+        self.assertAlmostEqual(result.duration_seconds, 0.7)
+
+    def test_record_to_wav_speech_like_chunks_extend_recording(self):
+        sample_rate = 16000
+        chunk_frames = 1600
+        speech = repeated_sample(1300, chunk_frames)
+        background = repeated_sample(650, chunk_frames)
+        chunks = [speech, background, background, speech, background, background, background, background, background]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = record_to_wav(
+                chunks,
+                sample_rate=sample_rate,
+                silence_seconds=0.5,
+                max_record_seconds=2.0,
+                silence_threshold=750,
+                output_path=Path(tmp_dir) / "input.wav",
+            )
+
+        self.assertEqual(result.chunks_recorded, 9)
+        self.assertEqual(result.stopped_by, "silence")
+        self.assertAlmostEqual(result.duration_seconds, 0.9)
+
     def test_invalid_pcm_chunk_fails_before_writing(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(ValueError):
@@ -65,6 +108,15 @@ class RecorderTests(unittest.TestCase):
                     [b"\x00"],
                     silence_seconds=0.1,
                     max_record_seconds=1.0,
+                    output_path=Path(tmp_dir) / "input.wav",
+                )
+
+    def test_negative_silence_threshold_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(ValueError):
+                record_to_wav(
+                    [],
+                    silence_threshold=-1,
                     output_path=Path(tmp_dir) / "input.wav",
                 )
 

@@ -30,6 +30,11 @@ POST_PLAYBACK_QUIET_SECONDS=0.5
 POST_PLAYBACK_QUIET_RMS=500
 POST_PLAYBACK_MAX_SUPPRESSION_SECONDS=6.0
 WAKE_CONFIRMATION_FRAMES=2
+ARMED_NO_SPEECH_TIMEOUT_SECONDS=2.0
+ARMED_VOICE_RMS=750
+MIN_VALID_SPEECH_SECONDS=0.24
+MIN_TRANSCRIPT_LENGTH=2
+CANCEL_PHRASES=取消,没事,不用了,算了,stop,cancel,never mind
 ```
 
 Manual acceptance cases are tracked in [MANUAL_TESTING.md](MANUAL_TESTING.md).
@@ -117,9 +122,34 @@ the result is not trading advice.
 
 Wake acknowledgement playback is enabled by default. The assistant plays the
 prepared `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` file after `Hey Jarvis`, drains
-microphone residue for `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`, and then records
-the user's question. Normal wake handling reuses the local acknowledgement file
-and does not call TTS on every wake event.
+microphone residue for `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`, enters `ARMED`,
+and records only after local speech is detected. If no speech arrives within
+`ARMED_NO_SPEECH_TIMEOUT_SECONDS`, or the transcript is empty, filler, too
+short, or a configured `CANCEL_PHRASES` entry, the assistant returns to
+`WAIT_WAKE` without chat/tool routing, answer TTS, playback, or chat-history
+changes. Cancel matching also accepts conservative short noisy suffixes such
+as `没事了`, `没事不用了`, `没事 谢谢`, `没事 后面有声音`, `取消吧`, and
+`算了算了`, plus colloquial spoken variants such as `不用啦`, `不用不用`,
+`不用不用了`, `不要了`, `没事儿`, and `没事没事儿`, while command-like
+continuations such as `不用了帮我查天气`, `没事的话帮我查天气`,
+`取消我明天的闹钟`, `不要取消我明天的闹钟`, or `cancel my alarm tomorrow`
+continue to chat/tool routing. Transcript-cancel logs include the normalized
+transcript and `match_mode`; short non-cancel transcripts log safe
+`match_decision=not_cancelled` diagnostic context.
+After any local cancellation, including no speech after acknowledgement or a
+cancel transcript such as `算了算了`, the assistant suppresses wake detection
+with the same cooldown and observed-quiet settings used after answer playback.
+The cancellation path logs the reason, discarded chunk counts, quiet-gate
+status, and maximum suppressed wake score before it becomes wake-ready again.
+Normal wake handling reuses the local acknowledgement file and does not call
+TTS on every wake event.
+
+Question recording stops on `SILENCE_SECONDS` of recent-window audio mostly
+below `RECORDING_SILENCE_RMS`, default `750`, or on the `MAX_RECORD_SECONDS`
+safety cap. This keeps normal 4-5 second utterances from waiting for the full
+20 second maximum when the room has steady low or moderate background noise,
+while speech-like chunks still extend recording. Recording logs preserve
+`stopped_by=silence` and `stopped_by=max_duration` without logging raw audio.
 
 If the TFLite runtime is missing after installing requirements, run the same
 install command again from the active virtual environment and confirm
@@ -274,8 +304,9 @@ what is two plus two?
 ```
 
 The assistant should drain acknowledgement audio residue, record the question to
-`tmp/input.wav`, transcribe it, ask the configured chat model, write speech to
-`tmp/output.mp3`, play it with `afplay`, and return to `WAIT_WAKE`.
+`tmp/input.wav` after `ARMED` detects speech, transcribe it, ask the configured
+chat model or structured tool route, write speech to `tmp/output.mp3`, play it
+with `afplay`, and return to `WAIT_WAKE`.
 
 Stop the process with `Ctrl-C`.
 
@@ -336,3 +367,10 @@ Only start the real assistant after recovery and diagnostics pass.
   `POST_PLAYBACK_QUIET_SECONDS` enabled, keep `WAKE_CONFIRMATION_FRAMES` at `2`
   or higher, and increase the cooldown or quiet window if speaker echo still
   bleeds into the microphone.
+- Wake acknowledgement plays but no question is intended: keep
+  `ARMED_NO_SPEECH_TIMEOUT_SECONDS` enabled so the assistant cancels locally
+  before recording, transcription, answer generation, or TTS playback.
+- Wake acknowledgement repeats after a local cancellation: keep
+  `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` and `POST_PLAYBACK_QUIET_SECONDS`
+  enabled. Cancellation should log post-cancellation suppression and should not
+  enter another acknowledgement cycle until fresh wake audio arrives after quiet.

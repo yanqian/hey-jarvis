@@ -315,7 +315,17 @@ def _weather_result(
     try:
         return open_meteo_weather_result(route, provider_config=config, http_client=client)
     except ProviderError as exc:
-        return provider_error_result(route, exc)
+        return provider_error_result(_weather_error_context_route(route, config), exc)
+
+
+def _weather_error_context_route(route: ToolRoute, provider_config: object) -> ToolRoute:
+    params = dict(route.params)
+    attempted_location = str(params.get("location") or getattr(provider_config, "default_location", "")).strip()
+    if attempted_location:
+        params.setdefault("attempted_location", attempted_location)
+        if not params.get("location"):
+            params["location_source"] = "default"
+    return ToolRoute(route.category, route.tool_name, params, route.reason)
 
 
 def _fx_result(
@@ -486,15 +496,15 @@ def _extract_weather_location(text: str, normalized: str) -> str:
         normalized,
     )
     if english_match:
-        return _clean_weather_location(english_match.group(1))
+        return _normalize_weather_location_candidate(_clean_weather_location(english_match.group(1)))
 
     if re.search(r"[\u4e00-\u9fff]", text):
         location = text
         for marker in _WEATHER_CN_STOP_MARKERS:
             location = location.replace(marker, "")
         location = re.sub(r"[?？!！,，.。]", "", location)
-        location = _clean_weather_location(location)
-        if location and location not in {"怎么样", "如何", "多少", "几度", "會", "会"}:
+        location = _normalize_weather_location_candidate(_clean_weather_location(location))
+        if location:
             return location
 
     return ""
@@ -506,6 +516,15 @@ def _clean_weather_location(value: str) -> str:
     cleaned = re.sub(r"\b(weather|forecast|temperature|rain|raining|today|tomorrow|now|right now)\b", " ", cleaned)
     cleaned = " ".join(cleaned.split(" 的 "))
     return " ".join(cleaned.split()).strip(" ?!.，,。")
+
+
+def _normalize_weather_location_candidate(value: str) -> str:
+    location = value.strip()
+    if not location:
+        return ""
+    if location in _WEATHER_LOCATION_PLACEHOLDERS:
+        return ""
+    return location
 
 
 def _extract_fx_params(text: str) -> Mapping[str, str]:
@@ -834,6 +853,43 @@ _WEATHER_CN_STOP_MARKERS = (
     "吗",
     "嗎",
 )
+_WEATHER_LOCATION_PLACEHOLDERS = {
+    "here",
+    "there",
+    "local",
+    "locally",
+    "nearby",
+    "outside",
+    "my location",
+    "current location",
+    "this area",
+    "the area",
+    "這裡",
+    "这里",
+    "這邊",
+    "这边",
+    "本地",
+    "当地",
+    "當地",
+    "附近",
+    "周边",
+    "周邊",
+    "外面",
+    "家里",
+    "家裡",
+    "我这",
+    "我這",
+    "我这里",
+    "我這裡",
+    "我这边",
+    "我這邊",
+    "這兒",
+    "这儿",
+    "此地",
+    "目前所在地",
+    "当前位置",
+    "當前位置",
+}
 _FX_MARKERS = (
     "exchange rate",
     "currency exchange",

@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import logging
 import wave
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Protocol
 
-from .silence import SAMPLE_WIDTH_BYTES, is_silence
+from .silence import SAMPLE_WIDTH_BYTES, rms_level
 
 
 DEFAULT_INPUT_WAV = Path("tmp/input.wav")
 CHANNELS = 1
+SILENCE_WINDOW_QUIET_RATIO = 0.8
+SPEECH_LIKE_RMS_MULTIPLIER = 1.25
+SECONDS_EPSILON = 1e-9
 
 
 class ChunkReader(Protocol):
@@ -50,6 +54,8 @@ class Recorder:
             raise ValueError("max_record_seconds must be positive")
         if max_record_seconds <= silence_seconds:
             raise ValueError("max_record_seconds must be greater than silence_seconds")
+        if silence_threshold < 0:
+            raise ValueError("silence_threshold must be non-negative")
 
         self.source = source
         self.sample_rate = sample_rate
@@ -65,7 +71,8 @@ class Recorder:
 
         chunks: list[bytes] = []
         duration_seconds = 0.0
-        silent_seconds = 0.0
+        silence_window = _SilenceWindow(self.silence_seconds)
+        speech_like_threshold = self.silence_threshold * SPEECH_LIKE_RMS_MULTIPLIER
         stopped_by = "source_exhausted"
 
         while duration_seconds < self.max_record_seconds:
@@ -87,15 +94,16 @@ class Recorder:
             chunks.append(chunk)
             duration_seconds += chunk_seconds
 
-            if is_silence(chunk, self.silence_threshold):
-                silent_seconds += chunk_seconds
+            rms = rms_level(chunk)
+            if rms > speech_like_threshold:
+                silence_window.clear()
             else:
-                silent_seconds = 0.0
+                silence_window.add(chunk_seconds, quiet=rms <= self.silence_threshold)
 
             if duration_seconds >= self.max_record_seconds:
                 stopped_by = "max_duration"
                 break
-            if silent_seconds >= self.silence_seconds:
+            if silence_window.is_complete:
                 stopped_by = "silence"
                 break
 
@@ -151,3 +159,51 @@ def record_to_wav(
 def _validate_pcm_chunk(chunk: bytes) -> None:
     if len(chunk) % SAMPLE_WIDTH_BYTES != 0:
         raise ValueError("PCM chunks must contain complete int16 samples")
+
+
+class _SilenceWindow:
+    def __init__(self, target_seconds: float, quiet_ratio: float = SILENCE_WINDOW_QUIET_RATIO) -> None:
+        self.target_seconds = target_seconds
+        self.quiet_ratio = quiet_ratio
+        self._chunks: deque[tuple[float, bool]] = deque()
+        self._total_seconds = 0.0
+        self._quiet_seconds = 0.0
+
+    def clear(self) -> None:
+        self._chunks.clear()
+        self._total_seconds = 0.0
+        self._quiet_seconds = 0.0
+
+    def add(self, seconds: float, *, quiet: bool) -> None:
+        if seconds <= 0:
+            return
+        self._chunks.append((seconds, quiet))
+        self._total_seconds += seconds
+        if quiet:
+            self._quiet_seconds += seconds
+        self._trim()
+
+    @property
+    def is_complete(self) -> bool:
+        return (
+            self._total_seconds + SECONDS_EPSILON >= self.target_seconds
+            and self._quiet_seconds + SECONDS_EPSILON >= self.target_seconds * self.quiet_ratio
+        )
+
+    def _trim(self) -> None:
+        excess_seconds = self._total_seconds - self.target_seconds
+        while excess_seconds > 0 and self._chunks:
+            seconds, quiet = self._chunks[0]
+            if seconds <= excess_seconds:
+                self._chunks.popleft()
+                self._total_seconds -= seconds
+                if quiet:
+                    self._quiet_seconds -= seconds
+                excess_seconds -= seconds
+                continue
+
+            self._chunks[0] = (seconds - excess_seconds, quiet)
+            self._total_seconds -= excess_seconds
+            if quiet:
+                self._quiet_seconds -= excess_seconds
+            break
