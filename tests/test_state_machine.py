@@ -620,6 +620,52 @@ class StateMachineTests(unittest.TestCase):
         self.assertEqual(synthesized_text, "The answer is 4.")
         self.assertIn("tool route=calculator status=success", "\n".join(logs.output))
 
+    def test_traditional_chinese_local_tool_routes_skip_chat_history(self):
+        cases = (
+            ("現在幾點了", "The local time is", "tool route=time status=success"),
+            ("100減20是多少", "The answer is 80.", "tool route=calculator status=success"),
+        )
+
+        for transcription, expected_answer, expected_log in cases:
+            with self.subTest(transcription=transcription):
+                logger = logging.getLogger(f"tests.state_machine.traditional.{transcription}")
+                audio_source = FakeAudioSource()
+                wake_detector = FakeWakeDetector()
+                openai_client = FakeOpenAIClient(transcription=transcription)
+                player = FakePlayer()
+                history = []
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    input_path = Path(tmp_dir) / "input.wav"
+                    output_path = Path(tmp_dir) / "output.mp3"
+                    machine = VoiceAssistantStateMachine(
+                        settings=make_settings(
+                            enable_tools=True,
+                            post_playback_wake_cooldown_seconds=0,
+                            post_playback_quiet_seconds=0,
+                        ),
+                        audio_source=audio_source,
+                        wake_detector=wake_detector,
+                        openai_client=openai_client,
+                        player=player,
+                        history=history,
+                        record_audio=fake_record_audio,
+                        input_path=input_path,
+                        output_path=output_path,
+                        logger=logger,
+                    )
+
+                    with self.assertLogs(logger, level="INFO") as logs:
+                        result = machine.run_once()
+                    synthesized_text = output_path.read_text(encoding="utf-8")
+
+                self.assertIn(expected_answer, result.answer)
+                self.assertEqual(openai_client.chat_calls, 0)
+                self.assertEqual(openai_client.tts_calls, 1)
+                self.assertEqual(history, [])
+                self.assertIn(expected_answer, synthesized_text)
+                self.assertIn(expected_log, "\n".join(logs.output))
+
     def test_provider_error_logs_route_params_and_result_data(self):
         logger = logging.getLogger("tests.state_machine.provider_error")
         route = ToolRoute(

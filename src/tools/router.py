@@ -406,7 +406,14 @@ def _extract_calculator_expression(text: str) -> str | None:
         .replace("×", "*")
         .replace("÷", "/")
     )
-    compact = compact.replace("加", "+").replace("减", "-").replace("乘", "*").replace("除以", "/").replace("除", "/")
+    compact = (
+        compact.replace("加", "+")
+        .replace("减", "-")
+        .replace("減", "-")
+        .replace("乘", "*")
+        .replace("除以", "/")
+        .replace("除", "/")
+    )
     match = re.search(r"[-+*/%().\d\s]{3,}", compact)
     if not match:
         return None
@@ -799,7 +806,10 @@ _TIME_MARKERS = (
     "local time",
     "time is it",
     "现在几点",
+    "現在幾點",
     "几点",
+    "幾點",
+    "現在時間",
     "時間",
     "时间",
 )

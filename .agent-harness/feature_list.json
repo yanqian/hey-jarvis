@@ -684,6 +684,27 @@
         "F003",
         "F029"
       ]
+    },
+    {
+      "id": "F034",
+      "title": "Route traditional Chinese local tool requests",
+      "description": "Fix deterministic local-tool routing so traditional Chinese STT variants such as 現在幾點了 and 100減20是多少 route to the local time or calculator tools instead of falling through to general OpenAI chat.",
+      "acceptance": [
+        "Time routing recognizes common traditional Chinese time phrases including 現在幾點了, 幾點了, and 現在時間 while preserving existing simplified Chinese, English, and Japanese time markers.",
+        "Calculator routing recognizes digit-based traditional Chinese arithmetic such as 100減20是多少 while preserving existing symbolic, English, and simplified Chinese operator behavior.",
+        "Traditional Chinese local-tool requests produce route=time/tool=local_time or route=calculator/tool=safe_calculator through the text-debug CLI, with local ToolResult answers and no external provider requirement.",
+        "The normal answer path after transcription uses local tools for traditional Chinese time and calculator requests and does not call ask_chatgpt or mutate chat history for those routed requests.",
+        "The fix stays narrowly scoped to deterministic local-tool routing and does not change wake-word detection, ARMED timing, recording thresholds, transcription settings, provider-backed tools, local time answer formatting, calculator safety rules, or add broad Chinese script conversion.",
+        "Focused router/text-debug/answer-path tests and final ./init.sh recovery verification pass without live microphone, OpenAI chat, speaker, or network access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F022"
+      ]
     }
   ]
 }

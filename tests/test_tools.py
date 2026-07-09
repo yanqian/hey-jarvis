@@ -92,6 +92,26 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(result.status, "success")
         self.assertEqual(result.answer, "The answer is 4.")
 
+    def test_routes_traditional_chinese_local_tool_requests(self):
+        for text in ("現在幾點了", "幾點了", "現在時間"):
+            with self.subTest(text=text):
+                route = route_text(text)
+                result = execute_route(route, now_provider=self.local_clock)
+
+                self.assertEqual(route.category, "time")
+                self.assertEqual(route.tool_name, "local_time")
+                self.assertEqual(result.status, "success")
+                self.assertIn("09:08", result.answer)
+
+        route = route_text("100減20是多少")
+        result = execute_route(route)
+
+        self.assertEqual(route.category, "calculator")
+        self.assertEqual(route.tool_name, "safe_calculator")
+        self.assertEqual(route.params["expression"], "100-20")
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.answer, "The answer is 80.")
+
     def test_rejects_unsafe_calculator_expression(self):
         route = route_text("__import__('os').system('date')")
 
@@ -350,6 +370,33 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(chat_client.calls, [])
         self.assertEqual(history, [])
 
+    def test_traditional_chinese_local_tools_do_not_call_chat(self):
+        chat_client = FakeChatClient()
+        history = []
+
+        time_answer, time_route, time_result = answer_with_tools(
+            "現在幾點了",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+            now_provider=self.local_clock,
+        )
+        calculator_answer, calculator_route, calculator_result = answer_with_tools(
+            "100減20是多少",
+            chat_client=chat_client,
+            history=history,
+            tools_enabled=True,
+        )
+
+        self.assertEqual(time_route.category, "time")
+        self.assertEqual(time_result.status, "success")
+        self.assertIn("09:08", time_answer)
+        self.assertEqual(calculator_route.category, "calculator")
+        self.assertEqual(calculator_result.status, "success")
+        self.assertEqual(calculator_answer, "The answer is 80.")
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
     def test_weather_provider_failure_does_not_fall_back_to_chat(self):
         chat_client = FakeChatClient()
         client = FakeJsonClient([{"results": []}])
@@ -552,6 +599,17 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertIn("raw_answer=The local time is 09:08", debug)
         self.assertIn("naturalization_status=not_applicable", debug)
         self.assertIn("final_answer=The local time is 09:08", debug)
+
+    def test_text_debug_prints_traditional_chinese_local_tools(self):
+        time_debug = format_text_debug("現在幾點了", now_provider=self.local_clock)
+        calculator_debug = format_text_debug("100減20是多少")
+
+        self.assertIn("route=time", time_debug)
+        self.assertIn("tool=local_time", time_debug)
+        self.assertIn("raw_answer=The local time is 09:08", time_debug)
+        self.assertIn("route=calculator", calculator_debug)
+        self.assertIn("tool=safe_calculator", calculator_debug)
+        self.assertIn("raw_answer=The answer is 80.", calculator_debug)
 
     def test_text_debug_can_show_mocked_weather_result(self):
         client = FakeJsonClient([weather_geocoding_response(), weather_daily_response()])
