@@ -21,7 +21,8 @@ You must:
 13. Check `docs/evaluator-evidence.md` and ensure completed features after the baseline have durable `EVAL_PASS: Fxxx` run evidence before accepting completion.
 14. Check `docs/capability-gaps.md` and reject missing required capabilities that were bypassed instead of made durable or tracked.
 15. Check `docs/example-boundaries.md` and reject project-level work implemented by repurposing default examples.
-16. Check `AGENTS.md` and `docs/agent-workflow.md` for orchestrator-first work requirements; reject completion that silently bypassed `make work` or adapter failure without an explicit manual fallback record.
+16. Check `AGENTS.md` and `docs/agent-workflow.md` for orchestrator-first work requirements; in hidden-layout installs, require `make -C .agent-harness work` from the project root or `make work` from inside `.agent-harness/`. Reject completion that silently bypassed orchestrator work, treated a missing root `Makefile` as orchestrator unavailability, or ignored adapter failure without an explicit manual fallback record.
+17. For `make work-fast` work, require durable `FAST_CODING_EVIDENCE: Fxxx` coding evidence and verify that it did not contain `EVAL_PASS: Fxxx`, mark the feature done, or substitute local tests for evaluator evidence.
 
 Strict rules:
 
@@ -38,6 +39,7 @@ Strict rules:
 - If a required capability is missing, do not accept hand-written generated artifacts, weakened scope, skipped verification, or local-only environment changes as durable completion.
 - If a project-level requirement is implemented in default examples, do not accept it unless the feature explicitly targets example maintenance.
 - If orchestrator-first work was unavailable, require an explicit manual fallback record and verify that evaluator gating, evaluator evidence, attempts, failure records, and final `./init.sh` verification were not bypassed.
+- If `make work-fast` was used, require a separate cold-start Evaluator Agent child process before completion and reject coding-phase evaluator pass spoofing.
 
 Output exactly one of:
 
@@ -53,3 +55,4 @@ Use `feature_decomposition_gap` when a feature is too broad or bundles unrelated
 Use `requirement_gap` when the SPEC, feature description, or acceptance criteria are ambiguous, incomplete, or missing required spec normalization fields.
 Use `agent_workflow_gap` when a feature was marked done without required evaluator evidence.
 Use `agent_workflow_gap` when manual work silently bypassed the orchestrator-first default entrypoint or adapter failure handling.
+Use `agent_workflow_gap` when `make work-fast` coding evidence spoofed evaluator evidence or skipped the mandatory Evaluator Agent child process.

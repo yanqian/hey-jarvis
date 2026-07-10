@@ -17,6 +17,8 @@ CODING_AGENT_ADAPTER = Path("scripts/run-coding-agent.sh")
 EVALUATOR_AGENT_ADAPTER = Path("scripts/run-evaluator-agent.sh")
 MAX_ROUNDS = 1
 MAX_ATTEMPTS = 3
+FAST_CODING_EVIDENCE_PREFIX = "FAST_CODING_EVIDENCE:"
+FAST_CODING_HANDOFF_PREFIX = "FAST_CODING_HANDOFF:"
 
 
 class OrchestratorError(Exception):
@@ -77,6 +79,20 @@ def pick_feature(data: dict, max_attempts: int) -> Optional[dict]:
     return candidates[0] if candidates else None
 
 
+def pick_fast_feature(data: dict, max_attempts: int) -> Optional[dict]:
+    priority = {"P0": 0, "P1": 1, "P2": 2}
+    ordered_features = features(data)
+    in_progress = [
+        feature
+        for feature in ordered_features
+        if feature.get("passes") is False and normalize_status(feature) == "in_progress"
+    ]
+    if in_progress:
+        in_progress.sort(key=lambda item: (priority.get(item.get("priority", "P2"), 9), ordered_features.index(item)))
+        return in_progress[0]
+    return pick_feature(data, max_attempts)
+
+
 def mark_in_progress(feature_id: str) -> None:
     data = load_state()
     feature = feature_by_id(data, feature_id)
@@ -105,7 +121,14 @@ def mark_failed(feature_id: str, error: str, max_attempts: int) -> None:
     save_state(data)
 
 
-def write_failure_run_record(feature_id: str, failure_summary: str) -> None:
+def write_failure_run_record(
+    feature_id: str,
+    failure_summary: str,
+    *,
+    command: str = "python3 orchestrator.py",
+    failure_domain: str = "agent_workflow_gap",
+    harness_improvement: str = "No new harness improvement required; the orchestrator recorded this failure and kept the feature non-done.",
+) -> None:
     RUNS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     safe_feature = re.sub(r"[^A-Za-z0-9_-]+", "-", feature_id)
@@ -125,7 +148,7 @@ def write_failure_run_record(feature_id: str, failure_summary: str) -> None:
         f"- Working tree status: {status}\n\n"
         "## Commands Run\n\n"
         "```bash\n"
-        "python3 orchestrator.py\n"
+        f"{command}\n"
         "```\n\n"
         "## Evidence\n\n"
         "- Tests:\n"
@@ -133,9 +156,9 @@ def write_failure_run_record(feature_id: str, failure_summary: str) -> None:
         "- Screenshots or traces:\n"
         "- External behavior verification:\n\n"
         "## Failure Analysis\n\n"
-        "- Failure domain: unknown\n"
+        f"- Failure domain: {failure_domain}\n"
         f"- Failure summary: {failure_summary.strip()[:1000]}\n"
-        "- Harness improvement: unknown\n"
+        f"- Harness improvement: {harness_improvement}\n"
         "- Follow-up feature:\n\n"
         "## Files Changed\n\n"
         "- `feature_list.json`\n\n"
@@ -170,6 +193,10 @@ def prompt_template(name: str) -> str:
 
 def coding_prompt(feature_id: str) -> str:
     return f"{prompt_template('work.md')}\n\nSelected feature ID: `{feature_id}`\n"
+
+
+def fast_coding_prompt(feature_id: str) -> str:
+    return f"{prompt_template('work-fast.md')}\n\nSelected feature ID: `{feature_id}`\n"
 
 
 def evaluator_prompt(feature_id: str) -> str:
@@ -261,6 +288,67 @@ def coding_result(feature_id: str, result: subprocess.CompletedProcess[str]) -> 
     return final_role_verdict(output, pass_line, fail_prefix)
 
 
+def fast_coding_evidence_result(feature_id: str) -> tuple[Optional[bool], str]:
+    """Return the final fast-coding verdict from durable run evidence."""
+    verdict: tuple[Optional[bool], str] = (None, "")
+    if not RUNS_DIR.exists():
+        return verdict
+
+    marker = f"{FAST_CODING_EVIDENCE_PREFIX} {feature_id}"
+    eval_pass = f"EVAL_PASS: {feature_id}"
+    coding_pass = f"CODING_PASS: {feature_id}"
+    coding_fail_prefix = f"CODING_FAIL: {feature_id}:"
+    for path in sorted(RUNS_DIR.glob("*.md")):
+        if path.name == "RUN_TEMPLATE.md":
+            continue
+        text = path.read_text(errors="replace")
+        if f"{FAST_CODING_HANDOFF_PREFIX} {feature_id}" in text:
+            continue
+        if marker not in text:
+            continue
+        if eval_pass in text:
+            return (
+                False,
+                f"fast coding evidence must not contain evaluator pass evidence: {path}",
+            )
+        passed, reason = final_role_verdict(text, coding_pass, coding_fail_prefix)
+        if passed is not None:
+            verdict = (passed, reason)
+    return verdict
+
+
+def write_fast_coding_handoff(feature_id: str) -> Path:
+    RUNS_DIR.mkdir(exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    safe_feature = re.sub(r"[^A-Za-z0-9_-]+", "-", feature_id)
+    path = RUNS_DIR / f"{timestamp}-{safe_feature}-work-fast-handoff.md"
+    current_commit = run_capture(["git", "rev-parse", "--short", "HEAD"], check=False).stdout.strip() or "unknown"
+    status = run_capture(["git", "status", "--short"], check=False).stdout.strip() or "clean"
+    path.write_text(
+        f"# Run Record: {feature_id} - work-fast coding handoff\n\n"
+        "## Summary\n\n"
+        f"- Date: {timestamp}\n"
+        "- Agent role: Orchestrator fast handoff\n"
+        f"- Feature: {feature_id}\n"
+        "- Result: in_progress\n\n"
+        "## Repository State\n\n"
+        f"- Starting commit: {current_commit}\n"
+        f"- Ending commit: {current_commit}\n"
+        f"- Working tree status: {status}\n\n"
+        "## Commands Run\n\n"
+        "```bash\n"
+        "python3 orchestrator.py --work-fast\n"
+        "```\n\n"
+        "## Evidence\n\n"
+        f"- Fast handoff: {FAST_CODING_HANDOFF_PREFIX} {feature_id}\n"
+        "- Coding evidence required: write a separate run record containing the fast coding evidence marker "
+        "and matching coding pass verdict after implementation.\n"
+        "- Evaluator pass prohibited in coding evidence: do not write evaluator pass evidence during the fast coding phase.\n"
+    )
+    print(f"Wrote fast coding handoff: {path}", flush=True)
+    return path
+
+
 def evaluate_feature(feature_id: str, dry_run: bool) -> bool:
     print(f"\n== Evaluate: {feature_id} ==", flush=True)
     result = run_agent(evaluator_prompt(feature_id), dry_run, "Evaluator Agent", EVALUATOR_AGENT_ADAPTER)
@@ -282,6 +370,85 @@ def evaluate_feature(feature_id: str, dry_run: bool) -> bool:
     return False
 
 
+def evaluate_fast_feature(feature_id: str, dry_run: bool, max_attempts: int) -> bool:
+    print(f"\n== Work-fast evaluate: {feature_id} ==", flush=True)
+    if dry_run:
+        run_agent(evaluator_prompt(feature_id), dry_run=True, label="Evaluator Agent", adapter_path=EVALUATOR_AGENT_ADAPTER)
+        return True
+
+    evaluator = run_agent(evaluator_prompt(feature_id), dry_run=False, label="Evaluator Agent", adapter_path=EVALUATOR_AGENT_ADAPTER)
+    passed, reason = evaluator_result(feature_id, evaluator)
+    if passed:
+        if evaluator.returncode != 0:
+            print(
+                f"Evaluator emitted EVAL_PASS despite provider exit code {evaluator.returncode}; accepting final verdict.",
+                flush=True,
+            )
+        mark_done(feature_id)
+        print(f"Done: {feature_id}", flush=True)
+        return True
+
+    if evaluator.returncode != 0:
+        error = f"evaluator exited with code {evaluator.returncode}: {reason}"
+    else:
+        error = reason or "Evaluator rejected the feature."
+    mark_failed(feature_id, error, max_attempts)
+    write_failure_run_record(
+        feature_id,
+        error,
+        command="python3 orchestrator.py --work-fast",
+        failure_domain="agent_workflow_gap",
+        harness_improvement="No new harness improvement required; work-fast preserved evaluator gating and recorded the evaluator failure.",
+    )
+    print(f"Evaluation failed: {feature_id}: {reason}", flush=True)
+    return False
+
+
+def run_work_fast_round(round_no: int, max_attempts: int, dry_run: bool) -> bool:
+    data = load_state()
+    feature = pick_fast_feature(data, max_attempts)
+    if not feature:
+        print("No runnable unfinished feature left.", flush=True)
+        return True
+    feature_id = str(feature["id"])
+    print(f"\n== Work-fast round {round_no}: {feature_id} ==", flush=True)
+
+    evidence_passed, evidence_reason = fast_coding_evidence_result(feature_id)
+    if dry_run:
+        print("\n== Fast coding handoff prompt ==")
+        print(fast_coding_prompt(feature_id))
+        run_agent(evaluator_prompt(feature_id), dry_run=True, label="Evaluator Agent", adapter_path=EVALUATOR_AGENT_ADAPTER)
+        return True
+
+    ensure_adapter_configured("Evaluator Agent", EVALUATOR_AGENT_ADAPTER)
+
+    if evidence_passed is True:
+        return evaluate_fast_feature(feature_id, dry_run=False, max_attempts=max_attempts)
+
+    if evidence_passed is False:
+        error = evidence_reason or "Fast coding evidence reported failure."
+        mark_failed(feature_id, error, max_attempts)
+        write_failure_run_record(
+            feature_id,
+            error,
+            command="python3 orchestrator.py --work-fast",
+            failure_domain="agent_workflow_gap",
+            harness_improvement="No new harness improvement required; work-fast rejected invalid coding evidence before evaluator completion.",
+        )
+        return False
+
+    if normalize_status(feature) != "in_progress":
+        mark_in_progress(feature_id)
+    write_fast_coding_handoff(feature_id)
+    print(f"{FAST_CODING_HANDOFF_PREFIX} {feature_id}", flush=True)
+    print(
+        "Fast coding evidence is required before evaluator execution. "
+        f"Record `{FAST_CODING_EVIDENCE_PREFIX} {feature_id}` and `CODING_PASS: {feature_id}` in runs/ after coding.",
+        flush=True,
+    )
+    return True
+
+
 def feature_ids_for_eval(target: str) -> list[str]:
     data = load_state()
     if target == "all":
@@ -295,6 +462,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-rounds", type=int, default=MAX_ROUNDS)
     parser.add_argument("--max-attempts", type=int, default=MAX_ATTEMPTS)
     parser.add_argument("--eval-only", metavar="FEATURE_ID|all")
+    parser.add_argument("--work-fast", action="store_true", help="run evaluator-gated fast work mode")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -305,6 +473,10 @@ def main() -> int:
 
     if args.eval_only:
         results = [evaluate_feature(feature_id, args.dry_run) for feature_id in feature_ids_for_eval(args.eval_only)]
+        return 0 if all(results) else 1
+
+    if args.work_fast:
+        results = [run_work_fast_round(round_no, args.max_attempts, args.dry_run) for round_no in range(1, args.max_rounds + 1)]
         return 0 if all(results) else 1
 
     for round_no in range(1, args.max_rounds + 1):

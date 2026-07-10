@@ -84,13 +84,33 @@ Default entrypoint:
 - For one-feature implementation and evaluation, use the orchestrator first:
 
   ```bash
+  make work
+  ```
+
+- In hidden-layout installs, the harness Makefile lives under `.agent-harness/`; from the project root run:
+
+  ```bash
   make -C .agent-harness work
   ```
 
-  In this hidden-layout repository, the orchestrator Makefile lives under `.agent-harness/`; do not treat a missing root `make work` target as an orchestrator capability gap.
-
+  or `cd .agent-harness && make work`. A missing root `Makefile` is not an orchestrator-unavailable condition in hidden layout.
 - Use manual or interactive Coding Agent work only as an explicit fallback when role adapters are not configured, unavailable, or the user explicitly asks for manual work.
 - Manual fallback must be recorded in `progress.md` or `runs/` and must not bypass evaluator pass, evaluator evidence, attempts, failure records, or final `./init.sh` verification.
+- `make work-fast` is an A/B alternative to `make work`: it skips the Coding Agent role adapter, records provider-native coding evidence, and still requires a separate cold-start Evaluator Agent child process before completion.
+
+Preferred interactive mode:
+
+- For interactive user-led development, default to evaluator-gated fast work:
+
+  ```bash
+  make work-fast
+  ```
+
+- In this mode, the current agent/provider-native session implements the selected feature after the fast handoff.
+- The coding phase must record `FAST_CODING_EVIDENCE: Fxxx` and `CODING_PASS: Fxxx` in `runs/`.
+- The coding phase must not write `EVAL_PASS: Fxxx`, must not mark the feature `passes=true` or `status=done`, and must not treat local tests as evaluator evidence.
+- After coding evidence is recorded, rerun `make work-fast` so a separate cold-start Evaluator Agent child process can accept or reject the feature.
+- Use baseline `make work` when the user explicitly asks for the full two-child-process flow, unattended execution, or batch work.
 
 Responsibilities:
 
@@ -143,6 +163,7 @@ Responsibilities:
 - Increment the selected feature's `attempts`.
 - Run a Coding Agent prompt for that feature.
 - Run an Evaluator Agent prompt for that feature.
+- In `--work-fast` mode, do not run the Coding Agent adapter; require durable fast coding evidence and then run the Evaluator Agent adapter before marking the feature done.
 - Mark the feature done only after evaluator pass.
 - Mark the feature failed or blocked after coding or evaluation failure.
 - Write a failure run record when unattended coding or evaluation fails.
@@ -320,6 +341,7 @@ When implementing behavior that parses output from external tools such as Codex 
 - The Coding Agent updates state and progress for its target feature.
 - The Evaluator Agent verifies without implementation changes.
 - The orchestrator is the default entrypoint for one-feature implementation and evaluation.
+- `make work-fast` may be used only as an evaluator-gated A/B alternative; coding evidence cannot substitute for evaluator evidence.
 - Manual Coding Agent work is an explicit fallback only when adapters are unavailable or the user requests it.
 - The orchestrator owns unattended feature state transitions.
 - From the evaluator-evidence baseline onward, do not mark a feature done unless `runs/` contains `EVAL_PASS: Fxxx` evidence for that feature.
@@ -379,6 +401,18 @@ python3 orchestrator.py --dry-run
 ```
 
 Default one-feature work uses:
+
+```bash
+make work
+```
+
+Fast A/B one-feature work uses provider-native coding plus mandatory evaluator child gating:
+
+```bash
+make work-fast
+```
+
+In hidden-layout installs, run the equivalent from the project root:
 
 ```bash
 make -C .agent-harness work

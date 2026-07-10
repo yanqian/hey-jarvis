@@ -33,7 +33,8 @@ for path in \
   tests/test_skeleton.py \
   tests/test_state_machine.py \
   tests/test_wake_word.py \
-  tmp/.gitkeep
+  tmp/.gitkeep \
+  var/.gitkeep
 do
   test -f "$path"
 done

@@ -5,6 +5,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def template_file(*parts: str) -> Path:
+    bundled = ROOT / "skills" / "ai-agent-harness" / "assets" / "template"
+    path = bundled.joinpath(*parts)
+    if path.exists():
+        return path
+    return ROOT.joinpath(*parts)
+
+
+def bundled_template_available() -> bool:
+    return (ROOT / "skills" / "ai-agent-harness" / "assets" / "template").exists()
+
+
 class RepositoryContractTests(unittest.TestCase):
     def test_readme_records_reference_sources(self):
         text = (ROOT / "README.md").read_text()
@@ -51,7 +63,7 @@ class RepositoryContractTests(unittest.TestCase):
         flow = (ROOT / "docs" / "new-project-flow.md").read_text()
         spec = (ROOT / "SPEC.md").read_text()
         init = (ROOT / "scripts" / "init.sh").read_text()
-        template_flow = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "docs" / "new-project-flow.md").read_text()
+        template_flow = template_file("docs", "new-project-flow.md").read_text()
 
         for phrase in ["New Project Flow", "docs/new-project-flow.md", "one-screen diagram"]:
             self.assertIn(phrase, readme)
@@ -64,7 +76,7 @@ class RepositoryContractTests(unittest.TestCase):
             "```mermaid",
             "flowchart TD",
             "Human: ask `Use $ai-agent-harness to initialize this project`",
-            "Skill: check/adopt/new/repair harness",
+            "Skill: check/adopt/new/repair/upgrade harness",
             "Planning Agent: normalize minspec into SPEC",
             "Feature: runnable skeleton updates root `./init.sh`",
             "Human: choose agent provider or explicit manual fallback",
@@ -79,14 +91,15 @@ class RepositoryContractTests(unittest.TestCase):
         ]:
             self.assertIn(phrase, flow)
 
-        for phrase in [
-            "New Project Flow",
-            "visual map",
-            "skill invocation",
-            "minspec input",
-            "approved commit",
-        ]:
-            self.assertIn(phrase, spec)
+        if bundled_template_available():
+            for phrase in [
+                "New Project Flow",
+                "visual map",
+                "skill invocation",
+                "minspec input",
+                "approved commit",
+            ]:
+                self.assertIn(phrase, spec)
 
         self.assertIn("docs/new-project-flow.md", init)
         self.assertEqual(flow, template_flow)
@@ -178,7 +191,7 @@ class RepositoryContractTests(unittest.TestCase):
             init: ["docs/capability-gaps.md"],
             skill: ["docs/capability-gaps.md", "local-only workarounds"],
             workflows: ["Identify required capabilities", "Check `docs/capability-gaps.md`"],
-            initializer: ["docs/capability-gaps.md", "Capability Gap Handling", "TEMPLATE_VERSION = \"0.3.3\""],
+            initializer: ["docs/capability-gaps.md", "Capability Gap Handling", "TEMPLATE_VERSION = \"0.3.8\""],
         }
         for text, phrases in checks.items():
             for phrase in phrases:
@@ -198,8 +211,8 @@ class RepositoryContractTests(unittest.TestCase):
         coding_adapter = (ROOT / "scripts" / "run-coding-agent.sh").read_text()
         evaluator_adapter = (ROOT / "scripts" / "run-evaluator-agent.sh").read_text()
         init = (ROOT / "scripts" / "init.sh").read_text()
-        template_doc = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "docs" / "agent-provider-configuration.md").read_text()
-        template_example = json.loads((ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "agent-provider.example.json").read_text())
+        template_doc = template_file("docs", "agent-provider-configuration.md").read_text()
+        template_example = json.loads(template_file("agent-provider.example.json").read_text())
 
         self.assertEqual(example["provider"], "codex")
         self.assertEqual(example["providers"]["codex"]["command"], ["codex", "exec", "-"])
@@ -276,8 +289,10 @@ class RepositoryContractTests(unittest.TestCase):
             init: ["docs/feature-decomposition.md"],
             skill: ["docs/feature-decomposition.md", "Split independently verifiable behavior"],
             workflows: ["Use `docs/feature-decomposition.md`", "reject over-bundled features"],
-            initializer: ["docs/feature-decomposition.md", "TEMPLATE_VERSION = \"0.3.3\""],
+            initializer: ["docs/feature-decomposition.md", "TEMPLATE_VERSION = \"0.3.8\""],
         }
+        if not bundled_template_available():
+            checks.pop(spec, None)
         for text, phrases in checks.items():
             for phrase in phrases:
                 self.assertIn(phrase, text)
@@ -294,9 +309,9 @@ class RepositoryContractTests(unittest.TestCase):
         skill = (ROOT / "skills" / "ai-agent-harness" / "SKILL.md").read_text()
         workflows = (ROOT / "skills" / "ai-agent-harness" / "references" / "workflows.md").read_text()
         initializer = (ROOT / "skills" / "ai-agent-harness" / "scripts" / "init_harness.py").read_text()
-        template_agents = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "AGENTS.md").read_text()
-        template_doc = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "docs" / "project-recovery-init.md").read_text()
-        template_init = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "scripts" / "init.sh").read_text()
+        template_agents = template_file("AGENTS.md").read_text()
+        template_doc = template_file("docs", "project-recovery-init.md").read_text()
+        template_init = template_file("scripts", "init.sh").read_text()
 
         for phrase in [
             "## Project Recovery Init",
@@ -332,6 +347,8 @@ class RepositoryContractTests(unittest.TestCase):
             template_doc: ["# Project Recovery Init", "The root project init may call `.agent-harness/scripts/init.sh`"],
             template_init: ["docs/project-recovery-init.md"],
         }
+        if not bundled_template_available():
+            checks.pop(spec, None)
         for text, phrases in checks.items():
             for phrase in phrases:
                 self.assertIn(phrase, text)
@@ -349,9 +366,9 @@ class RepositoryContractTests(unittest.TestCase):
         init = (ROOT / "scripts" / "init.sh").read_text()
         skill = (ROOT / "skills" / "ai-agent-harness" / "SKILL.md").read_text()
         workflows = (ROOT / "skills" / "ai-agent-harness" / "references" / "workflows.md").read_text()
-        template_agents = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "AGENTS.md").read_text()
-        template_doc = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "docs" / "spec-normalization.md").read_text()
-        template_plan = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "prompts" / "plan.md").read_text()
+        template_agents = template_file("AGENTS.md").read_text()
+        template_doc = template_file("docs", "spec-normalization.md").read_text()
+        template_plan = template_file("prompts", "plan.md").read_text()
 
         for phrase in [
             "## Spec Normalization",
@@ -393,6 +410,8 @@ class RepositoryContractTests(unittest.TestCase):
             template_doc: ["# Spec Normalization", "Required Fields"],
             template_plan: ["Use `docs/spec-normalization.md`", "Reject vague requirements"],
         }
+        if not bundled_template_available():
+            checks.pop(spec, None)
         for text, phrases in checks.items():
             for phrase in phrases:
                 self.assertIn(phrase, text)
@@ -411,8 +430,8 @@ class RepositoryContractTests(unittest.TestCase):
         skill = (ROOT / "skills" / "ai-agent-harness" / "SKILL.md").read_text()
         workflows = (ROOT / "skills" / "ai-agent-harness" / "references" / "workflows.md").read_text()
         failure_domains = (ROOT / "docs" / "failure-domains.md").read_text()
-        template_doc = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "docs" / "evaluator-evidence.md").read_text()
-        template_script = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "scripts" / "check-evaluator-evidence.sh").read_text()
+        template_doc = template_file("docs", "evaluator-evidence.md").read_text()
+        template_script = template_file("scripts", "check-evaluator-evidence.sh").read_text()
 
         for phrase in [
             "From the evaluator-evidence enforcement baseline onward",
@@ -438,6 +457,8 @@ class RepositoryContractTests(unittest.TestCase):
             template_doc: ["# Evaluator Evidence", "The default enforcement baseline is `F027`."],
             template_script: ["HARNESS_EVALUATOR_EVIDENCE_BASELINE", "missing_evaluator_evidence"],
         }
+        if not bundled_template_available():
+            checks.pop(spec, None)
         for text, phrases in checks.items():
             for phrase in phrases:
                 self.assertIn(phrase, text)
@@ -484,8 +505,10 @@ class RepositoryContractTests(unittest.TestCase):
             init: ["docs/commit-messages.md"],
             skill: ["docs/commit-messages.md", "Fxxx <Action> <concise summary>"],
             workflows: ["Read `docs/commit-messages.md`", "starts with the feature ID", "Verify every feature ID referenced"],
-            initializer: ["docs/commit-messages.md", "TEMPLATE_VERSION = \"0.3.3\""],
+            initializer: ["docs/commit-messages.md", "TEMPLATE_VERSION = \"0.3.8\""],
         }
+        if not bundled_template_available():
+            checks.pop(spec, None)
         for text, phrases in checks.items():
             for phrase in phrases:
                 self.assertIn(phrase, text)
@@ -532,7 +555,7 @@ class RepositoryContractTests(unittest.TestCase):
             init: ["docs/example-boundaries.md"],
             skill: ["docs/example-boundaries.md", "Default examples are references"],
             workflows: ["Identify project-owned implementation and verification paths", "do not use default examples as the product implementation surface"],
-            initializer: ["docs/example-boundaries.md", "TEMPLATE_VERSION = \"0.3.3\""],
+            initializer: ["docs/example-boundaries.md", "TEMPLATE_VERSION = \"0.3.8\""],
         }
         for text, phrases in checks.items():
             for phrase in phrases:
@@ -608,9 +631,9 @@ class RepositoryContractTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text()
         init = (ROOT / "scripts" / "init.sh").read_text()
 
-        for target in ["init:", "test:", "validate:", "unit:", "contract:", "smoke:", "go-example:", "work:", "dry-run:", "summarize:", "clean:", "ci:"]:
+        for target in ["init:", "test:", "validate:", "unit:", "contract:", "smoke:", "go-example:", "work:", "work-fast:", "dry-run:", "summarize:", "clean:", "ci:"]:
             self.assertIn(target, makefile)
-        for phrase in ["./init.sh", "scripts/validate-feature.sh $(FEATURE)", "python3 orchestrator.py --max-rounds 1", "python3 orchestrator.py --dry-run", "python3 scripts/clean-state.py", "$(MAKE) validate FEATURE=F001"]:
+        for phrase in ["./init.sh", "scripts/validate-feature.sh $(FEATURE)", "python3 orchestrator.py --max-rounds 1", "python3 orchestrator.py --work-fast --max-rounds 1", "python3 orchestrator.py --dry-run", "python3 scripts/clean-state.py", "$(MAKE) validate FEATURE=F001"]:
             self.assertIn(phrase, makefile)
         for phrase in ["push:", "pull_request:", "workflow_dispatch:", "actions/checkout@v4", "actions/setup-go@v5", "make ci"]:
             self.assertIn(phrase, workflow)
@@ -632,12 +655,14 @@ class RepositoryContractTests(unittest.TestCase):
         evaluator_adapter = (ROOT / "scripts" / "run-evaluator-agent.sh").read_text()
         skill = (ROOT / "skills" / "ai-agent-harness" / "SKILL.md").read_text()
         workflows = (ROOT / "skills" / "ai-agent-harness" / "references" / "workflows.md").read_text()
-        template_agents = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "AGENTS.md").read_text()
-        template_workflows = (ROOT / "skills" / "ai-agent-harness" / "assets" / "template" / "skills" / "ai-agent-harness" / "references" / "workflows.md").read_text()
+        template_agents = template_file("AGENTS.md").read_text()
+        template_workflows = template_file("skills", "ai-agent-harness", "references", "workflows.md").read_text()
 
         for phrase in [
             "Default entrypoint:",
             "make work",
+            "make -C .agent-harness work",
+            "A missing root `Makefile` is not an orchestrator-unavailable condition in hidden layout.",
             "Manual fallback must be recorded",
             "must not bypass evaluator pass, evaluator evidence, attempts, failure records, or final `./init.sh` verification",
             "fail closed with clear configuration guidance",
@@ -646,19 +671,19 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertIn(phrase, agents)
 
         checks = {
-            readme: ["The default one-feature work entrypoint is:", "make work", "real orchestrator work fails closed", "Manual Coding Agent work is an explicit fallback"],
-            workflow: ["Use the orchestrator as the default entrypoint", "make work", "Manual fallback must not bypass evaluator pass"],
-            work_prompt: ["Default invocation", "normally dispatched by the orchestrator through `make work`", "explicit fallback"],
-            continue_prompt: ["use `make work` first", "Do not silently fall back from orchestrator adapter failure"],
-            evaluate_prompt: ["orchestrator-first work requirements", "manual fallback record", "silently bypassed the orchestrator-first default entrypoint"],
+            readme: ["The default one-feature work entrypoint is:", "make work", "make -C .agent-harness work", "missing root `Makefile`", "real orchestrator work fails closed", "Manual Coding Agent work is an explicit fallback"],
+            workflow: ["Use the orchestrator as the default entrypoint", "make work", "make -C .agent-harness work", "missing root `Makefile`", "Manual fallback must not bypass evaluator pass"],
+            work_prompt: ["Default invocation", "baseline `make work`, not the fast `make work-fast` handoff", "make -C .agent-harness work", "missing root `Makefile`", "explicit fallback"],
+            continue_prompt: ["use `make work` first", "make -C .agent-harness work", "Do not silently fall back from orchestrator adapter failure"],
+            evaluate_prompt: ["orchestrator-first work requirements", "make -C .agent-harness work", "treated a missing root `Makefile` as orchestrator unavailability", "manual fallback record"],
             makefile: ["work:", "python3 orchestrator.py --max-rounds 1"],
             orchestrator: ["ensure_adapter_configured", "provider is not configured for orchestrator-first work", "default work entrypoint is orchestrator-first", "before running orchestrator work"],
             coding_adapter: ["run-agent-provider.py --role coding", "HARNESS_AGENT_PROVIDER_CHECK"],
             evaluator_adapter: ["run-agent-provider.py --role evaluator", "HARNESS_AGENT_PROVIDER_CHECK"],
-            skill: ["orchestrator-first entrypoint", "normally `make work`", "explicit fallback"],
-            workflows: ["Default to orchestrator-first work", "make work", "fail-closed adapter setup gap"],
-            template_agents: ["Default entrypoint:", "make work", "Manual fallback must be recorded"],
-            template_workflows: ["Default to orchestrator-first work", "make work", "fail-closed adapter setup gap"],
+            skill: ["orchestrator-first entrypoint", "normally `make work`", "make -C .agent-harness work", "missing root `Makefile`", "explicit fallback"],
+            workflows: ["Default to orchestrator-first work", "make work", "make -C .agent-harness work", "missing root `Makefile`", "fail-closed adapter setup gap"],
+            template_agents: ["Default entrypoint:", "make work", "make -C .agent-harness work", "Manual fallback must be recorded"],
+            template_workflows: ["Default to orchestrator-first work", "make work", "make -C .agent-harness work", "fail-closed adapter setup gap"],
         }
         for text, phrases in checks.items():
             for phrase in phrases:
@@ -725,6 +750,7 @@ class RepositoryContractTests(unittest.TestCase):
             "new",
             "adopt",
             "repair",
+            "upgrade",
             "check",
             "Never commit merely because implementation finished.",
             "The commit boundary is user satisfaction.",
@@ -737,6 +763,7 @@ class RepositoryContractTests(unittest.TestCase):
             "new",
             "adopt",
             "repair",
+            "upgrade",
             "check",
             "--layout",
             "hidden_agents_text",
@@ -754,12 +781,14 @@ class RepositoryContractTests(unittest.TestCase):
             "ensure_executable_mode",
             "item_should_be_executable",
             "semantic_validation",
+            "remove_obsolete_paths",
+            "should_upgrade_drift",
             "write_install_manifest",
             "project_state_changed",
             "next_action",
         ]:
             self.assertIn(phrase, initializer)
-        self.assertEqual(template_manifest["template_version"], "0.3.3")
+        self.assertEqual(template_manifest["template_version"], "0.3.8")
         self.assertEqual(template_manifest["default_layout"], "hidden")
         self.assertIn("hidden", template_manifest["layouts"])
         self.assertIn("visible", template_manifest["layouts"])
@@ -780,12 +809,14 @@ class RepositoryContractTests(unittest.TestCase):
             "does not replace repository state",
             "does not overwrite conflicting files unless `--force` is used",
             ".agent-harness/manifest.json",
+            "`upgrade`",
             "--layout hidden",
             "--layout visible",
             "Root keeps thin `AGENTS.md` and `init.sh` entry points",
             "project-owned state",
             "runnable_harness=true",
             "version drift",
+            "update the global skill first",
             "### Install The Skill",
             "### Use The Installed Skill",
             "### Manual Script Usage",
@@ -815,22 +846,24 @@ class RepositoryContractTests(unittest.TestCase):
         ]:
             self.assertIn(phrase, skill)
         self.assertNotIn("/Users/", skill)
-        for phrase in [
-            "Skill Assisted Workflow",
-            "convenience layer",
-            "preserve the template's vendor-neutral boundary",
-            "skills/ai-agent-harness/",
-            "new`, `adopt`, `repair`, and `check` modes",
-            "installation layouts",
-            "default `hidden` layout",
-            "root `AGENTS.md` and `init.sh` as thin entry points",
-            "`visible` layout",
-            "version drift handling",
-            "semantically valid",
-            "installed skill usage",
-            "Manual `python3 skills/.../init_harness.py` commands",
-        ]:
-            self.assertIn(phrase, spec)
+        if bundled_template_available():
+            for phrase in [
+                "Skill Assisted Workflow",
+                "convenience layer",
+                "preserve the template's vendor-neutral boundary",
+                "skills/ai-agent-harness/",
+                "new`, `adopt`, `repair`, `upgrade`, and `check` modes",
+                "installation layouts",
+                "default `hidden` layout",
+                "root `AGENTS.md` and `init.sh` as thin entry points",
+                "`visible` layout",
+                "Installed Harness Upgrade Workflow",
+                "version drift handling",
+                "semantically valid",
+                "installed skill usage",
+                "Manual `python3 skills/.../init_harness.py` commands",
+            ]:
+                self.assertIn(phrase, spec)
         for path in [
             "skills/ai-agent-harness/SKILL.md",
             "skills/ai-agent-harness/agents/openai.yaml",
@@ -838,6 +871,7 @@ class RepositoryContractTests(unittest.TestCase):
             "skills/ai-agent-harness/scripts/init_harness.py",
         ]:
             self.assertIn(path, init)
+        self.assertIn('rel.parts[:3] == ("skills", "ai-agent-harness", "assets")', initializer)
 
     def test_feature_schema_requires_acceptance_and_state(self):
         schema = json.loads((ROOT / "schemas/feature_list.schema.json").read_text())
@@ -946,6 +980,48 @@ class RepositoryContractTests(unittest.TestCase):
             "if args.eval_only:",
         ]:
             self.assertIn(phrase, text)
+
+    def test_work_fast_flow_is_documented_and_evaluator_gated(self):
+        agents = (ROOT / "AGENTS.md").read_text()
+        readme = (ROOT / "README.md").read_text()
+        workflow = (ROOT / "docs" / "agent-workflow.md").read_text()
+        fast_prompt = (ROOT / "prompts" / "work-fast.md").read_text()
+        continue_prompt = (ROOT / "prompts" / "continue.md").read_text()
+        evaluate_prompt = (ROOT / "prompts" / "evaluate.md").read_text()
+        makefile = (ROOT / "Makefile").read_text()
+        orchestrator = (ROOT / "orchestrator.py").read_text()
+        skill = (ROOT / "skills" / "ai-agent-harness" / "SKILL.md").read_text()
+        workflows = (ROOT / "skills" / "ai-agent-harness" / "references" / "workflows.md").read_text()
+        template_agents = template_file("AGENTS.md").read_text()
+        template_makefile = template_file("Makefile").read_text()
+        template_orchestrator = template_file("orchestrator.py").read_text()
+        template_fast_prompt = template_file("prompts", "work-fast.md").read_text()
+        template_workflows = template_file("skills", "ai-agent-harness", "references", "workflows.md").read_text()
+        initializer = (ROOT / "skills" / "ai-agent-harness" / "scripts" / "init_harness.py").read_text()
+        template_initializer = template_file("skills", "ai-agent-harness", "scripts", "init_harness.py").read_text()
+
+        checks = {
+            agents: ["Preferred interactive mode", "make work-fast", "current agent/provider-native session", "FAST_CODING_EVIDENCE: Fxxx", "Use baseline `make work`"],
+            readme: ["make work-fast", "fast A/B", "FAST_CODING_EVIDENCE: Fxxx", "must not write `EVAL_PASS: Fxxx`", "status=done", "passes=true"],
+            workflow: ["make work-fast", "does not invoke the Coding Agent role adapter", "FAST_CODING_EVIDENCE: Fxxx", "separate cold-start child process"],
+            fast_prompt: ["Work-Fast Coding Handoff", "does not invoke the Coding Agent role adapter", "FAST_CODING_EVIDENCE: Fxxx", "Do not write `EVAL_PASS: Fxxx`", "Do not mark the selected feature `passes=true` or `status=done`"],
+            continue_prompt: ["make work-fast", "FAST_CODING_EVIDENCE: Fxxx", "separate cold-start Evaluator Agent child process"],
+            evaluate_prompt: ["make work-fast", "FAST_CODING_EVIDENCE: Fxxx", "coding-phase evaluator pass spoofing", "separate cold-start Evaluator Agent child process"],
+            makefile: ["work-fast:", "python3 orchestrator.py --work-fast --max-rounds 1"],
+            orchestrator: ["--work-fast", "FAST_CODING_EVIDENCE_PREFIX", "FAST_CODING_HANDOFF_PREFIX", "fast_coding_evidence_result", "EVALUATOR_AGENT_ADAPTER"],
+            skill: ["make work-fast", "provider-native coding", "must not write `EVAL_PASS: Fxxx`"],
+            workflows: ["make work-fast", "FAST_CODING_EVIDENCE: Fxxx", "separate cold-start Evaluator Agent child process"],
+            template_agents: ["Preferred interactive mode", "make work-fast", "current agent/provider-native session", "FAST_CODING_EVIDENCE: Fxxx", "Use baseline `make work`"],
+            template_makefile: ["work-fast:", "python3 orchestrator.py --work-fast --max-rounds 1"],
+            template_orchestrator: ["--work-fast", "FAST_CODING_EVIDENCE_PREFIX", "fast_coding_evidence_result"],
+            template_fast_prompt: ["Work-Fast Coding Handoff", "FAST_CODING_EVIDENCE: Fxxx", "Do not write `EVAL_PASS: Fxxx`"],
+            template_workflows: ["make work-fast", "FAST_CODING_EVIDENCE: Fxxx", "separate cold-start Evaluator Agent child process"],
+            initializer: ["Preferred interactive mode", "make -C .agent-harness work-fast", "FAST_CODING_EVIDENCE: Fxxx", "Use baseline `make -C .agent-harness work`"],
+            template_initializer: ["Preferred interactive mode", "make -C .agent-harness work-fast", "FAST_CODING_EVIDENCE: Fxxx", "Use baseline `make -C .agent-harness work`"],
+        }
+        for text, phrases in checks.items():
+            for phrase in phrases:
+                self.assertIn(phrase, text)
         self.assertNotIn("HARNESS_AGENT_COMMAND", text)
 
     def test_orchestrator_uses_explicit_role_adapters(self):

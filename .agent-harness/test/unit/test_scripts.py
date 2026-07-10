@@ -1,11 +1,14 @@
 import json
 import importlib.util
+import contextlib
+import io
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -444,6 +447,103 @@ class ScriptUnitTests(unittest.TestCase):
             stderr="",
         )
         self.assertEqual(orchestrator.coding_result("F009", result), (None, ""))
+
+    def test_orchestrator_fast_coding_evidence_rejects_eval_pass_spoofing(self):
+        orchestrator = load_orchestrator()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir)
+            with mock.patch.object(orchestrator, "RUNS_DIR", runs_dir):
+                self.assertEqual(orchestrator.fast_coding_evidence_result("F123"), (None, ""))
+
+                (runs_dir / "valid.md").write_text(
+                    "# Run Record\n\n"
+                    "FAST_CODING_EVIDENCE: F123\n"
+                    "CODING_PASS: F123\n"
+                )
+                self.assertEqual(orchestrator.fast_coding_evidence_result("F123"), (True, ""))
+
+                (runs_dir / "spoof.md").write_text(
+                    "# Run Record\n\n"
+                    "FAST_CODING_EVIDENCE: F123\n"
+                    "CODING_PASS: F123\n"
+                    "EVAL_PASS: F123\n"
+                )
+                passed, reason = orchestrator.fast_coding_evidence_result("F123")
+                self.assertFalse(passed)
+                self.assertIn("must not contain evaluator pass evidence", reason)
+
+    def test_orchestrator_work_fast_starts_without_coding_adapter(self):
+        orchestrator = load_orchestrator()
+        data = {
+            "features": [
+                {
+                    "id": "F123",
+                    "title": "fast feature",
+                    "description": "feature",
+                    "acceptance": ["done"],
+                    "passes": False,
+                    "status": "todo",
+                    "attempts": 0,
+                    "last_error": "",
+                    "priority": "P0",
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir)
+            with (
+                mock.patch.object(orchestrator, "RUNS_DIR", runs_dir),
+                mock.patch.object(orchestrator, "load_state", return_value=data),
+                mock.patch.object(orchestrator, "ensure_adapter_configured") as ensure,
+                mock.patch.object(orchestrator, "mark_in_progress") as mark_in_progress,
+                mock.patch.object(orchestrator, "write_fast_coding_handoff") as handoff,
+                mock.patch.object(orchestrator, "evaluate_fast_feature") as evaluate,
+            ):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertTrue(orchestrator.run_work_fast_round(1, 3, False))
+                ensure.assert_called_once()
+                self.assertEqual(ensure.call_args.args[0], "Evaluator Agent")
+                mark_in_progress.assert_called_once_with("F123")
+                handoff.assert_called_once_with("F123")
+                evaluate.assert_not_called()
+
+    def test_orchestrator_work_fast_requires_evaluator_after_coding_evidence(self):
+        orchestrator = load_orchestrator()
+        data = {
+            "features": [
+                {
+                    "id": "F123",
+                    "title": "fast feature",
+                    "description": "feature",
+                    "acceptance": ["done"],
+                    "passes": False,
+                    "status": "in_progress",
+                    "attempts": 3,
+                    "last_error": "",
+                    "priority": "P0",
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir)
+            (runs_dir / "coding.md").write_text(
+                "# Run Record\n\n"
+                "FAST_CODING_EVIDENCE: F123\n"
+                "CODING_PASS: F123\n"
+            )
+            with (
+                mock.patch.object(orchestrator, "RUNS_DIR", runs_dir),
+                mock.patch.object(orchestrator, "load_state", return_value=data),
+                mock.patch.object(orchestrator, "ensure_adapter_configured") as ensure,
+                mock.patch.object(orchestrator, "evaluate_fast_feature", return_value=True) as evaluate,
+                mock.patch.object(orchestrator, "mark_in_progress") as mark_in_progress,
+            ):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertTrue(orchestrator.run_work_fast_round(1, 3, False))
+                ensure.assert_called_once()
+                self.assertEqual(ensure.call_args.args[0], "Evaluator Agent")
+                evaluate.assert_called_once_with("F123", dry_run=False, max_attempts=3)
+                mark_in_progress.assert_not_called()
 
 
 if __name__ == "__main__":

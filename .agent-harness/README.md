@@ -76,8 +76,9 @@ For the complete first-project path, see [New Project Flow](docs/new-project-flo
 4. Add your first feature to `feature_list.json`.
 5. Run `make init`.
 6. Configure role adapters when you want unattended agent execution, then run one feature through `make work`.
-7. Ask Codex, Claude Code, Cursor Agent, or another coding agent to follow `AGENTS.md` only as an explicit manual fallback when adapters are unavailable or interactive work is requested.
-8. Validate one feature with `make validate FEATURE=F001`.
+7. Use `make work-fast` only when you want the fast A/B flow: provider-native coding evidence first, then a mandatory cold-start Evaluator Agent child process.
+8. Ask Codex, Claude Code, Cursor Agent, or another coding agent to follow `AGENTS.md` only as an explicit manual fallback when adapters are unavailable or interactive work is requested.
+9. Validate one feature with `make validate FEATURE=F001`.
 
 ### Install The Skill
 
@@ -133,7 +134,7 @@ Once installed, invoke it by name:
 Use $ai-agent-harness to initialize this project.
 ```
 
-You can also ask naturally about installing a harness, adopting `AGENTS.md`, repairing `feature_list.json`, or checking a resumable AI coding workflow.
+You can also ask naturally about installing a harness, adopting `AGENTS.md`, repairing `feature_list.json`, upgrading an installed project harness, or checking a resumable AI coding workflow.
 
 The skill is designed to remain vendor-neutral even when loaded by Codex as `SKILL.md`.
 
@@ -144,11 +145,12 @@ If you are using this repository checkout directly, or using another agent tool 
 ```bash
 python3 skills/ai-agent-harness/scripts/init_harness.py --root /path/to/project --mode adopt
 python3 skills/ai-agent-harness/scripts/init_harness.py --root /path/to/project --mode check
+python3 skills/ai-agent-harness/scripts/init_harness.py --root /path/to/project --mode upgrade
 ```
 
 Manual `python3 skills/ai-agent-harness/scripts/init_harness.py` commands are repository-checkout or vendor-neutral fallback usage, not the primary installed-skill experience.
 
-The initializer supports `new`, `adopt`, `repair`, and `check` modes. It does not overwrite conflicting files unless `--force` is used after explicit approval.
+The initializer supports `new`, `adopt`, `repair`, `upgrade`, and `check` modes. It does not overwrite conflicting files unless `--force` is used after explicit approval.
 
 The initializer also supports layout profiles:
 
@@ -161,12 +163,12 @@ The initializer writes `.agent-harness/manifest.json` in installed projects and 
 
 - harness-owned static files are copied and drift-checked by hash;
 - project-owned state such as `SPEC.md`, `feature_list.json`, and `progress.md` is validated semantically after initialization;
-- merge-sensitive files such as `AGENTS.md`, `README.md`, and `Makefile` are not overwritten by default;
+- root merge-sensitive entrypoints such as `AGENTS.md` and `init.sh` are not overwritten by default in hidden-layout projects;
 - optional integrations such as GitHub workflow files and examples are reported separately.
 
 A project counts as an installed harness when `./init.sh` succeeds, the installed layout's `feature_list.json` is valid, progress and agent rules contain the required workflow sections, scripts and prompts are present, run templates are available, and skill `check` reports `runnable_harness=true`. This is stronger than checking for file existence alone.
 
-For version drift handling, run skill `check` first. Use `repair` to restore missing files and write a manifest. Review drift before using explicit overwrite or a future upgrade flow.
+For version drift handling, update the global skill first, then run skill `check` in each installed project. Use `repair` to restore missing files. Use `upgrade` to update harness-owned static files, template metadata, and installed runtime files while preserving project-owned state such as `SPEC.md`, `feature_list.json`, `progress.md`, `runs/`, and root project recovery `init.sh`. Review merge-sensitive conflicts before using `--force`.
 
 After installation, distinguish harness recovery from project recovery. In hidden layout, root `./init.sh` starts as a thin wrapper around `.agent-harness/scripts/init.sh`; before a minspec exists, that only proves the harness can plan and resume. Once a minspec is accepted, the first project setup feature should turn root `./init.sh` into the project recovery contract: install dependencies, start required services, run a real endpoint or core-function smoke test, print clear logs, and fail non-zero on setup, startup, or verification failure. See [docs/project-recovery-init.md](docs/project-recovery-init.md).
 
@@ -202,12 +204,13 @@ Expected result:
 2. Decompose broad requirements into independently verifiable features using `docs/feature-decomposition.md`.
 3. For a fresh project with an accepted minspec, add a runnable-skeleton feature using `docs/project-recovery-init.md`.
 4. Append new features to `feature_list.json`.
-5. Implement and evaluate one feature through `make work`.
-6. Use manual Coding Agent work only as an explicit fallback when adapters are unavailable or the user requests interactive work.
-7. Run `make init`.
-8. Run `make validate FEATURE=Fxxx`.
-9. Update `progress.md`.
-10. Commit only after verification passes.
+5. Implement and evaluate one feature through `make work` in visible layout, or `make -C .agent-harness work` from a hidden-layout project root.
+6. Use `make work-fast` as the fast A/B alternative only when coding evidence will be recorded in `runs/` and evaluator child gating remains mandatory.
+7. Use manual Coding Agent work only as an explicit fallback when adapters are unavailable or the user requests interactive work.
+8. Run `make init`.
+9. Run `make validate FEATURE=Fxxx`.
+10. Update `progress.md`.
+11. Commit only after verification passes.
 
 ## Make Targets
 
@@ -215,7 +218,8 @@ Expected result:
 - `make validate FEATURE=Fxxx` validates one feature.
 - `make unit`, `make contract`, and `make smoke` run individual test layers.
 - `make go-example` runs the Go server example tests.
-- `make work` runs one orchestrator round for the next unfinished feature.
+- `make work` runs one orchestrator round for the next unfinished feature in visible layout or from inside `.agent-harness/`.
+- `make work-fast` runs the evaluator-gated fast A/B flow without invoking the Coding Agent role adapter.
 - `make dry-run` previews the next orchestrator round.
 - `make summarize` prints progress and run summaries.
 - `make clean` resets project-specific state after copying the template.
@@ -229,7 +233,23 @@ The default one-feature work entrypoint is:
 make work
 ```
 
+In hidden-layout installs, the harness Makefile lives under `.agent-harness/`. From the project root, use:
+
+```bash
+make -C .agent-harness work
+```
+
+or change into `.agent-harness/` and run `make work`. A missing root `Makefile` in hidden layout does not mean orchestrator work is unavailable.
+
 `make work` runs `python3 orchestrator.py --max-rounds 1`. The orchestrator selects one unfinished feature, marks it in progress, increments attempts, dispatches Coding Agent and Evaluator Agent role prompts, and marks the feature done only after evaluator pass.
+
+The fast A/B entrypoint is:
+
+```bash
+make work-fast
+```
+
+`make work-fast` runs `python3 orchestrator.py --work-fast --max-rounds 1`. The orchestrator selects or resumes one unfinished feature, marks it in progress, increments attempts when starting new work, and writes a durable fast coding handoff. The provider-native coding phase must record `FAST_CODING_EVIDENCE: Fxxx` plus `CODING_PASS: Fxxx` in `runs/` and must not write `EVAL_PASS: Fxxx` or mark the feature done. After coding evidence exists, rerun `make work-fast`; the orchestrator invokes the Evaluator Agent adapter as a separate cold-start child process before it can set `status=done` and `passes=true`.
 
 Preview the next one-feature round:
 

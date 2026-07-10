@@ -1,0 +1,133 @@
+# Run Record: F035 - work-fast coding handoff
+
+## Summary
+
+- Date: 20260709T083423Z
+- Agent role: Orchestrator fast handoff
+- Feature: F035
+- Result: in_progress
+
+## Repository State
+
+- Starting commit: 40674e7
+- Ending commit: 40674e7
+- Working tree status: M .agent-harness-template.json
+ M AGENTS.md
+ M Makefile
+ M README.md
+ M docs/agent-provider-configuration.md
+ M docs/agent-workflow.md
+ M docs/new-project-flow.md
+ M feature_list.json
+ M manifest.json
+ M orchestrator.py
+ M progress.md
+ M prompts/continue.md
+ M prompts/evaluate.md
+ M prompts/work.md
+ M skills/ai-agent-harness/SKILL.md
+ D skills/ai-agent-harness/assets/template/.agent-harness-template.json
+ D skills/ai-agent-harness/assets/template/.github/ISSUE_TEMPLATE/bug_report.md
+ D skills/ai-agent-harness/assets/template/.github/ISSUE_TEMPLATE/config.yml
+ D skills/ai-agent-harness/assets/template/.github/ISSUE_TEMPLATE/feature_request.md
+ D skills/ai-agent-harness/assets/template/.github/workflows/ci.yml
+ D skills/ai-agent-harness/assets/template/AGENTS.md
+ D skills/ai-agent-harness/assets/template/CHANGELOG.md
+ D skills/ai-agent-harness/assets/template/CONTRIBUTING.md
+ D skills/ai-agent-harness/assets/template/LICENSE
+ D skills/ai-agent-harness/assets/template/Makefile
+ D skills/ai-agent-harness/assets/template/QUALITY.md
+ D skills/ai-agent-harness/assets/template/README.md
+ D skills/ai-agent-harness/assets/template/SECURITY.md
+ D skills/ai-agent-harness/assets/template/SPEC.md
+ D skills/ai-agent-harness/assets/template/agent-provider.example.json
+ D skills/ai-agent-harness/assets/template/docs/README.md
+ D skills/ai-agent-harness/assets/template/docs/agent-provider-configuration.md
+ D skills/ai-agent-harness/assets/template/docs/agent-workflow.md
+ D skills/ai-agent-harness/assets/template/docs/architecture.md
+ D skills/ai-agent-harness/assets/template/docs/capability-gaps.md
+ D skills/ai-agent-harness/assets/template/docs/commit-messages.md
+ D skills/ai-agent-harness/assets/template/docs/decisions/README.md
+ D skills/ai-agent-harness/assets/template/docs/evaluator-evidence.md
+ D skills/ai-agent-harness/assets/template/docs/example-boundaries.md
+ D skills/ai-agent-harness/assets/template/docs/external-behavior.md
+ D skills/ai-agent-harness/assets/template/docs/failure-domains.md
+ D skills/ai-agent-harness/assets/template/docs/feature-decomposition.md
+ D skills/ai-agent-harness/assets/template/docs/new-project-flow.md
+ D skills/ai-agent-harness/assets/template/docs/project-recovery-init.md
+ D skills/ai-agent-harness/assets/template/docs/real-world-usage.md
+ D skills/ai-agent-harness/assets/template/docs/spec-normalization.md
+ D skills/ai-agent-harness/assets/template/docs/testing.md
+ D skills/ai-agent-harness/assets/template/examples/go-server/README.md
+ D skills/ai-agent-harness/assets/template/examples/go-server/go.mod
+ D skills/ai-agent-harness/assets/template/examples/go-server/main.go
+ D skills/ai-agent-harness/assets/template/examples/go-server/server.go
+ D skills/ai-agent-harness/assets/template/examples/go-server/server_test.go
+ D skills/ai-agent-harness/assets/template/examples/tiny-cli/test_tiny_cli.py
+ D skills/ai-agent-harness/assets/template/examples/tiny-cli/tiny_cli.py
+ D skills/ai-agent-harness/assets/template/feature_list.json
+ D skills/ai-agent-harness/assets/template/init.sh
+ D skills/ai-agent-harness/assets/template/orchestrator.py
+ D skills/ai-agent-harness/assets/template/progress.md
+ D skills/ai-agent-harness/assets/template/prompts/continue.md
+ D skills/ai-agent-harness/assets/template/prompts/evaluate.md
+ D skills/ai-agent-harness/assets/template/prompts/plan.md
+ D skills/ai-agent-harness/assets/template/prompts/work.md
+ D skills/ai-agent-harness/assets/template/runs/.gitkeep
+ D skills/ai-agent-harness/assets/template/runs/F033-final-role-verdict-normalization.md
+ D skills/ai-agent-harness/assets/template/runs/F034-provider-runtime-preflight.md
+ D skills/ai-agent-harness/assets/template/runs/RUN_TEMPLATE.md
+ D skills/ai-agent-harness/assets/template/schemas/feature_list.schema.json
+ D skills/ai-agent-harness/assets/template/scripts/check-evaluator-evidence.sh
+ D skills/ai-agent-harness/assets/template/scripts/check-failure-domains.sh
+ D skills/ai-agent-harness/assets/template/scripts/clean-state.py
+ D skills/ai-agent-harness/assets/template/scripts/init.sh
+ D skills/ai-agent-harness/assets/template/scripts/run-agent-provider.py
+ D skills/ai-agent-harness/assets/template/scripts/run-coding-agent.sh
+ D skills/ai-agent-harness/assets/template/scripts/run-evaluator-agent.sh
+ D skills/ai-agent-harness/assets/template/scripts/summarize-progress.sh
+ D skills/ai-agent-harness/assets/template/scripts/summarize-runs.sh
+ D skills/ai-agent-harness/assets/template/scripts/validate-feature.sh
+ D skills/ai-agent-harness/assets/template/scripts/validate-state.py
+ D skills/ai-agent-harness/assets/template/skills/ai-agent-harness/SKILL.md
+ D skills/ai-agent-harness/assets/template/skills/ai-agent-harness/agents/openai.yaml
+ D skills/ai-agent-harness/assets/template/skills/ai-agent-harness/references/workflows.md
+ D skills/ai-agent-harness/assets/template/skills/ai-agent-harness/scripts/init_harness.py
+ D skills/ai-agent-harness/assets/template/test/contract/test_repository_contract.py
+ D skills/ai-agent-harness/assets/template/test/harness/test_skill_initializer.py
+ D skills/ai-agent-harness/assets/template/test/smoke/test_smoke.py
+ D skills/ai-agent-harness/assets/template/test/unit/test_scripts.py
+ D skills/ai-agent-harness/assets/template/test_plan.md
+ M skills/ai-agent-harness/references/workflows.md
+ M skills/ai-agent-harness/scripts/init_harness.py
+ M test/contract/test_repository_contract.py
+ M test/harness/test_skill_initializer.py
+ M test/unit/test_scripts.py
+ M ../.env.example
+ M ../.gitignore
+ M ../AGENTS.md
+ M ../DEPLOYMENT.md
+ M ../MANUAL_TESTING.md
+ M ../README.md
+ M ../SPEC.md
+ M ../init.sh
+ M ../src/config.py
+ M ../src/state_machine.py
+ M ../tests/test_documentation.py
+ M ../tests/test_state_machine.py
+?? .gitignore
+?? prompts/work-fast.md
+?? runs/20260709T060212Z-harness-036-repair.md
+?? ../var/
+
+## Commands Run
+
+```bash
+python3 orchestrator.py --work-fast
+```
+
+## Evidence
+
+- Fast handoff: FAST_CODING_HANDOFF: F035
+- Coding evidence required: write a separate run record containing the fast coding evidence marker and matching coding pass verdict after implementation.
+- Evaluator pass prohibited in coding evidence: do not write evaluator pass evidence during the fast coding phase.

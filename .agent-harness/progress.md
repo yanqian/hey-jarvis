@@ -88,9 +88,11 @@ F034 has been planned after real voice testing showed that `现在几点了` can
 
 F034 has been completed by manual fast-work fallback because the installed hidden-layout harness does not currently provide the documented `work-fast` Makefile target. The router now recognizes traditional Chinese time requests such as `現在幾點了`, `幾點了`, and `現在時間`, and digit-based calculator requests using `減`, such as `100減20是多少`, while preserving the existing deterministic local time and safe calculator behavior. Focused router/text-debug/answer-path tests pass, text debug confirms the affected inputs now route locally, final `./init.sh` recovery verification passes, coding evidence is recorded in `.agent-harness/runs/F034-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F034` in `.agent-harness/runs/F034-evaluation.md`.
 
+F035 has been completed through evaluator-gated `work-fast` after the hidden-layout harness repair restored the target. ARMED now confirms speech through an adaptive recent voiced window, rejects overflowed or clipped chunks, preserves pre-roll audio when recording starts, logs structured `armed_trigger` and `armed_summary` diagnostics with RMS/peak/overflow/threshold/noise-floor/pre-roll context, and keeps local short/empty/filler/acknowledgement-only cancellation before AI routing. Focused config/state-machine/documentation tests, full project tests, fake-backend smoke, final recovery verification, fast coding evidence, and cold-start evaluator approval pass. Coding evidence is recorded in `.agent-harness/runs/20260709T085604Z-F035-fast-coding-retry.md`, and evaluator approval is recorded as `EVAL_PASS: F035` in `.agent-harness/runs/20260709T090453Z-F035-evaluation-pass.md`.
+
 ## Last Completed Feature
 
-F034 - Route traditional Chinese local tool requests.
+F035 - Confirm ARMED speech with adaptive pre-roll.
 
 ## Next Feature
 
@@ -127,3 +129,4 @@ No currently planned todo feature.
 - F027 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `runs/F027-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F027` in `runs/F027-evaluation.md`.
 - F031 was completed through the orchestrator entrypoint after the first unprivileged provider runtime attempt failed with a Codex state/app-server permission error and the same harness command was retried with approved escalated execution. Implementation evidence is in `.agent-harness/runs/F031-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F031` in `.agent-harness/runs/F031-evaluation.md`.
 - F034 was completed by manual fast-work fallback because `make -C .agent-harness work-fast` failed with `No rule to make target 'work-fast'`. The fallback preserved focused coding evidence, evaluator pass evidence, and final `./init.sh` verification.
+- Harness repair on 20260709T060212Z updated the hidden-layout install from 0.3.3 to 0.3.6 so `make -C .agent-harness work-fast` is available. Root `init.sh` was intentionally preserved as the project recovery contract; repair evidence is recorded in `.agent-harness/runs/20260709T060212Z-harness-036-repair.md`.

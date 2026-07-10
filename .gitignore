@@ -10,3 +10,5 @@ tmp/*.mp3
 tmp/*.m4a
 tmp/input.wav
 tmp/output.mp3
+var/*
+!var/.gitkeep

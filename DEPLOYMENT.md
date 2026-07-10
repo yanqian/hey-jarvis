@@ -23,7 +23,7 @@ WAKE_PHRASE=hey jarvis
 WAKE_THRESHOLD=0.5
 WAKE_ACKNOWLEDGEMENT_ENABLED=1
 WAKE_ACKNOWLEDGEMENT_TEXT=在呢
-WAKE_ACKNOWLEDGEMENT_AUDIO_PATH=tmp/ack.mp3
+WAKE_ACKNOWLEDGEMENT_AUDIO_PATH=var/ack.mp3
 WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS=0.35
 POST_PLAYBACK_WAKE_COOLDOWN_SECONDS=1.0
 POST_PLAYBACK_QUIET_SECONDS=0.5
@@ -32,7 +32,13 @@ POST_PLAYBACK_MAX_SUPPRESSION_SECONDS=6.0
 WAKE_CONFIRMATION_FRAMES=2
 ARMED_NO_SPEECH_TIMEOUT_SECONDS=2.0
 ARMED_VOICE_RMS=750
-MIN_VALID_SPEECH_SECONDS=0.24
+ARMED_MIN_RMS=750
+ARMED_SNR_MULTIPLIER=2.5
+ARMED_VOICE_WINDOW_SECONDS=0.30
+ARMED_VOICE_REQUIRED_RATIO=0.75
+ARMED_CLIP_REJECT_PEAK=32000
+ARMED_PRE_ROLL_SECONDS=0.50
+MIN_VALID_SPEECH_SECONDS=0.50
 MIN_TRANSCRIPT_LENGTH=2
 CANCEL_PHRASES=取消,没事,不用了,算了,stop,cancel,never mind
 ```
@@ -123,7 +129,12 @@ the result is not trading advice.
 Wake acknowledgement playback is enabled by default. The assistant plays the
 prepared `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` file after `Hey Jarvis`, drains
 microphone residue for `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`, enters `ARMED`,
-and records only after local speech is detected. If no speech arrives within
+and records only after a recent window contains enough speech-like chunks above
+the adaptive threshold `max(ARMED_MIN_RMS, noise_floor *
+ARMED_SNR_MULTIPLIER)`. ARMED rejects overflowed and clipped chunks, preserves
+`ARMED_PRE_ROLL_SECONDS` of recent audio before recording, and logs
+`armed_summary` or `armed_trigger` with RMS, peak, overflow, noise-floor,
+threshold, voiced-window, and pre-roll context. If no speech arrives within
 `ARMED_NO_SPEECH_TIMEOUT_SECONDS`, or the transcript is empty, filler, too
 short, or a configured `CANCEL_PHRASES` entry, the assistant returns to
 `WAIT_WAKE` without chat/tool routing, answer TTS, playback, or chat-history
@@ -181,7 +192,7 @@ python -m src.main --prepare-acknowledgement
 ```
 
 This writes `WAKE_ACKNOWLEDGEMENT_TEXT`, default `在呢`, to
-`WAKE_ACKNOWLEDGEMENT_AUDIO_PATH`, default `tmp/ack.mp3`, through the configured
+`WAKE_ACKNOWLEDGEMENT_AUDIO_PATH`, default `var/ack.mp3`, through the configured
 OpenAI TTS boundary.
 
 ## Verify
@@ -331,7 +342,7 @@ Only start the real assistant after recovery and diagnostics pass.
 - `.env.example`: documented deployable defaults.
 - `tmp/input.wav`: latest normal question recording.
 - `tmp/output.mp3`: latest synthesized answer.
-- `tmp/ack.mp3`: prepared wake acknowledgement audio.
+- `var/ack.mp3`: prepared wake acknowledgement audio.
 - `tmp/wake-debug.wav`: optional wake-debug capture when requested.
 
 ## Troubleshooting

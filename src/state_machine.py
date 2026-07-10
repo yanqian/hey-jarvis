@@ -6,10 +6,11 @@ import logging
 import math
 import re
 import wave
+from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, MutableSequence, Protocol
+from typing import Any, MutableSequence, Protocol, Sequence
 
 from .config import Settings
 from .openai_client import OpenAIClientError
@@ -81,6 +82,18 @@ class _TranscriptCancellationMatch:
     match_mode: str
 
 
+@dataclass(frozen=True)
+class _ArmedChunk:
+    pcm: bytes
+    seconds: float
+    rms: float
+    peak: int
+    overflowed: bool
+    voiced: bool
+    dynamic_threshold: float
+    noise_floor: float
+
+
 class VoiceAssistantStateMachine:
     """Run the WAIT_WAKE to PLAYING flow and return to wake listening."""
 
@@ -127,12 +140,12 @@ class VoiceAssistantStateMachine:
             self._drain_wake_acknowledgement_audio()
 
         self._set_state(AssistantState.ARMED)
-        speech_start_chunk = self._wait_for_armed_speech()
-        if speech_start_chunk is None:
+        speech_start_chunks = self._wait_for_armed_speech()
+        if speech_start_chunks is None:
             return self._cancel_to_wait_wake("no_speech_after_wake")
 
         self._set_state(AssistantState.RECORDING)
-        recording = self._record_question(initial_chunk=speech_start_chunk)
+        recording = self._record_question(initial_chunks=speech_start_chunks)
         self._logger.info(
             "State RECORDING: wrote %s chunks to %s; stopped_by=%s",
             recording.chunks_recorded,
@@ -323,45 +336,150 @@ class VoiceAssistantStateMachine:
         )
         return detected
 
-    def _wait_for_armed_speech(self) -> bytes | None:
+    def _wait_for_armed_speech(self) -> tuple[bytes, ...] | None:
         timeout_seconds = self.settings.armed_no_speech_timeout_seconds
         minimum_chunk_seconds = 1.0 / self.settings.sample_rate
+        expected_frame_seconds = _detector_frame_seconds(self.wake_detector, self.settings.sample_rate)
+        window_chunks_required = max(1, math.ceil(self.settings.armed_voice_window_seconds / expected_frame_seconds))
+        voiced_chunks_required = max(1, math.ceil(window_chunks_required * self.settings.armed_voice_required_ratio))
         elapsed_seconds = 0.0
         chunks_checked = 0
+        valid_chunks = 0
+        overflow_chunks = 0
+        voiced_chunks = 0
+        max_rms = 0.0
+        max_peak = 0
+        noise_samples: list[float] = []
+        voiced_window: deque[bool] = deque(maxlen=window_chunks_required)
+        pre_roll: deque[_ArmedChunk] = deque()
+        pre_roll_seconds = 0.0
         self._logger.info(
-            "State ARMED: waiting up to %.2fs for speech above %.1f RMS",
+            (
+                "State ARMED: waiting up to %.2fs for speech; min_rms=%.1f "
+                "snr_multiplier=%.2f voiced_window=%s/%s pre_roll=%.2fs"
+            ),
             timeout_seconds,
-            self.settings.armed_voice_rms,
+            self.settings.armed_min_rms,
+            self.settings.armed_snr_multiplier,
+            voiced_chunks_required,
+            window_chunks_required,
+            self.settings.armed_pre_roll_seconds,
         )
 
         while elapsed_seconds < timeout_seconds:
             chunk = self.audio_source.read_chunk()
             chunks_checked += 1
-            elapsed_seconds += max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
-            if getattr(self.audio_source, "last_overflowed", False):
+            chunk_seconds = max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+            elapsed_seconds += chunk_seconds
+            rms, peak = pcm_rms_and_peak(chunk)
+            max_rms = max(max_rms, rms)
+            max_peak = max(max_peak, peak)
+            overflowed = bool(getattr(self.audio_source, "last_overflowed", False))
+            clipped = peak >= self.settings.armed_clip_reject_peak
+            noise_floor = _noise_floor(noise_samples)
+            dynamic_threshold = max(
+                self.settings.armed_min_rms,
+                noise_floor * self.settings.armed_snr_multiplier,
+            )
+            voiced = not overflowed and not clipped and rms >= dynamic_threshold
+            armed_chunk = _ArmedChunk(
+                pcm=chunk,
+                seconds=chunk_seconds,
+                rms=rms,
+                peak=peak,
+                overflowed=overflowed,
+                voiced=voiced,
+                dynamic_threshold=dynamic_threshold,
+                noise_floor=noise_floor,
+            )
+            pre_roll.append(armed_chunk)
+            pre_roll_seconds += chunk_seconds
+            pre_roll_seconds = _trim_pre_roll(
+                pre_roll,
+                pre_roll_seconds=pre_roll_seconds,
+                max_seconds=self.settings.armed_pre_roll_seconds,
+            )
+
+            if overflowed:
+                overflow_chunks += 1
                 self._logger.info("State ARMED: ignoring overflowed microphone chunk")
+                voiced_window.append(False)
                 continue
-            rms, _ = pcm_rms_and_peak(chunk)
-            if rms >= self.settings.armed_voice_rms:
+            valid_chunks += 1
+            voiced_window.append(voiced)
+            if voiced:
+                voiced_chunks += 1
+            elif not clipped:
+                noise_samples.append(rms)
+
+            window_voiced_chunks = sum(1 for item in voiced_window if item)
+            if len(voiced_window) >= window_chunks_required and window_voiced_chunks >= voiced_chunks_required:
+                pre_roll_chunks = tuple(item.pcm for item in pre_roll if item.pcm)
+                pre_roll_overflow_chunks = sum(1 for item in pre_roll if item.overflowed)
+                pre_roll_ms = int(round(sum(item.seconds for item in pre_roll) * 1000))
                 self._logger.info(
-                    "State ARMED: speech detected after %.2fs using %s chunks; rms=%.1f",
+                    (
+                        "armed_trigger after=%.2fs duration_pcm=%.2fs chunks=%s valid_chunks=%s "
+                        "rms=%.1f peak=%s overflow=%s max_rms=%.1f max_peak=%s "
+                        "overflow_chunks=%s voiced_chunks=%s threshold=%.1f "
+                        "dynamic_threshold=%.1f noise_floor=%.1f voiced_window=%s/%s "
+                        "pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
+                        "result=recording_started"
+                    ),
+                    elapsed_seconds,
                     elapsed_seconds,
                     chunks_checked,
+                    valid_chunks,
                     rms,
+                    peak,
+                    _bool_text(overflowed),
+                    max_rms,
+                    max_peak,
+                    overflow_chunks,
+                    voiced_chunks,
+                    self.settings.armed_min_rms,
+                    dynamic_threshold,
+                    noise_floor,
+                    window_voiced_chunks,
+                    len(voiced_window),
+                    pre_roll_ms,
+                    len(pre_roll_chunks),
+                    pre_roll_overflow_chunks,
                 )
-                return chunk
+                return pre_roll_chunks or (chunk,)
 
+        final_noise_floor = _noise_floor(noise_samples)
+        final_dynamic_threshold = max(
+            self.settings.armed_min_rms,
+            final_noise_floor * self.settings.armed_snr_multiplier,
+        )
         self._logger.info(
-            "State ARMED: no speech detected in %.2fs using %s chunks",
+            (
+                "armed_summary duration_pcm=%.2fs chunks=%s valid_chunks=%s max_rms=%.1f max_peak=%s "
+                "overflow_chunks=%s voiced_chunks=%s threshold=%.1f dynamic_threshold=%.1f "
+                "noise_floor=%.1f pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
+                "result=no_speech_timeout"
+            ),
             elapsed_seconds,
             chunks_checked,
+            valid_chunks,
+            max_rms,
+            max_peak,
+            overflow_chunks,
+            voiced_chunks,
+            self.settings.armed_min_rms,
+            final_dynamic_threshold,
+            final_noise_floor,
+            int(round(sum(item.seconds for item in pre_roll) * 1000)),
+            sum(1 for item in pre_roll if item.pcm),
+            sum(1 for item in pre_roll if item.overflowed),
         )
         return None
 
-    def _record_question(self, *, initial_chunk: bytes | None = None) -> RecordingResult:
+    def _record_question(self, *, initial_chunks: Sequence[bytes] | None = None) -> RecordingResult:
         source = self.audio_source
-        if initial_chunk is not None:
-            source = _PreloadedChunkSource(initial_chunk, self.audio_source)
+        if initial_chunks:
+            source = _PreloadedChunkSource(initial_chunks, self.audio_source)
         return self.record_audio(
             source,
             sample_rate=self.settings.sample_rate,
@@ -381,7 +499,7 @@ class VoiceAssistantStateMachine:
         voice_duration = _wav_voice_duration_seconds(
             recording.path,
             sample_rate=self.settings.sample_rate,
-            voice_rms=self.settings.armed_voice_rms,
+            voice_rms=self.settings.armed_min_rms,
         )
         if voice_duration < self.settings.min_valid_speech_seconds:
             return "silent_recording"
@@ -662,25 +780,46 @@ def _detector_frame_seconds(wake_detector: object, sample_rate: int) -> float:
 
 
 class _PreloadedChunkSource:
-    def __init__(self, first_chunk: bytes, source: ChunkSource) -> None:
-        self._first_chunk = first_chunk
+    def __init__(self, preloaded_chunks: Sequence[bytes], source: ChunkSource) -> None:
+        self._preloaded_chunks = deque(preloaded_chunks)
         self._source = source
-        self._used_first_chunk = False
 
     @property
     def last_overflowed(self) -> bool:
-        if not self._used_first_chunk:
+        if self._preloaded_chunks:
             return False
         return bool(getattr(self._source, "last_overflowed", False))
 
     def read_chunk(self) -> bytes:
-        if not self._used_first_chunk:
-            self._used_first_chunk = True
-            return self._first_chunk
+        if self._preloaded_chunks:
+            return self._preloaded_chunks.popleft()
         return self._source.read_chunk()
 
 
-_FILLER_TRANSCRIPTS = {"um", "uh", "umm", "hmm", "hm", "嗯", "啊", "呃", "额"}
+def _noise_floor(samples: Sequence[float]) -> float:
+    if not samples:
+        return 0.0
+    sorted_samples = sorted(samples)
+    midpoint = len(sorted_samples) // 2
+    if len(sorted_samples) % 2:
+        return sorted_samples[midpoint]
+    return (sorted_samples[midpoint - 1] + sorted_samples[midpoint]) / 2
+
+
+def _trim_pre_roll(
+    pre_roll: deque[_ArmedChunk],
+    *,
+    pre_roll_seconds: float,
+    max_seconds: float,
+) -> float:
+    target_seconds = max(0.0, max_seconds)
+    while len(pre_roll) > 1 and pre_roll_seconds > target_seconds:
+        removed = pre_roll.popleft()
+        pre_roll_seconds -= removed.seconds
+    return max(0.0, pre_roll_seconds)
+
+
+_FILLER_TRANSCRIPTS = {"um", "uh", "umm", "hmm", "hm", "嗯", "啊", "呃", "额", "在呢"}
 _NOISY_CANCEL_SUFFIXES = {
     "了",
     "啦",

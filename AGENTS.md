@@ -23,13 +23,27 @@ Before planning, coding, evaluating, or resuming work:
 Full harness rules live in `.agent-harness/AGENTS.md`.
 Project-specific implementation should live in project-owned source and test paths, not in `.agent-harness/` unless the selected feature explicitly changes the harness.
 
-For one-feature implementation and evaluation, the orchestrator Makefile lives under `.agent-harness/`, not at the repository root. Use:
+For orchestrator work, the harness Makefile is inside `.agent-harness/`. From the project root, run:
 
 ```bash
 make -C .agent-harness work
 ```
 
-Do not treat a missing root `make work` target as an orchestrator capability gap. Only use manual fallback after the `.agent-harness` orchestrator entrypoint or configured role adapters are actually unavailable, blocked, or explicitly bypassed by the user.
+Equivalently, run `cd .agent-harness && make work`. Do not treat a missing root `Makefile` as a reason to bypass the orchestrator-first workflow.
+
+Preferred interactive mode:
+
+- For interactive user-led development, default to evaluator-gated fast work from the project root:
+
+  ```bash
+  make -C .agent-harness work-fast
+  ```
+
+- In this mode, the current agent/provider-native session implements the selected feature after the fast handoff.
+- The coding phase must record `FAST_CODING_EVIDENCE: Fxxx` and `CODING_PASS: Fxxx` in `.agent-harness/runs/`.
+- The coding phase must not write `EVAL_PASS: Fxxx`, must not mark the feature `passes=true` or `status=done`, and must not treat local tests as evaluator evidence.
+- After coding evidence is recorded, rerun `make -C .agent-harness work-fast` so a separate cold-start Evaluator Agent child process can accept or reject the feature.
+- Use baseline `make -C .agent-harness work` when the user explicitly asks for the full two-child-process flow, unattended execution, or batch work.
 
 Root `./init.sh` starts as harness verification only. Before a minspec exists, it proves the harness can plan and resume. After minspec acceptance, plan a runnable-skeleton feature that turns root `./init.sh` into the project recovery contract described in `.agent-harness/docs/project-recovery-init.md`.
 

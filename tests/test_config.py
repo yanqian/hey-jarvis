@@ -4,7 +4,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.config import (
+    DEFAULT_ARMED_CLIP_REJECT_PEAK,
+    DEFAULT_ARMED_MIN_RMS,
     DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS,
+    DEFAULT_ARMED_PRE_ROLL_SECONDS,
+    DEFAULT_ARMED_SNR_MULTIPLIER,
+    DEFAULT_ARMED_VOICE_REQUIRED_RATIO,
+    DEFAULT_ARMED_VOICE_WINDOW_SECONDS,
     DEFAULT_ARMED_VOICE_RMS,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CANCEL_PHRASES,
@@ -96,6 +102,12 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_confirmation_frames, DEFAULT_WAKE_CONFIRMATION_FRAMES)
         self.assertEqual(settings.armed_no_speech_timeout_seconds, DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS)
         self.assertEqual(settings.armed_voice_rms, DEFAULT_ARMED_VOICE_RMS)
+        self.assertEqual(settings.armed_min_rms, DEFAULT_ARMED_MIN_RMS)
+        self.assertEqual(settings.armed_snr_multiplier, DEFAULT_ARMED_SNR_MULTIPLIER)
+        self.assertEqual(settings.armed_voice_window_seconds, DEFAULT_ARMED_VOICE_WINDOW_SECONDS)
+        self.assertEqual(settings.armed_voice_required_ratio, DEFAULT_ARMED_VOICE_REQUIRED_RATIO)
+        self.assertEqual(settings.armed_clip_reject_peak, DEFAULT_ARMED_CLIP_REJECT_PEAK)
+        self.assertEqual(settings.armed_pre_roll_seconds, DEFAULT_ARMED_PRE_ROLL_SECONDS)
         self.assertEqual(settings.min_valid_speech_seconds, DEFAULT_MIN_VALID_SPEECH_SECONDS)
         self.assertEqual(settings.min_transcript_length, DEFAULT_MIN_TRANSCRIPT_LENGTH)
         self.assertEqual(settings.cancel_phrases, DEFAULT_CANCEL_PHRASES)
@@ -141,6 +153,12 @@ class ConfigTests(unittest.TestCase):
                 "WAKE_CONFIRMATION_FRAMES": "3",
                 "ARMED_NO_SPEECH_TIMEOUT_SECONDS": "1.25",
                 "ARMED_VOICE_RMS": "900",
+                "ARMED_MIN_RMS": "950",
+                "ARMED_SNR_MULTIPLIER": "3.0",
+                "ARMED_VOICE_WINDOW_SECONDS": "0.4",
+                "ARMED_VOICE_REQUIRED_RATIO": "0.8",
+                "ARMED_CLIP_REJECT_PEAK": "31000",
+                "ARMED_PRE_ROLL_SECONDS": "0.6",
                 "MIN_VALID_SPEECH_SECONDS": "0.4",
                 "MIN_TRANSCRIPT_LENGTH": "3",
                 "CANCEL_PHRASES": "stop,no thanks,算了",
@@ -186,6 +204,12 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_confirmation_frames, 3)
         self.assertEqual(settings.armed_no_speech_timeout_seconds, 1.25)
         self.assertEqual(settings.armed_voice_rms, 900.0)
+        self.assertEqual(settings.armed_min_rms, 950.0)
+        self.assertEqual(settings.armed_snr_multiplier, 3.0)
+        self.assertEqual(settings.armed_voice_window_seconds, 0.4)
+        self.assertEqual(settings.armed_voice_required_ratio, 0.8)
+        self.assertEqual(settings.armed_clip_reject_peak, 31000)
+        self.assertEqual(settings.armed_pre_roll_seconds, 0.6)
         self.assertEqual(settings.min_valid_speech_seconds, 0.4)
         self.assertEqual(settings.min_transcript_length, 3)
         self.assertEqual(settings.cancel_phrases, ("stop", "no thanks", "算了"))
@@ -244,6 +268,12 @@ class ConfigTests(unittest.TestCase):
                     "WAKE_CONFIRMATION_FRAMES": "0",
                     "ARMED_NO_SPEECH_TIMEOUT_SECONDS": "-1",
                     "ARMED_VOICE_RMS": "-1",
+                    "ARMED_MIN_RMS": "-1",
+                    "ARMED_SNR_MULTIPLIER": "-1",
+                    "ARMED_VOICE_WINDOW_SECONDS": "-1",
+                    "ARMED_VOICE_REQUIRED_RATIO": "1.5",
+                    "ARMED_CLIP_REJECT_PEAK": "40000",
+                    "ARMED_PRE_ROLL_SECONDS": "-1",
                     "MIN_VALID_SPEECH_SECONDS": "-0.1",
                     "MIN_TRANSCRIPT_LENGTH": "0",
                 },
@@ -278,6 +308,12 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("WAKE_CONFIRMATION_FRAMES must be at least 1", message)
         self.assertIn("ARMED_NO_SPEECH_TIMEOUT_SECONDS must be at least 0.0", message)
         self.assertIn("ARMED_VOICE_RMS must be at least 0.0", message)
+        self.assertIn("ARMED_MIN_RMS must be at least 0.0", message)
+        self.assertIn("ARMED_SNR_MULTIPLIER must be at least 0.0", message)
+        self.assertIn("ARMED_VOICE_WINDOW_SECONDS must be at least 0.0", message)
+        self.assertIn("ARMED_VOICE_REQUIRED_RATIO must be at most 1.0", message)
+        self.assertIn("ARMED_CLIP_REJECT_PEAK must be at most 32768", message)
+        self.assertIn("ARMED_PRE_ROLL_SECONDS must be at least 0.0", message)
         self.assertIn("MIN_VALID_SPEECH_SECONDS must be at least 0.0", message)
         self.assertIn("MIN_TRANSCRIPT_LENGTH must be at least 1", message)
         self.assertIn("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS", message)

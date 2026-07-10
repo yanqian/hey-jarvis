@@ -58,7 +58,7 @@ DEFAULT_LOCATION = PROVIDER_DEFAULT_LOCATION
 DEFAULT_BASE_CURRENCY = PROVIDER_DEFAULT_BASE_CURRENCY
 DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED = True
 DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT = "在呢"
-DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH = Path("tmp/ack.mp3")
+DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH = Path("var/ack.mp3")
 DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS = 0.35
 DEFAULT_WAKE_DEBUG = False
 DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS = 1.0
@@ -67,8 +67,14 @@ DEFAULT_POST_PLAYBACK_QUIET_RMS = 500.0
 DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS = 6.0
 DEFAULT_WAKE_CONFIRMATION_FRAMES = 2
 DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS = 2.0
-DEFAULT_ARMED_VOICE_RMS = 750.0
-DEFAULT_MIN_VALID_SPEECH_SECONDS = 0.24
+DEFAULT_ARMED_MIN_RMS = 750.0
+DEFAULT_ARMED_VOICE_RMS = DEFAULT_ARMED_MIN_RMS
+DEFAULT_ARMED_SNR_MULTIPLIER = 2.5
+DEFAULT_ARMED_VOICE_WINDOW_SECONDS = 0.30
+DEFAULT_ARMED_VOICE_REQUIRED_RATIO = 0.75
+DEFAULT_ARMED_CLIP_REJECT_PEAK = 32000
+DEFAULT_ARMED_PRE_ROLL_SECONDS = 0.50
+DEFAULT_MIN_VALID_SPEECH_SECONDS = 0.50
 DEFAULT_MIN_TRANSCRIPT_LENGTH = 2
 DEFAULT_CANCEL_PHRASES = ("取消", "没事", "不用了", "算了", "stop", "cancel", "never mind")
 
@@ -132,6 +138,12 @@ class Settings:
     wake_confirmation_frames: int = DEFAULT_WAKE_CONFIRMATION_FRAMES
     armed_no_speech_timeout_seconds: float = DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS
     armed_voice_rms: float = DEFAULT_ARMED_VOICE_RMS
+    armed_min_rms: float = DEFAULT_ARMED_MIN_RMS
+    armed_snr_multiplier: float = DEFAULT_ARMED_SNR_MULTIPLIER
+    armed_voice_window_seconds: float = DEFAULT_ARMED_VOICE_WINDOW_SECONDS
+    armed_voice_required_ratio: float = DEFAULT_ARMED_VOICE_REQUIRED_RATIO
+    armed_clip_reject_peak: int = DEFAULT_ARMED_CLIP_REJECT_PEAK
+    armed_pre_roll_seconds: float = DEFAULT_ARMED_PRE_ROLL_SECONDS
     min_valid_speech_seconds: float = DEFAULT_MIN_VALID_SPEECH_SECONDS
     min_transcript_length: int = DEFAULT_MIN_TRANSCRIPT_LENGTH
     cancel_phrases: tuple[str, ...] = DEFAULT_CANCEL_PHRASES
@@ -347,6 +359,51 @@ def load_settings(
         errors,
         minimum=0.0,
     )
+    armed_min_rms = _float_value(
+        raw_env,
+        "ARMED_MIN_RMS",
+        armed_voice_rms,
+        errors,
+        minimum=0.0,
+    )
+    armed_snr_multiplier = _float_value(
+        raw_env,
+        "ARMED_SNR_MULTIPLIER",
+        DEFAULT_ARMED_SNR_MULTIPLIER,
+        errors,
+        minimum=0.0,
+    )
+    armed_voice_window_seconds = _float_value(
+        raw_env,
+        "ARMED_VOICE_WINDOW_SECONDS",
+        DEFAULT_ARMED_VOICE_WINDOW_SECONDS,
+        errors,
+        minimum=0.0,
+    )
+    armed_voice_required_ratio = _float_value(
+        raw_env,
+        "ARMED_VOICE_REQUIRED_RATIO",
+        DEFAULT_ARMED_VOICE_REQUIRED_RATIO,
+        errors,
+        minimum=0.0,
+        maximum=1.0,
+    )
+    armed_clip_reject_peak = _int_value(
+        raw_env,
+        "ARMED_CLIP_REJECT_PEAK",
+        DEFAULT_ARMED_CLIP_REJECT_PEAK,
+        errors,
+        minimum=1,
+    )
+    if armed_clip_reject_peak > 32768:
+        errors.append("ARMED_CLIP_REJECT_PEAK must be at most 32768")
+    armed_pre_roll_seconds = _float_value(
+        raw_env,
+        "ARMED_PRE_ROLL_SECONDS",
+        DEFAULT_ARMED_PRE_ROLL_SECONDS,
+        errors,
+        minimum=0.0,
+    )
     min_valid_speech_seconds = _float_value(
         raw_env,
         "MIN_VALID_SPEECH_SECONDS",
@@ -413,6 +470,12 @@ def load_settings(
         wake_confirmation_frames=wake_confirmation_frames,
         armed_no_speech_timeout_seconds=armed_no_speech_timeout_seconds,
         armed_voice_rms=armed_voice_rms,
+        armed_min_rms=armed_min_rms,
+        armed_snr_multiplier=armed_snr_multiplier,
+        armed_voice_window_seconds=armed_voice_window_seconds,
+        armed_voice_required_ratio=armed_voice_required_ratio,
+        armed_clip_reject_peak=armed_clip_reject_peak,
+        armed_pre_roll_seconds=armed_pre_roll_seconds,
         min_valid_speech_seconds=min_valid_speech_seconds,
         min_transcript_length=min_transcript_length,
         cancel_phrases=cancel_phrases,

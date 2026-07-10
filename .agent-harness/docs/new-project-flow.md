@@ -4,7 +4,7 @@ This is the end-to-end path for starting a new project with the AI Agent Harness
 
 ```mermaid
 flowchart TD
-    A["Human: ask `Use $ai-agent-harness to initialize this project`"] --> B["Skill: check/adopt/new/repair harness"]
+    A["Human: ask `Use $ai-agent-harness to initialize this project`"] --> B["Skill: check/adopt/new/repair/upgrade harness"]
     B --> C["Skill: install hidden layout and run root `./init.sh`"]
     C --> D{"Human: provide minspec?"}
     D -- "not yet" --> E["State: recoverable planning harness only"]
@@ -31,7 +31,7 @@ flowchart TD
 
 ## What The Skill Does
 
-- Installs or repairs the harness without relying on chat history.
+- Installs, repairs, or upgrades the harness without relying on chat history.
 - Defaults new projects to hidden layout: root keeps thin `AGENTS.md` and `init.sh`; harness state lives under `.agent-harness/`.
 - Keeps durable state in repository files: `SPEC.md`, `feature_list.json`, `progress.md`, `docs/`, `QUALITY.md`, and `runs/`.
 - Runs the startup protocol and root `./init.sh` before planning, coding, evaluation, continuation, or commit.
@@ -43,7 +43,7 @@ flowchart TD
 
 ## What Humans Must Provide
 
-- Project intent: new install, adopt existing project, repair existing harness, or check only.
+- Project intent: new install, adopt existing project, repair missing files, upgrade an installed harness after a skill update, or check only.
 - Conflict decisions: whether the skill may overwrite merge-sensitive files; default is no.
 - Minspec: the smallest useful project description, including goal, included scope, excluded scope, core flows, constraints, and verification expectations.
 - Clarifications: answers or approved assumptions when the minspec is ambiguous.
@@ -77,6 +77,8 @@ Run one real orchestrator round after provider configuration:
 ```bash
 make work
 ```
+
+From a hidden-layout project root, use `make -C .agent-harness work` instead because the harness Makefile lives inside `.agent-harness/`.
 
 ## Required Follow-On Decisions
 

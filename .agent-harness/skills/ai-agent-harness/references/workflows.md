@@ -6,18 +6,21 @@ If the skill is installed in an agent surface, invoke it by name, for example `U
 
 ## Initialize Harness
 
-Use when the target project lacks harness files or the user asks to install, adopt, repair, or check the harness.
+Use when the target project lacks harness files or the user asks to install, adopt, repair, upgrade, or check the harness.
 
 1. Run `scripts/init_harness.py --mode check --root <project>` when the user only wants inspection.
 2. Run `scripts/init_harness.py --mode adopt --layout hidden --root <project>` for an existing project unless the user asks for visible layout.
 3. Run `scripts/init_harness.py --mode new --layout hidden --root <project>` for a new project unless the user asks for visible layout.
 4. Run `scripts/init_harness.py --mode repair --root <project>` for an existing harness with missing files.
-5. Do not use `--force` unless the user explicitly approved overwriting conflicts.
-6. After initialization, run `<project>/init.sh` if present.
+5. After updating the global skill, run `scripts/init_harness.py --mode check --root <project>` in existing installed projects; when `installed_version` is older than `template_version`, run `scripts/init_harness.py --mode upgrade --root <project>`.
+6. Do not use `--force` unless the user explicitly approved overwriting conflicts.
+7. After initialization, repair, or upgrade, run `<project>/init.sh` if present.
 
-`new` and `adopt` reset project feature state to an empty `feature_list.json` and fresh `progress.md`. `repair` preserves existing project state.
+`new` and `adopt` reset project feature state to an empty `feature_list.json` and fresh `progress.md`. `repair` preserves existing project state and restores missing files. `upgrade` preserves project-owned state while updating harness-owned static files, installed runtime files, prompts, docs, template metadata, and the installation manifest.
 
 Installed projects record `.agent-harness/manifest.json`. The template records `.agent-harness-template.json`. Use `check` before repair or upgrade decisions: it reports installed layout, installed version, template version, missing files, merge-sensitive conflicts, harness-owned drift, project-owned state changes, semantic validity, runnable status, and next action guidance.
+
+In hidden layout, root `AGENTS.md` and root `init.sh` are project merge-sensitive entry points. Do not overwrite them during upgrade unless the user explicitly approves `--force`, especially after a minspec has turned root `./init.sh` into the project recovery contract. The project-local `.agent-harness/` runtime files are harness-owned and should be updated by `upgrade`.
 
 `hidden` layout is the default for user projects: root keeps thin `AGENTS.md` and `init.sh` entry points while the harness body lives under `.agent-harness/`. `visible` layout is for harness development and direct template inspection.
 
@@ -55,17 +58,25 @@ Use when the user asks to implement, continue, or work on a harness feature.
    make work
    ```
 
+   In hidden-layout installs, run this from the project root instead:
+
+   ```bash
+   make -C .agent-harness work
+   ```
+
+   You can also `cd .agent-harness && make work`. Do not treat a missing root `Makefile` as a fail-closed adapter setup gap.
 3. Let the orchestrator select one unfinished feature, mark it `in_progress`, increment attempts, run Coding Agent and Evaluator Agent adapters, and mark done only after evaluator pass.
-4. Configure `agent-provider.json` from `agent-provider.example.json` using `docs/agent-provider-configuration.md` before real provider execution.
-5. If adapters or providers are missing, unavailable, ambiguous, or still unconfigured, treat that as a fail-closed adapter setup gap. Do not silently hand-edit feature completion.
-6. Use manual or interactive Coding Agent work only as an explicit fallback when adapters are not configured or the user asks for manual work.
-7. For manual fallback, select exactly one feature, implement only that feature, preserve unrelated working-tree changes, update `progress.md`, and update only the selected feature in `feature_list.json`.
-8. Manual fallback must record that it was a fallback in `progress.md` or `runs/` and must not bypass evaluator pass, evaluator evidence, attempts, failure records, or final `./init.sh` verification.
-9. Record a run note in `runs/` for non-trivial work, external behavior verification, failures, or evaluator handoff.
-10. When a required capability is missing, follow `docs/capability-gaps.md`; make the capability durable, block the feature, or create follow-up work instead of relying on local-only workarounds.
-11. When implementation touches `examples/`, follow `docs/example-boundaries.md`; do not use default examples as the product implementation surface.
-12. Run `./init.sh` after changes.
-13. Do not stage or commit during orchestrated Coding Agent work.
+4. Use `make work-fast` only as the fast A/B alternative: it skips the Coding Agent role adapter, records provider-native coding evidence with `FAST_CODING_EVIDENCE: Fxxx`, and still requires a separate cold-start Evaluator Agent child process before completion.
+5. Configure `agent-provider.json` from `agent-provider.example.json` using `docs/agent-provider-configuration.md` before real provider execution.
+6. If adapters or providers are missing, unavailable, ambiguous, or still unconfigured, treat that as a fail-closed adapter setup gap. Do not silently hand-edit feature completion.
+7. Use manual or interactive Coding Agent work only as an explicit fallback when adapters are not configured or the user asks for manual work.
+8. For manual fallback, select exactly one feature, implement only that feature, preserve unrelated working-tree changes, update `progress.md`, and update only the selected feature in `feature_list.json`.
+9. Manual fallback must record that it was a fallback in `progress.md` or `runs/` and must not bypass evaluator pass, evaluator evidence, attempts, failure records, or final `./init.sh` verification.
+10. Record a run note in `runs/` for non-trivial work, external behavior verification, failures, or evaluator handoff.
+11. When a required capability is missing, follow `docs/capability-gaps.md`; make the capability durable, block the feature, or create follow-up work instead of relying on local-only workarounds.
+12. When implementation touches `examples/`, follow `docs/example-boundaries.md`; do not use default examples as the product implementation surface.
+13. Run `./init.sh` after changes.
+14. Do not stage or commit during orchestrated Coding Agent work.
 
 ## Evaluate Feature
 
@@ -91,7 +102,7 @@ Use after interruption or when the user asks to resume.
 2. Read `progress.md`, `feature_list.json`, `AGENTS.md`, and recent commits.
 3. Run `./init.sh`.
 4. Identify the next safe action from repository state.
-5. Continue implementation or evaluation through `make work` first.
+5. Continue implementation or evaluation through `make work` first, using `make -C .agent-harness work` from the project root in hidden-layout installs.
 6. Use manual continuation only as an explicit fallback when adapters are unavailable or the user asks for interactive/manual work.
 7. Inspect `docs/capability-gaps.md` when prior work used local-only workarounds for missing capabilities.
 8. Inspect `docs/example-boundaries.md` when prior work modified `examples/`.

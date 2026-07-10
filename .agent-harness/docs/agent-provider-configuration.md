@@ -103,6 +103,8 @@ Run one orchestrator round:
 make work
 ```
 
+From a hidden-layout project root, use `make -C .agent-harness work` because the provider config and harness Makefile live under `.agent-harness/`.
+
 Preview without requiring a provider:
 
 ```bash

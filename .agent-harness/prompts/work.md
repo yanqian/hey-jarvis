@@ -4,7 +4,7 @@ Act as Coding Agent for one selected feature.
 
 Feature ID: `Fxxx`
 
-Default invocation: the Coding Agent prompt is normally dispatched by the orchestrator through `make work`. If you are running this prompt manually, treat that as an explicit fallback because role adapters are unavailable or the user requested interactive/manual work. Record the fallback in `progress.md` or `runs/`, and do not bypass evaluator gating, evaluator evidence, attempts, failure records, or final `./init.sh` verification.
+Default invocation: the Coding Agent prompt is normally dispatched by the orchestrator through baseline `make work`, not the fast `make work-fast` handoff. In hidden-layout installs, run the equivalent command from the project root with `make -C .agent-harness work`, or run `make work` after changing into `.agent-harness/`. If you are running this prompt manually, treat that as an explicit fallback because role adapters are unavailable or the user requested interactive/manual work. A missing root `Makefile` in hidden layout is not a valid manual-fallback reason. Record the fallback in `progress.md` or `runs/`, and do not bypass evaluator gating, evaluator evidence, attempts, failure records, or final `./init.sh` verification.
 
 You must:
 

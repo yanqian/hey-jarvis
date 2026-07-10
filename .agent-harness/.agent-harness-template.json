@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "template_version": "0.3.3",
+  "template_version": "0.3.8",
   "default_layout": "hidden",
   "file_categories": {
     "harness-owned static": "Copied and drift-checked by content hash.",
@@ -16,6 +16,6 @@
   "version_drift": {
     "check": "Report installed_version, template_version, drift files, state validity, and next_action.",
     "repair": "Restore missing files and write an installation manifest without overwriting local modifications.",
-    "upgrade": "Future explicit mode for template-version upgrades after review."
+    "upgrade": "Update harness-owned installed files and manifest metadata after reviewing merge-sensitive project files."
   }
 }

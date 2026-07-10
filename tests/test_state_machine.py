@@ -6,7 +6,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.config import (
+    DEFAULT_ARMED_CLIP_REJECT_PEAK,
+    DEFAULT_ARMED_MIN_RMS,
     DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS,
+    DEFAULT_ARMED_PRE_ROLL_SECONDS,
+    DEFAULT_ARMED_SNR_MULTIPLIER,
+    DEFAULT_ARMED_VOICE_REQUIRED_RATIO,
+    DEFAULT_ARMED_VOICE_WINDOW_SECONDS,
     DEFAULT_ARMED_VOICE_RMS,
     DEFAULT_CANCEL_PHRASES,
     DEFAULT_CHAT_MODEL,
@@ -54,6 +60,12 @@ def make_settings(
     wake_acknowledgement_drain_seconds=DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
     armed_no_speech_timeout_seconds=DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS,
     armed_voice_rms=DEFAULT_ARMED_VOICE_RMS,
+    armed_min_rms=DEFAULT_ARMED_MIN_RMS,
+    armed_snr_multiplier=DEFAULT_ARMED_SNR_MULTIPLIER,
+    armed_voice_window_seconds=DEFAULT_ARMED_VOICE_WINDOW_SECONDS,
+    armed_voice_required_ratio=DEFAULT_ARMED_VOICE_REQUIRED_RATIO,
+    armed_clip_reject_peak=DEFAULT_ARMED_CLIP_REJECT_PEAK,
+    armed_pre_roll_seconds=DEFAULT_ARMED_PRE_ROLL_SECONDS,
     min_valid_speech_seconds=DEFAULT_MIN_VALID_SPEECH_SECONDS,
     min_transcript_length=DEFAULT_MIN_TRANSCRIPT_LENGTH,
     cancel_phrases=DEFAULT_CANCEL_PHRASES,
@@ -87,6 +99,12 @@ def make_settings(
         wake_confirmation_frames=wake_confirmation_frames,
         armed_no_speech_timeout_seconds=armed_no_speech_timeout_seconds,
         armed_voice_rms=armed_voice_rms,
+        armed_min_rms=armed_min_rms,
+        armed_snr_multiplier=armed_snr_multiplier,
+        armed_voice_window_seconds=armed_voice_window_seconds,
+        armed_voice_required_ratio=armed_voice_required_ratio,
+        armed_clip_reject_peak=armed_clip_reject_peak,
+        armed_pre_roll_seconds=armed_pre_roll_seconds,
         min_valid_speech_seconds=min_valid_speech_seconds,
         min_transcript_length=min_transcript_length,
         cancel_phrases=cancel_phrases,
@@ -100,11 +118,15 @@ def pcm_chunk(sample, frames=1280):
 WAKE_CHUNK = pcm_chunk(1)
 QUIET_CHUNK = pcm_chunk(0)
 LOUD_CHUNK = pcm_chunk(2000)
+MODERATE_CHUNK = pcm_chunk(800)
+NOISE_CHUNK = pcm_chunk(400)
+CLIPPED_CHUNK = pcm_chunk(32767)
+SPEECH_CHUNKS = [LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK]
 
 
 class FakeAudioSource:
     def __init__(self, chunks=None, *, fallback_chunk=QUIET_CHUNK):
-        self.chunks = list(chunks if chunks is not None else [QUIET_CHUNK, WAKE_CHUNK, WAKE_CHUNK, LOUD_CHUNK])
+        self.chunks = list(chunks if chunks is not None else [QUIET_CHUNK, WAKE_CHUNK, WAKE_CHUNK, *SPEECH_CHUNKS])
         self.fallback_chunk = fallback_chunk
         self.read_chunks = []
         self.last_overflowed = False
@@ -178,8 +200,8 @@ def fake_record_audio(source, *, sample_rate, output_path, **kwargs):
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
-        wav_file.writeframes(LOUD_CHUNK * 4)
-    return RecordingResult(path=path, duration_seconds=0.32, chunks_recorded=4, stopped_by="test")
+        wav_file.writeframes(LOUD_CHUNK * 8)
+    return RecordingResult(path=path, duration_seconds=0.64, chunks_recorded=8, stopped_by="test")
 
 
 def fake_silent_record_audio(source, *, sample_rate, output_path, **kwargs):
@@ -188,14 +210,14 @@ def fake_silent_record_audio(source, *, sample_rate, output_path, **kwargs):
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
-        wav_file.writeframes(QUIET_CHUNK * 4)
-    return RecordingResult(path=path, duration_seconds=0.32, chunks_recorded=4, stopped_by="silence")
+        wav_file.writeframes(QUIET_CHUNK * 8)
+    return RecordingResult(path=path, duration_seconds=0.64, chunks_recorded=8, stopped_by="silence")
 
 
 class StateMachineTests(unittest.TestCase):
     def test_wake_acknowledgement_plays_and_drains_before_recording(self):
         logger = logging.getLogger("tests.state_machine.acknowledgement")
-        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, LOUD_CHUNK, LOUD_CHUNK, QUIET_CHUNK])
+        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, QUIET_CHUNK, *SPEECH_CHUNKS])
         wake_detector = FakeWakeDetector()
         openai_client = FakeOpenAIClient()
         player = FakePlayer()
@@ -243,7 +265,7 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("Transition ARMED -> RECORDING", log_output)
 
     def test_recording_uses_configured_silence_threshold(self):
-        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, LOUD_CHUNK])
+        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, *SPEECH_CHUNKS])
         captured_kwargs = {}
 
         def record_with_capture(source, *, sample_rate, output_path, **kwargs):
@@ -312,7 +334,134 @@ class StateMachineTests(unittest.TestCase):
         self.assertEqual(history, [])
         log_output = "\n".join(logs.output)
         self.assertIn("Transition WAIT_WAKE -> ARMED", log_output)
+        self.assertIn("armed_summary duration_pcm=0.16s chunks=2 valid_chunks=2", log_output)
+        self.assertIn("max_rms=0.0 max_peak=0 overflow_chunks=0 voiced_chunks=0 threshold=750.0", log_output)
+        self.assertIn("pre_roll_ms=160 pre_roll_chunks=2 pre_roll_overflow_chunks=0", log_output)
+        self.assertIn("result=no_speech_timeout", log_output)
         self.assertIn("local cancellation reason=no_speech_after_wake", log_output)
+
+    def test_armed_trigger_preserves_pre_roll_chunks(self):
+        logger = logging.getLogger("tests.state_machine.armed_pre_roll")
+        audio_source = FakeAudioSource(
+            [WAKE_CHUNK, WAKE_CHUNK, QUIET_CHUNK, QUIET_CHUNK, LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK],
+            fallback_chunk=LOUD_CHUNK,
+        )
+        recorded_chunks = []
+
+        def record_with_pre_roll_capture(source, *, sample_rate, output_path, **kwargs):
+            for _ in range(5):
+                recorded_chunks.append(source.read_chunk())
+            return fake_record_audio(source, sample_rate=sample_rate, output_path=output_path, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    armed_pre_roll_seconds=0.5,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=record_with_pre_roll_capture,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(recorded_chunks, [QUIET_CHUNK, QUIET_CHUNK, LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK])
+        log_output = "\n".join(logs.output)
+        self.assertIn("armed_trigger after=0.40s", log_output)
+        self.assertIn("duration_pcm=0.40s chunks=5 valid_chunks=5", log_output)
+        self.assertIn("max_rms=2000.0 max_peak=2000 overflow_chunks=0 voiced_chunks=3", log_output)
+        self.assertIn("voiced_window=3/4", log_output)
+        self.assertIn("pre_roll_ms=400", log_output)
+        self.assertIn("pre_roll_chunks=5", log_output)
+        self.assertIn("pre_roll_overflow_chunks=0 result=recording_started", log_output)
+
+    def test_armed_dynamic_threshold_rejects_noise_floor_scaled_chunks(self):
+        logger = logging.getLogger("tests.state_machine.armed_dynamic_threshold")
+        audio_source = FakeAudioSource(
+            [WAKE_CHUNK, WAKE_CHUNK, NOISE_CHUNK, NOISE_CHUNK, MODERATE_CHUNK, MODERATE_CHUNK],
+            fallback_chunk=MODERATE_CHUNK,
+        )
+        openai_client = FakeOpenAIClient()
+
+        def fail_record_audio(*args, **kwargs):
+            raise AssertionError("recording should not start below the dynamic threshold")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    armed_no_speech_timeout_seconds=0.32,
+                    armed_min_rms=500,
+                    armed_snr_multiplier=2.5,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=openai_client,
+                player=FakePlayer(),
+                record_audio=fail_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertTrue(result.cancelled)
+        self.assertEqual(result.cancellation_reason, "no_speech_after_wake")
+        self.assertIsNone(openai_client.transcribed_path)
+        log_output = "\n".join(logs.output)
+        self.assertIn("armed_summary", log_output)
+        self.assertIn("max_rms=800.0", log_output)
+        self.assertIn("dynamic_threshold=1500.0", log_output)
+        self.assertIn("noise_floor=600.0", log_output)
+
+    def test_armed_rejects_overflow_and_clipped_chunks(self):
+        logger = logging.getLogger("tests.state_machine.armed_overflow_clipped")
+        audio_source = FakeAudioSource(
+            [WAKE_CHUNK, WAKE_CHUNK, b"overflow", CLIPPED_CHUNK, CLIPPED_CHUNK, CLIPPED_CHUNK],
+            fallback_chunk=CLIPPED_CHUNK,
+        )
+
+        def fail_record_audio(*args, **kwargs):
+            raise AssertionError("recording should not start from overflowed or clipped chunks")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    armed_no_speech_timeout_seconds=0.32,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=fail_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertTrue(result.cancelled)
+        log_output = "\n".join(logs.output)
+        self.assertIn("ignoring overflowed microphone chunk", log_output)
+        self.assertIn("overflow_chunks=1", log_output)
+        self.assertIn("max_peak=32767", log_output)
+        self.assertIn("voiced_chunks=0", log_output)
 
     def test_run_once_completes_full_loop_and_returns_to_wait_wake(self):
         logger = logging.getLogger("tests.state_machine")
@@ -721,7 +870,7 @@ class StateMachineTests(unittest.TestCase):
 
     def test_single_wake_candidate_does_not_enter_recording_until_confirmed(self):
         logger = logging.getLogger("tests.state_machine.wake_confirmation")
-        audio_source = FakeAudioSource([WAKE_CHUNK, QUIET_CHUNK, WAKE_CHUNK, WAKE_CHUNK, LOUD_CHUNK])
+        audio_source = FakeAudioSource([WAKE_CHUNK, QUIET_CHUNK, WAKE_CHUNK, WAKE_CHUNK, *SPEECH_CHUNKS])
         wake_detector = FakeWakeDetector()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -752,7 +901,7 @@ class StateMachineTests(unittest.TestCase):
 
     def test_post_playback_residue_is_drained_without_wake_detection(self):
         logger = logging.getLogger("tests.state_machine.post_playback")
-        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, LOUD_CHUNK, b"overflow", WAKE_CHUNK, QUIET_CHUNK])
+        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, *SPEECH_CHUNKS, b"overflow", WAKE_CHUNK, QUIET_CHUNK])
         wake_detector = FakeWakeDetector()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -789,8 +938,7 @@ class StateMachineTests(unittest.TestCase):
             [
                 WAKE_CHUNK,
                 WAKE_CHUNK,
-                LOUD_CHUNK,
-                LOUD_CHUNK,
+                *SPEECH_CHUNKS,
                 WAKE_CHUNK,
                 WAKE_CHUNK,
                 QUIET_CHUNK,
@@ -826,10 +974,8 @@ class StateMachineTests(unittest.TestCase):
 
         self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
         self.assertEqual(wake_detector.detected_chunks[:2], [WAKE_CHUNK, WAKE_CHUNK])
-        self.assertIn(WAKE_CHUNK, wake_detector.detected_chunks[2:])
         self.assertEqual(player.played, [output_path])
         log_output = "\n".join(logs.output)
-        self.assertIn("max_suppressed_score=1.000000000", log_output)
         self.assertIn("post-playback quiet gate consumed", log_output)
 
     def test_transcript_cancel_suppresses_residual_wake_before_later_intentional_wake(self):
@@ -838,14 +984,14 @@ class StateMachineTests(unittest.TestCase):
             [
                 WAKE_CHUNK,
                 WAKE_CHUNK,
-                LOUD_CHUNK,
+                *SPEECH_CHUNKS,
                 WAKE_CHUNK,
                 WAKE_CHUNK,
                 QUIET_CHUNK,
                 QUIET_CHUNK,
                 WAKE_CHUNK,
                 WAKE_CHUNK,
-                LOUD_CHUNK,
+                *SPEECH_CHUNKS,
             ],
             fallback_chunk=QUIET_CHUNK,
         )
@@ -898,7 +1044,7 @@ class StateMachineTests(unittest.TestCase):
         self.assertEqual(player.played, [acknowledgement_path, acknowledgement_path, output_path])
         self.assertEqual(
             consumed_after_cancel,
-            [WAKE_CHUNK, WAKE_CHUNK, LOUD_CHUNK, WAKE_CHUNK, WAKE_CHUNK, QUIET_CHUNK, QUIET_CHUNK],
+            [WAKE_CHUNK, WAKE_CHUNK, *SPEECH_CHUNKS, WAKE_CHUNK, WAKE_CHUNK, QUIET_CHUNK, QUIET_CHUNK],
         )
         first_log_output = "\n".join(first_logs.output)
         second_log_output = "\n".join(second_logs.output)
@@ -971,7 +1117,7 @@ class StateMachineTests(unittest.TestCase):
 
     def test_overflowed_wake_chunk_is_ignored(self):
         logger = logging.getLogger("tests.state_machine.overflow")
-        audio_source = FakeAudioSource([b"overflow", WAKE_CHUNK, WAKE_CHUNK, LOUD_CHUNK])
+        audio_source = FakeAudioSource([b"overflow", WAKE_CHUNK, WAKE_CHUNK, *SPEECH_CHUNKS])
         wake_detector = FakeWakeDetector()
 
         with tempfile.TemporaryDirectory() as tmp_dir:

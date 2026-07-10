@@ -705,6 +705,28 @@
       "depends_on": [
         "F022"
       ]
+    },
+    {
+      "id": "F035",
+      "title": "Confirm ARMED speech with adaptive pre-roll",
+      "description": "Replace single-chunk ARMED speech triggering with adaptive noise-floor speech confirmation over a recent voiced window, preserve about 500ms of pre-roll audio when recording starts, and add structured ARMED diagnostics plus local safety gates for short, empty, filler, or acknowledgement-only recordings.",
+      "acceptance": [
+        "ARMED maintains a recent pre-roll ring buffer and starts recording with the actual buffered audio plus subsequent microphone chunks so sustained-speech confirmation does not drop the beginning of the user's utterance.",
+        "ARMED uses deterministic multi-chunk speech confirmation based on a recent voiced window, rejecting overflowed and clipped chunks and requiring RMS to meet max(ARMED_MIN_RMS, noise_floor * ARMED_SNR_MULTIPLIER) instead of triggering from one RMS-above-threshold chunk.",
+        "ARMED logs structured armed_summary and armed_trigger context including PCM duration, chunks, max_rms, max_peak, overflow_chunks, voiced_chunks or voiced_window, threshold/dynamic threshold, noise_floor, result, and pre-roll duration/counts without logging raw audio or secrets.",
+        "Configuration and documentation expose the ARMED minimum RMS, SNR multiplier, voiced-window duration/ratio, clipped-peak rejection, and pre-roll duration with validated defaults that preserve ordinary quiet speech better than a static RMS 5000 threshold.",
+        "Even if ARMED misfires, short speech duration below the configured minimum, empty STT, filler text, or acknowledgement-only text such as 在呢 locally cancels before chat/tool routing, answer TTS, playback, or chat-history mutation.",
+        "Focused config/state-machine/documentation tests and final ./init.sh recovery verification cover adaptive thresholding, overflow/clipping rejection, pre-roll preservation, diagnostic logs, and downstream cancellation without live microphone, OpenAI, speaker, or network access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F029",
+        "F033"
+      ]
     }
   ]
 }

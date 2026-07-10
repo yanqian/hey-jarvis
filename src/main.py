@@ -80,6 +80,9 @@ def run_fake_backend_smoke() -> int:
                 _FAKE_SILENCE_CHUNK,
                 _FAKE_SILENCE_CHUNK,
                 _FAKE_SPEECH_CHUNK,
+                _FAKE_SPEECH_CHUNK,
+                _FAKE_SPEECH_CHUNK,
+                _FAKE_SPEECH_CHUNK,
             ]
         )
         machine = VoiceAssistantStateMachine(
@@ -436,8 +439,8 @@ def _fake_record_audio(
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
-        wav_file.writeframes(_FAKE_SPEECH_CHUNK * 4)
-    return RecordingResult(path=path, duration_seconds=0.32, chunks_recorded=4, stopped_by="fake_backend")
+        wav_file.writeframes(_FAKE_SPEECH_CHUNK * 8)
+    return RecordingResult(path=path, duration_seconds=0.64, chunks_recorded=8, stopped_by="fake_backend")
 
 
 def _print_live_wake_debug(

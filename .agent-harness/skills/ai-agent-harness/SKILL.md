@@ -33,6 +33,7 @@ Modes:
 - `new`: install the harness into a new or empty project and reset project state.
 - `adopt`: install missing harness files into an existing project and reset project state; default mode.
 - `repair`: add missing harness files but preserve existing `feature_list.json` and `progress.md`.
+- `upgrade`: update an already installed harness to the current template version after the global skill has been updated; preserve project-owned state and root project recovery files unless `--force` is explicitly approved.
 - `check`: report missing files, merge-sensitive conflicts, harness-owned drift, project state changes, installed/template versions, semantic validity, runnable status, and next action guidance without writing.
 
 Layouts:
@@ -55,14 +56,14 @@ Examples:
 python3 /path/to/skill/scripts/init_harness.py --root /path/to/project --mode adopt
 python3 /path/to/skill/scripts/init_harness.py --root /path/to/project --mode check
 python3 /path/to/skill/scripts/init_harness.py --root /path/to/project --mode repair
+python3 /path/to/skill/scripts/init_harness.py --root /path/to/project --mode upgrade
 ```
+
+After updating the global skill, run `check` in existing projects. If `installed_version` is older than `template_version`, run `upgrade` to refresh harness-owned files, installed runtime scripts, prompts, docs, and manifest metadata. Do not use `--force` unless the user explicitly approves overwriting merge-sensitive project files such as root `AGENTS.md` or root `init.sh`.
 
 ## Workflows
 
-For planning, one-feature work, evaluation, continuation, and final commit rules, read the skill-local workflow reference:
-
-- When using an installed skill, resolve `references/workflows.md` relative to this `SKILL.md` file.
-- In hidden-layout repositories with an embedded recovery copy, that file is normally `.agent-harness/skills/ai-agent-harness/references/workflows.md`.
+For planning, one-feature work, evaluation, continuation, and final commit rules, read `references/workflows.md`.
 
 Use the workflow names as intent detectors:
 
@@ -85,7 +86,9 @@ When completing or evaluating a feature, follow the target repository's `docs/ev
 
 When project work touches `examples/`, follow the target repository's `docs/example-boundaries.md`. Default examples are references, not the default place for product requirements.
 
-For one-feature implementation and evaluation, default to the repository's orchestrator-first entrypoint, normally `make work`. Manual or interactive Coding Agent work is an explicit fallback only when role adapters are unavailable or the user asks for manual work; it must not bypass evaluator gating, evaluator evidence, or final `./init.sh` verification.
+For one-feature implementation and evaluation, default to the repository's orchestrator-first entrypoint, normally `make work`. In hidden-layout installs, run `make -C .agent-harness work` from the project root, or `make work` from inside `.agent-harness/`; a missing root `Makefile` is not an orchestrator-unavailable condition. Manual or interactive Coding Agent work is an explicit fallback only when role adapters are unavailable or the user asks for manual work; it must not bypass evaluator gating, evaluator evidence, or final `./init.sh` verification.
+
+Use `make work-fast` only as the evaluator-gated fast A/B alternative to `make work`: provider-native coding must record `FAST_CODING_EVIDENCE: Fxxx` and `CODING_PASS: Fxxx`, must not write `EVAL_PASS: Fxxx`, and must rerun the orchestrator so a separate cold-start Evaluator Agent child process gates completion.
 
 When `make work` needs real agent execution, configure the target repository's provider contract from `agent-provider.example.json` using `docs/agent-provider-configuration.md`. Do not guess between Codex, Claude Code, Cursor Agent, or custom providers; missing or ambiguous provider setup is a capability gap.
 

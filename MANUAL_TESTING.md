@@ -27,7 +27,12 @@ python -m src.main --prepare-acknowledgement
 
 The MVP enters `ARMED` after the wake word is detected, the acknowledgement
 plays, and the acknowledgement drain window completes. Recording starts only
-after audio crosses `ARMED_VOICE_RMS`. If speech is not detected within
+after a recent window contains enough non-overflow, non-clipped chunks above
+`max(ARMED_MIN_RMS, noise_floor * ARMED_SNR_MULTIPLIER)`. `ARMED_VOICE_RMS`
+is a legacy fallback for `ARMED_MIN_RMS`. The assistant preserves
+`ARMED_PRE_ROLL_SECONDS` of recent audio before recording so the first words are
+not dropped, and logs `armed_summary` on timeout or `armed_trigger` on recording
+start. If speech is not detected within
 `ARMED_NO_SPEECH_TIMEOUT_SECONDS`, the assistant returns to `WAIT_WAKE` without
 recording, transcription, chat/tool routing, TTS, or playback. Once recording
 starts, it stops when either condition is reached:
@@ -192,7 +197,7 @@ State WAIT_WAKE: ready for the next wake word
 State WAIT_WAKE: listening for the hey jarvis wake word
 State WAIT_WAKE: wake word detected
 Transition WAIT_WAKE -> ACK_PLAYING
-State ACK_PLAYING: played wake acknowledgement from tmp/ack.mp3
+State ACK_PLAYING: played wake acknowledgement from var/ack.mp3
 Transition ACK_PLAYING -> ARMED
 State ARMED: no speech detected
 ```
@@ -215,8 +220,10 @@ For each manual test, record:
 - Any environment changes such as `SILENCE_SECONDS`, `MAX_RECORD_SECONDS`, or
   `WAKE_THRESHOLD`.
 - Any armed/cancellation settings such as `ARMED_NO_SPEECH_TIMEOUT_SECONDS`,
-  `ARMED_VOICE_RMS`, `MIN_VALID_SPEECH_SECONDS`, `MIN_TRANSCRIPT_LENGTH`, or
-  `CANCEL_PHRASES`.
+  `ARMED_MIN_RMS`, `ARMED_SNR_MULTIPLIER`, `ARMED_VOICE_WINDOW_SECONDS`,
+  `ARMED_VOICE_REQUIRED_RATIO`, `ARMED_CLIP_REJECT_PEAK`,
+  `ARMED_PRE_ROLL_SECONDS`, `ARMED_VOICE_RMS`, `MIN_VALID_SPEECH_SECONDS`,
+  `MIN_TRANSCRIPT_LENGTH`, or `CANCEL_PHRASES`.
 - Any post-playback settings such as `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS`,
   `POST_PLAYBACK_QUIET_SECONDS`, `POST_PLAYBACK_QUIET_RMS`,
   `POST_PLAYBACK_MAX_SUPPRESSION_SECONDS`, or `WAKE_CONFIRMATION_FRAMES`.
