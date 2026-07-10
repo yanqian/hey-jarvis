@@ -850,6 +850,28 @@ Verification surface: focused tests for baseline gating, cold-noise-floor silenc
 
 Decomposition decision: this remains one feature because the baseline gate and acknowledgement-boundary guard jointly address the same ARMED entry boundary and share one state-machine, logging, documentation, and synthetic-audio verification surface. Splitting them would leave either the false-trigger or first-syllable failure active at the same transition.
 
+### Require A Safe Post-ACK Boundary
+
+Goal: prevent acknowledgement speaker residue, clipping, and microphone overflow from entering triggerable ARMED detection or recording pre-roll, while preserving the working ACK-disabled path and allowing complete user speech after a verified quiet boundary.
+
+Included scope: an explicit post-ACK boundary result/helper, mandatory quiet observation for guarded ACK-enabled flows, bounded suppression and local no-speech cancellation, safe noise seeding, clipped/overflow pre-roll clearing, post-ACK-aware baseline semantics and diagnostics, less destructive ACK guard defaults, documentation/manual-test updates, deterministic state-machine/configuration tests, and updating the existing PR1 branch.
+
+Excluded scope: VAD or PR2 behavior, wake-word model changes, recorder endpointing changes, echo cancellation/DSP, volume automation, streaming transcription, extra spoken prompts, or preserving immediate speech that begins before a safe quiet boundary when it cannot be distinguished from acknowledgement residue without VAD.
+
+Core flows: with acknowledgement disabled, immediate speech enters ordinary F036 ARMED detection unchanged. With acknowledgement and guard enabled, the assistant suppresses clipped, overflowed, loud, or otherwise unsafe residue until the configured quiet duration is observed or the bounded maximum is reached. A verified quiet boundary supplies quiet noise seeds and permits ARMED; clipped/overflowed residue never enters pre-roll. If no quiet boundary is reached, the loop cancels locally as `no_speech_after_wake` without recording or OpenAI. After quiet, the first user speech chunks are retained by normal ARMED pre-roll and can trigger recording.
+
+Constraints: guarded ACK-enabled flow must never log `post_ack_quiet_observed=false` together with `armed_trigger ... result=recording_started`; a guarded ACK flow must not treat elapsed time alone as a useful baseline while noise floor has no samples; overflowed and clipped chunks clear post-ACK candidate pre-roll; max suppression is bounded by `ACK_GUARD_MAX_BUFFER_SECONDS`; automated tests use fake audio and do not require a microphone, speaker, OpenAI, or network. Local user `.env` tuning and untracked real-test logs are not committed.
+
+Ambiguities or assumptions: without VAD or acoustic echo cancellation, loud non-clipped audio before observed quiet cannot be safely distinguished as user speech versus acknowledgement residue, so PR1 follow-up prefers suppression/cancellation over recording it. `ACK_GUARD_SECONDS` is the initial suppression target while `ACK_GUARD_MAX_BUFFER_SECONDS` is the hard maximum boundary wait. Quiet chunks used as noise seeds are not recorded as user pre-roll. Existing guard-disabled behavior retains the legacy fixed drain and ordinary ARMED semantics.
+
+Required capabilities: current ACK/ARMED state machine, PCM RMS/peak and overflow metadata, deterministic fake chunks including clipping/overflow, bounded timing from detector frame duration, logging capture, configuration validation, and root recovery verification.
+
+Implementation paths: `src/config.py`, `src/state_machine.py`, `.env.example`, `README.md`, `MANUAL_TESTING.md`, `tests/test_config.py`, `tests/test_state_machine.py`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: ACK-without-quiet cancellation, clipped/overflow residue clearing, quiet-then-user-speech pre-roll, no ACK-enabled zero-noise-floor trigger, ACK-disabled immediate speech, post-ACK diagnostics, default configuration/docs assertions, full `python3 -m unittest discover -s tests`, dry-run, fake-backend, diagnose execution, and final `./init.sh`.
+
+Decomposition decision: this is one focused PR1 follow-up because boundary suppression, baseline eligibility, pre-roll safety, diagnostics, and regression tests are one state transition contract. VAD remains isolated in the already reserved stacked PR2 feature F037, so this follow-up uses F038.
+
 ## 5. Verification Plan
 
 Run:

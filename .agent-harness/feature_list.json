@@ -748,6 +748,27 @@
       "depends_on": [
         "F035"
       ]
+    },
+    {
+      "id": "F038",
+      "title": "Require a safe post-ACK boundary",
+      "description": "Separate acknowledgement residue suppression from ARMED user-speech detection so guarded ACK flows require observed quiet and useful noise seeds before triggering, exclude clipped or overflowed residue from pre-roll, and cancel locally on bounded suppression timeout.",
+      "acceptance": [
+        "Guarded ACK-enabled flow uses an explicit post-ACK boundary result with quiet_observed, suppressed/preserved/noise-seed chunks, RMS/peak, overflow/clipped counts, and timeout state; it continues suppression up to ACK_GUARD_MAX_BUFFER_SECONDS and locally cancels without recording or OpenAI when no safe quiet boundary is reached.",
+        "Post-ACK ARMED cannot trigger while post_ack_quiet_observed=false or while its useful noise floor has no samples; trigger and summary logs expose post-ACK quiet/suppression metrics, noise_floor_has_samples, and baseline readiness timing/count context without removing existing result markers.",
+        "Clipped or overflowed post-ACK chunks clear candidate pre-roll and never enter tmp/input.wav; after quiet is observed, normal ARMED pre-roll starts cleanly and preserves the first user speech chunk.",
+        "ACK-disabled immediate speech retains F036 behavior, and disabling ACK_GUARD retains the documented legacy drain/ordinary ARMED compatibility path.",
+        "Defaults and docs use ACK_GUARD_SECONDS=0.80, ACK_GUARD_MIN_QUIET_SECONDS=0.16, ACK_GUARD_QUIET_RMS=900, and ACK_GUARD_MAX_BUFFER_SECONDS=1.50, with guidance for clipped echo to lower playback volume or shorten the acknowledgement.",
+        "Focused config/state-machine/docs regressions, full unittest discovery, dry-run, fake-backend, diagnose execution, and final ./init.sh pass without VAD, recorder endpointing changes, live audio, OpenAI, speaker, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F036"
+      ]
     }
   ]
 }

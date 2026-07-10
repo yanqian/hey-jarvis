@@ -94,9 +94,17 @@ F036 has been planned from the user-reported post-F035 real-test failures. It ad
 
 F036 has been completed through interactive manual coding fallback and separate cold-start evaluator approval. ARMED now requires configurable baseline time plus valid chunks before triggering, can require the latest chunk to remain voiced, preserves baseline and guard-tail audio in pre-roll without letting initial guard chunks force a trigger, and logs baseline readiness/chunks/seconds with threshold context. The acknowledgement path now uses a bounded quiet-aware guard by default, retains the legacy fixed drain when disabled, and logs discarded/preserved counts plus quiet/RMS/peak metrics. Focused tests and final `./init.sh` pass with 170 project tests; coding evidence is in `.agent-harness/runs/F036-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F036` in `.agent-harness/runs/F036-evaluation.md`.
 
+F038 has been planned as a PR1 follow-up from real A/B testing and captured logs. ACK-disabled speech records correctly, but guarded ACK-enabled runs can finish suppression with `quiet=0.00s`, clipped peaks, and then enter ARMED with `noise_floor=0.0`, producing false recording or partial transcription. F038 separates post-ACK suppression from ARMED, requires a verified quiet/noise boundary, clears clipped/overflow residue from candidate pre-roll, and cancels locally at a bounded timeout. F037 remains reserved for the already stacked optional-VAD PR2.
+
+F038 coding is complete through interactive manual fallback after both normal and approved escalated `make -C .agent-harness work-fast` attempts failed the configured Codex Evaluator Agent runtime check before handoff. The state machine now returns an explicit post-ACK boundary result, requires contiguous safe quiet/noise seeds before guarded ACK flow can enter ARMED, cancels locally at the bounded suppression limit, excludes clipped/overflow residue from pre-roll, preserves ACK-disabled compatibility, and emits post-ACK/baseline diagnostics. Defaults, README, manual guidance, focused tests, full discovery, and recovery verification pass with 172 project tests. Coding evidence is recorded in `.agent-harness/runs/F038-manual-coding.md`; F038 remains in progress pending cold-start evaluator approval.
+
+F038 cold-start evaluation failed in the `implementation_gap` domain: configuration still accepts `ACK_GUARD_MIN_QUIET_SECONDS=0`, for which a loud first post-ACK chunk is incorrectly returned as `quiet_observed=true` with no noise seed and no timeout. This bypasses the mandatory safe post-ACK boundary for a supported configuration. Evaluator evidence is recorded in `.agent-harness/runs/F038-evaluation.md`. Harness improvement assessment: add validation-boundary evaluator probes for configurable safety gates; no harness runtime change is required.
+
+F038 has been completed after a coding retry and separate cold-start evaluator approval. Enabled ACK guard configuration now rejects a non-positive quiet duration, while the runtime boundary independently fails closed if invalid settings bypass configuration. The original explicit boundary metrics, bounded local cancellation, safe noise seeding, protected ARMED gating, clipped/overflow pre-roll exclusion, compatibility paths, defaults, documentation, and diagnostics remain accepted. Focused tests pass with 53 tests, full discovery and final recovery verification pass with 174 project tests, the original evaluator failure remains in `.agent-harness/runs/F038-evaluation.md`, and approval is recorded as `EVAL_PASS: F038` in `.agent-harness/runs/F038-evaluation-pass.md`.
+
 ## Last Completed Feature
 
-F036 - Guard ARMED startup and acknowledgement boundary.
+F038 - Require a safe post-ACK boundary.
 
 ## Next Feature
 

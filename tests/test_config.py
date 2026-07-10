@@ -56,6 +56,13 @@ from src.config import (
 
 
 class ConfigTests(unittest.TestCase):
+    def test_enabled_ack_guard_requires_positive_quiet_duration(self):
+        with self.assertRaisesRegex(ConfigError, "ACK_GUARD_MIN_QUIET_SECONDS must be greater than 0"):
+            load_settings(
+                env={"ACK_GUARD_ENABLED": "1", "ACK_GUARD_MIN_QUIET_SECONDS": "0"},
+                env_file=None,
+            )
+
     def test_defaults_do_not_require_openai_key(self):
         settings = load_settings(env={}, env_file=None)
 
@@ -95,10 +102,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_acknowledgement_audio_path, DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH)
         self.assertEqual(settings.wake_acknowledgement_drain_seconds, DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS)
         self.assertTrue(settings.ack_guard_enabled)
-        self.assertEqual(settings.ack_guard_seconds, 0.60)
+        self.assertEqual(settings.ack_guard_seconds, 0.80)
         self.assertEqual(settings.ack_guard_min_quiet_seconds, 0.16)
-        self.assertEqual(settings.ack_guard_quiet_rms, 600.0)
-        self.assertEqual(settings.ack_guard_max_buffer_seconds, 1.0)
+        self.assertEqual(settings.ack_guard_quiet_rms, 900.0)
+        self.assertEqual(settings.ack_guard_max_buffer_seconds, 1.5)
         self.assertEqual(settings.wake_debug, DEFAULT_WAKE_DEBUG)
         self.assertEqual(settings.post_playback_wake_cooldown_seconds, DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS)
         self.assertEqual(settings.post_playback_quiet_seconds, DEFAULT_POST_PLAYBACK_QUIET_SECONDS)
