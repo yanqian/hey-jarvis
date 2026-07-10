@@ -381,6 +381,19 @@ Only start the real assistant after recovery and diagnostics pass.
 - Wake acknowledgement plays but no question is intended: keep
   `ARMED_NO_SPEECH_TIMEOUT_SECONDS` enabled so the assistant cancels locally
   before recording, transcription, answer generation, or TTS playback.
+- Wake acknowledgement plays, no question is spoken, but recording starts and
+  runs to `MAX_RECORD_SECONDS`: this is not expected. The healthy path should
+  log `armed_summary ... result=no_speech_timeout`. A log pattern such as
+  `armed_trigger after=0.32s ... noise_floor=0.0 ... result=recording_started`
+  followed by `stopped_by=max_duration` and `empty_transcript` means ARMED
+  misclassified acknowledgement residue or background noise as speech before it
+  had a useful noise-floor baseline. Record the `armed_trigger`, recording, and
+  cancellation lines for follow-up.
+- The first syllable of a question is missing after acknowledgement, for
+  example `一加一等于几` becomes `加一等于几`: the first syllable may have
+  landed during acknowledgement playback, the acknowledgement drain window, or
+  an overflowed microphone chunk before ARMED pre-roll began. For current
+  manual testing, wait 0.3-0.5 seconds after `在呢` finishes before speaking.
 - Wake acknowledgement repeats after a local cancellation: keep
   `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` and `POST_PLAYBACK_QUIET_SECONDS`
   enabled. Cancellation should log post-cancellation suppression and should not

@@ -84,6 +84,67 @@ cuts off with `stopped_by=silence`, lower `RECORDING_SILENCE_RMS` only if the
 room is genuinely quiet and the speaker is loud enough; otherwise record the
 result as a failure.
 
+## Current ARMED Real-Test Findings
+
+The current acknowledgement flow is sensitive to timing. For the most reliable
+manual test, say `Hey Jarvis`, wait for the acknowledgement such as `在呢` to
+finish, pause roughly 0.3-0.5 seconds, and then start the question. Do not begin
+speaking while the acknowledgement is still playing or immediately on its tail.
+`WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`, default `0.35`, discards microphone audio
+after acknowledgement playback to clear speaker residue. Audio that lands in
+that drain window is intentionally discarded and is not recoverable by
+`ARMED_PRE_ROLL_SECONDS`, because the pre-roll buffer currently starts after
+the assistant enters `ARMED`.
+
+If a transcript is missing the first syllable, such as spoken `一加一等于几`
+being transcribed as `加一等于几`, inspect the preceding `armed_trigger` log.
+An early trigger such as `after=0.32s` with `pre_roll_ms=320` means the
+assistant could only preserve 320ms of ARMED audio; the missing first syllable
+may have occurred during acknowledgement playback, acknowledgement drain, or an
+overflowed microphone chunk before ARMED pre-roll began. Record this as a
+timing failure, not as proof that pre-roll failed.
+
+A no-speech wake should normally produce an ARMED timeout:
+
+```text
+armed_summary ... result=no_speech_timeout
+```
+
+It is a known current bug if the user says only `Hey Jarvis`, stays silent, and
+the log instead shows an early recording start:
+
+```text
+armed_trigger after=0.32s ... noise_floor=0.0 ... voiced_window=4/4 ... result=recording_started
+State RECORDING: wrote ... chunks to tmp/input.wav; stopped_by=max_duration
+State TRANSCRIBE: local cancellation reason=empty_transcript
+```
+
+That pattern means ARMED treated acknowledgement residue or background noise as
+speech before it had a useful noise-floor baseline. The downstream
+`empty_transcript` or `silent_recording` cancellation prevents an AI answer, but
+recording 20 seconds of background audio is still a failure. Capture the
+`armed_trigger`, `State RECORDING`, and local cancellation lines when reporting
+it.
+
+Temporary mitigation while testing:
+
+```text
+ARMED_NO_SPEECH_TIMEOUT_SECONDS=4.0
+ARMED_MIN_RMS=1200
+ARMED_VOICE_RMS=1200
+ARMED_SNR_MULTIPLIER=2.5
+WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS=0.20
+ARMED_PRE_ROLL_SECONDS=0.70
+RECORDING_SILENCE_RMS=1000
+MAX_RECORD_SECONDS=8
+```
+
+These values are not a final fix. They make false ARMED triggers and long
+background recordings less likely, but they can also make quiet speech harder
+to trigger. A future code fix should preserve audio safely around the
+acknowledgement/drain boundary while preventing ARMED from triggering before
+the last chunk is speech-like and before the noise-floor baseline is useful.
+
 ## Acceptance Standard
 
 The MVP is acceptable when:

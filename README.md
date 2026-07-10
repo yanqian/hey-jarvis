@@ -253,6 +253,18 @@ for observed quiet before becoming wake-ready again. This uses the same
 as post-playback suppression, and logs the cancellation reason, discarded chunk
 counts, quiet-gate status, and maximum suppressed wake score.
 
+Current manual-test note: the acknowledgement drain still discards microphone
+audio before ARMED pre-roll begins. For the most reliable test, say `Hey
+Jarvis`, wait for `在呢` to finish, pause roughly 0.3-0.5 seconds, then ask the
+question. If a question such as `一加一等于几` is transcribed as `加一等于几`,
+the first syllable likely landed during acknowledgement playback, the drain
+window, or an overflowed chunk. If saying only `Hey Jarvis` and then staying
+silent logs `armed_trigger ... result=recording_started` followed by
+`stopped_by=max_duration` and `empty_transcript`, that is a known bug: ARMED
+misclassified acknowledgement residue or background noise as speech before a
+useful noise-floor baseline existed. See `MANUAL_TESTING.md` for the current
+log patterns and temporary mitigation settings.
+
 `SILENCE_SECONDS` controls how much post-question quiet is required before the
 question recording stops. `RECORDING_SILENCE_RMS`, default `750`, is the RMS
 threshold used for question-recording end-of-speech detection. The recorder
