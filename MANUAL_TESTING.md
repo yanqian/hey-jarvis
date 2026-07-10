@@ -86,12 +86,18 @@ result as a failure.
 
 ## Current ARMED Real-Test Findings
 
-The acknowledgement boundary now uses a conservative guard instead of blindly
-discarding a fixed window. With the defaults, logs begin with `State
-ACK_PLAYING: guarding acknowledgement microphone residue for 0.60s` and end
-with discarded/preserved chunk counts, observed quiet time, maximum RMS, and
-maximum peak. A small late non-quiet tail may seed ARMED pre-roll, but guard
-audio never triggers recording by itself.
+The acknowledgement boundary now has a mandatory quiet gate. With the defaults,
+logs begin with `State ACK_PLAYING: waiting for safe post-ACK boundary` and end
+with `post_ack_quiet_observed`, suppressed/noise-seed chunk counts, maximum RMS
+and peak, plus clipped/overflow counts. ARMED is not entered if the boundary
+times out without quiet, and clipped or overflowed acknowledgement residue is
+never added to recording pre-roll.
+
+After `post_ack_quiet_observed=true`, clipped audio is treated differently from
+ACK residue: it is preserved as possible user speech in pre-roll but cannot
+trigger ARMED or update the noise floor. Overflowed chunks are skipped. A later
+clipped/overflowed user chunk must not clear earlier words; if an 800ms pre-roll
+collapses to only the final 240ms, record that as a regression.
 
 If a transcript is missing the first syllable, such as spoken `一加一等于几`
 being transcribed as `加一等于几`, inspect the preceding `armed_trigger` log.
@@ -133,10 +139,9 @@ ARMED_BASELINE_MIN_CHUNKS=3
 ARMED_REQUIRE_BASELINE=1
 ARMED_LAST_CHUNK_MUST_BE_VOICED=1
 ACK_GUARD_ENABLED=1
-ACK_GUARD_SECONDS=0.60
 ACK_GUARD_MIN_QUIET_SECONDS=0.16
-ACK_GUARD_QUIET_RMS=600
-ACK_GUARD_MAX_BUFFER_SECONDS=1.00
+ACK_GUARD_QUIET_RMS=900
+ACK_GUARD_MAX_BUFFER_SECONDS=1.50
 ```
 
 Manual case 1: say only `Hey Jarvis`, allow `在呢` to play, and remain silent.

@@ -750,16 +750,16 @@
       ]
     },
     {
-      "id": "F037",
-      "title": "Add optional VAD-gated audio handling",
-      "description": "Add an optional local WebRTC VAD abstraction, gate ARMED on energy plus voice evidence, optionally forward a wake-model VAD threshold, and use VAD-aware recording endpoint hysteresis without changing default disabled behavior.",
+      "id": "F038",
+      "title": "Require a safe post-ACK boundary",
+      "description": "Separate acknowledgement residue suppression from ARMED user-speech detection so guarded ACK flows require observed quiet and useful noise seeds before triggering, exclude clipped or overflowed residue from pre-roll, and cancel locally on bounded suppression timeout.",
       "acceptance": [
-        "A new project-owned VAD module provides a neutral DisabledVad and lazily loaded WebRtcVadDetector that validates supported sample rates, splits mono int16 PCM into 20ms frames, ignores incomplete trailing data deterministically, reports voiced ratio/counts, and raises actionable errors when the configured optional dependency is unavailable.",
-        "Configuration validates and documents VAD_BACKEND=disabled|webrtc, VAD_MODE=0..3, ARMED_VAD_REQUIRED_RATIO=0.50, ARMED_VAD_MIN_FRAMES=2, RECORDING_VAD_ENABLED=false, RECORDING_VAD_END_RATIO=0.25, RECORDING_VAD_SPEECH_RATIO=0.50, RECORDING_HANGOVER_SECONDS=0.30, RECORDING_END_SILENCE_SECONDS with SILENCE_SECONDS fallback, and optional WAKE_VAD_THRESHOLD while preserving existing settings.",
-        "When VAD is enabled, ARMED requires baseline readiness, energy, and configured VAD ratio/frame evidence; high-RMS non-voice cancels as no_speech_after_wake without recording or OpenAI, valid energy plus speech triggers recording, and armed_trigger/armed_summary expose useful non-spammy VAD diagnostics. Disabled VAD preserves F036 behavior.",
-        "WakeWordDetector passes vad_threshold to openWakeWord Model only when WAKE_VAD_THRESHOLD is configured, preserves the prior constructor arguments when unset, and raises a clear WakeWordError if a configured threshold is unsupported by the installed openWakeWord version.",
-        "record_to_wav remains backward compatible and, when recording VAD is enabled, preserves speech after short pauses, stops on sustained RMS-low/VAD-low non-voice before max duration, retains silence/max_duration/source_exhausted outcomes, and keeps maximum duration safety. State-machine wiring passes VAD only when configured.",
-        "README, .env.example, diagnostics, and MANUAL_TESTING explain optional installation and cover non-speech noise, background speech, and immediate-request tests; focused VAD/config/ARMED/wake/recorder/docs tests plus dry-run, fake-backend, diagnose, full unittest, and final ./init.sh pass without live audio, OpenAI, speaker, or network."
+        "Guarded ACK-enabled flow uses an explicit post-ACK boundary result with quiet_observed, suppressed/preserved/noise-seed chunks, RMS/peak, overflow/clipped counts, and timeout state; it continues suppression up to ACK_GUARD_MAX_BUFFER_SECONDS and locally cancels without recording or OpenAI when no safe quiet boundary is reached.",
+        "Post-ACK ARMED cannot trigger while post_ack_quiet_observed=false or while its useful noise floor has no samples; trigger and summary logs expose post-ACK quiet/suppression metrics, noise_floor_has_samples, and baseline readiness timing/count context without removing existing result markers.",
+        "Clipped or overflowed post-ACK chunks clear candidate pre-roll and never enter tmp/input.wav; after quiet is observed, normal ARMED pre-roll starts cleanly and preserves the first user speech chunk.",
+        "ACK-disabled immediate speech retains F036 behavior, and disabling ACK_GUARD retains the documented legacy drain/ordinary ARMED compatibility path.",
+        "Defaults and docs use ACK_GUARD_SECONDS=0.80, ACK_GUARD_MIN_QUIET_SECONDS=0.16, ACK_GUARD_QUIET_RMS=900, and ACK_GUARD_MAX_BUFFER_SECONDS=1.50, with guidance for clipped echo to lower playback volume or shorten the acknowledgement.",
+        "Focused config/state-machine/docs regressions, full unittest discovery, dry-run, fake-backend, diagnose execution, and final ./init.sh pass without VAD, recorder endpointing changes, live audio, OpenAI, speaker, or network."
       ],
       "passes": true,
       "status": "done",
@@ -769,6 +769,46 @@
       "depends_on": [
         "F036"
       ]
+    },
+    {
+      "id": "F039",
+      "title": "Preserve clipped post-ACK user speech",
+      "description": "Remove the unused ACK_GUARD_SECONDS setting and stop post-boundary clipped or overflowed chunks from clearing earlier safe ARMED pre-roll, preserving clipped user speech as audio while excluding it from trigger and noise decisions.",
+      "acceptance": [
+        "ACK_GUARD_SECONDS and ack_guard_seconds are removed from tracked defaults, Settings, loading, examples, README, manual guidance, tests, and post-ACK logs; ACK_GUARD_MAX_BUFFER_SECONDS remains the single documented bounded suppression timeout.",
+        "Before the verified quiet boundary, clipped/overflowed ACK residue continues resetting quiet/noise candidates and never enters recording; no-quiet guarded flow still cancels locally without ARMED or OpenAI.",
+        "After the quiet boundary, overflowed ARMED chunks are omitted individually and clipped chunks are retained in bounded recording pre-roll, while neither invalid type clears earlier safe pre-roll or counts as voiced/noise-floor evidence.",
+        "A synthetic question with valid speech, clipped middle chunks, and later valid voiced chunks triggers recording with the initial speech and clipped audio still present, preventing the observed configured-800ms pre-roll from collapsing to only the final 240ms tail.",
+        "ACK-disabled immediate speech and F038 post-ACK diagnostics/baseline safety remain compatible, with useful pre-roll metrics that expose retained duration/counts.",
+        "Focused config/state-machine/docs tests, full unittest discovery, dry-run, fake-backend, diagnose execution, and final ./init.sh pass without VAD, recorder endpointing changes, live audio, OpenAI, speaker, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F038"
+      ]
+    },
+    {
+      "id": "F037",
+      "title": "Add optional VAD-gated audio handling",
+      "description": "Add an optional local WebRTC VAD abstraction, gate ARMED on energy plus voice evidence, optionally forward a wake-model VAD threshold, and use VAD-aware recording endpoint hysteresis without changing default disabled behavior.",
+      "acceptance": [
+        "A new project-owned VAD module provides a neutral DisabledVad and lazily loaded WebRtcVadDetector that validates supported sample rates, splits mono int16 PCM into 20ms frames, ignores incomplete trailing data deterministically, reports voiced ratio/counts, and raises actionable errors when the configured optional dependency is unavailable.",
+        "Configuration validates and documents VAD_BACKEND=disabled|webrtc, VAD_MODE=0..3, ARMED_VAD_REQUIRED_RATIO=0.50, ARMED_VAD_MIN_FRAMES=2, RECORDING_VAD_ENABLED=false, RECORDING_VAD_END_RATIO=0.25, RECORDING_VAD_SPEECH_RATIO=0.50, RECORDING_HANGOVER_SECONDS=0.30, RECORDING_END_SILENCE_SECONDS with SILENCE_SECONDS fallback, and optional WAKE_VAD_THRESHOLD while preserving existing settings.",
+        "When VAD is enabled, ARMED requires baseline readiness, energy, and configured VAD ratio/frame evidence; high-RMS non-voice cancels as no_speech_after_wake without recording or OpenAI, valid energy plus speech triggers recording, and armed_trigger/armed_summary expose useful non-spammy VAD diagnostics. Disabled VAD preserves the merged PR1 behavior.",
+        "WakeWordDetector passes vad_threshold to openWakeWord Model only when WAKE_VAD_THRESHOLD is configured, preserves the prior constructor arguments when unset, and raises a clear WakeWordError if a configured threshold is unsupported by the installed openWakeWord version.",
+        "record_to_wav remains backward compatible and, when recording VAD is enabled, preserves speech after short pauses, stops on sustained RMS-low/VAD-low non-voice before max duration, retains silence/max_duration/source_exhausted outcomes, and keeps maximum duration safety. State-machine wiring passes VAD only when configured.",
+        "README, .env.example, diagnostics, and MANUAL_TESTING explain optional installation and cover non-speech noise, background speech, and immediate-request tests; focused VAD/config/ARMED/wake/recorder/docs tests plus dry-run, fake-backend, diagnose, full unittest, and final ./init.sh pass without live audio, OpenAI, speaker, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F036", "F039"]
     }
   ]
 }

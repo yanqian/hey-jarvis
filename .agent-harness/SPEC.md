@@ -850,29 +850,69 @@ Verification surface: focused tests for baseline gating, cold-noise-floor silenc
 
 Decomposition decision: this remains one feature because the baseline gate and acknowledgement-boundary guard jointly address the same ARMED entry boundary and share one state-machine, logging, documentation, and synthetic-audio verification surface. Splitting them would leave either the false-trigger or first-syllable failure active at the same transition.
 
-### Optional VAD Gating And Recording Endpointing
+### Require A Safe Post-ACK Boundary
 
-Goal: reduce false ARMED triggers from high-energy non-speech noise and make question recording stop more naturally by adding an optional local WebRTC VAD boundary, optional openWakeWord VAD threshold forwarding, and VAD-aware recording hysteresis while preserving all PR1 behavior when VAD is disabled.
+Goal: prevent acknowledgement speaker residue, clipping, and microphone overflow from entering triggerable ARMED detection or recording pre-roll, while preserving the working ACK-disabled path and allowing complete user speech after a verified quiet boundary.
 
-Included scope: a project-owned VAD protocol plus disabled and lazily loaded WebRTC implementations; validated VAD, ARMED VAD, recording VAD, hangover, end-silence, and wake VAD threshold settings; ARMED energy-plus-VAD gating and structured diagnostics; conditional openWakeWord `vad_threshold` construction with compatibility errors; backward-compatible optional recorder VAD parameters and endpointing; runtime wiring and diagnostics; environment examples, README/manual testing, and deterministic unit/smoke coverage.
+Included scope: an explicit post-ACK boundary result/helper, mandatory quiet observation for guarded ACK-enabled flows, bounded suppression and local no-speech cancellation, safe noise seeding, clipped/overflow pre-roll clearing, post-ACK-aware baseline semantics and diagnostics, less destructive ACK guard defaults, documentation/manual-test updates, deterministic state-machine/configuration tests, and updating the existing PR1 branch.
 
-Excluded scope: mandatory VAD for default operation, cloud VAD, streaming STT, wake-model replacement, changes to acknowledgement wording, new clarification TTS, broad audio resampling/channel conversion, or removing RMS and maximum-duration safety gates.
+Excluded scope: VAD or PR2 behavior, wake-word model changes, recorder endpointing changes, echo cancellation/DSP, volume automation, streaming transcription, extra spoken prompts, or preserving immediate speech that begins before a safe quiet boundary when it cannot be distinguished from acknowledgement residue without VAD.
 
-Core flows: with VAD disabled, wake, acknowledgement guard, ARMED, recording, transcription, routing, TTS, and playback behave as in F036. With WebRTC VAD enabled, 16-bit mono PCM is split into valid 20ms frames and ARMED requires both its existing baseline/energy gates and configured VAD evidence; high-RMS non-voice times out locally. When recording VAD is enabled, speech or energy keeps recording alive through short gaps and recording stops only after a configured quiet/non-voice window, while max duration remains a safety cap. When `WAKE_VAD_THRESHOLD` is configured, openWakeWord receives it or fails with explicit compatibility guidance.
+Core flows: with acknowledgement disabled, immediate speech enters ordinary F036 ARMED detection unchanged. With acknowledgement and guard enabled, the assistant suppresses clipped, overflowed, loud, or otherwise unsafe residue until the configured quiet duration is observed or the bounded maximum is reached. A verified quiet boundary supplies quiet noise seeds and permits ARMED; clipped/overflowed residue never enters pre-roll. If no quiet boundary is reached, the loop cancels locally as `no_speech_after_wake` without recording or OpenAI. After quiet, the first user speech chunks are retained by normal ARMED pre-roll and can trigger recording.
 
-Constraints: `VAD_BACKEND=disabled` is the default and must not require `webrtcvad`; selecting `webrtc` with a missing or unusable package fails clearly and is diagnosable. WebRTC accepts only 8/16/32/48 kHz mono 16-bit PCM and uses 20ms frames, ignoring incomplete trailing bytes. Existing `SILENCE_SECONDS`, `RECORDING_SILENCE_RMS`, and `MAX_RECORD_SECONDS` remain valid; `RECORDING_END_SILENCE_SECONDS` defaults to legacy `SILENCE_SECONDS`. Automated verification uses fake VAD/model factories and synthetic PCM without live audio, OpenAI, speaker, or network.
+Constraints: guarded ACK-enabled flow must never log `post_ack_quiet_observed=false` together with `armed_trigger ... result=recording_started`; a guarded ACK flow must not treat elapsed time alone as a useful baseline while noise floor has no samples; overflowed and clipped chunks clear post-ACK candidate pre-roll; max suppression is bounded by `ACK_GUARD_MAX_BUFFER_SECONDS`; automated tests use fake audio and do not require a microphone, speaker, OpenAI, or network. Local user `.env` tuning and untracked real-test logs are not committed.
 
-Ambiguities or assumptions: `ARMED_VAD_MIN_FRAMES` refers to the minimum number of voiced 20ms frames inside the current microphone chunk; the VAD result therefore exposes both ratio and frame counts through a small immutable result while retaining a ratio convenience method. `RECORDING_VAD_ENABLED=true` requires an enabled VAD backend. The optional WebRTC package is documented as an explicit extra installation rather than added to default `requirements.txt`, so default installation remains compatible. Recorder hysteresis treats RMS above the existing silence threshold as speech-like even when VAD is low, but only VAD-low plus RMS-low audio accumulates the final quiet window; this preserves quiet speech and makes moderate non-voice below the recording threshold end naturally.
+Ambiguities or assumptions: without VAD or acoustic echo cancellation, loud non-clipped audio before observed quiet cannot be safely distinguished as user speech versus acknowledgement residue, so PR1 follow-up prefers suppression/cancellation over recording it. `ACK_GUARD_SECONDS` is the initial suppression target while `ACK_GUARD_MAX_BUFFER_SECONDS` is the hard maximum boundary wait. Quiet chunks used as noise seeds are not recorded as user pre-roll. Existing guard-disabled behavior retains the legacy fixed drain and ordinary ARMED semantics.
 
-Required capabilities: lazy import and fake module injection for WebRTC behavior, existing PCM RMS helpers and recorder synthetic sources, openWakeWord fake model factories, dependency/config diagnostics, optional user installation of `webrtcvad`, project test fixtures, and root recovery verification.
+Required capabilities: current ACK/ARMED state machine, PCM RMS/peak and overflow metadata, deterministic fake chunks including clipping/overflow, bounded timing from detector frame duration, logging capture, configuration validation, and root recovery verification.
 
-Implementation paths: `src/vad.py`, `src/config.py`, `src/state_machine.py`, `src/recorder.py`, `src/wake_word.py`, `src/main.py`, `.env.example`, `README.md`, `MANUAL_TESTING.md`, `tests/test_vad.py`, `tests/test_config.py`, `tests/test_state_machine.py`, `tests/test_recorder.py`, `tests/test_wake_word.py`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+Implementation paths: `src/config.py`, `src/state_machine.py`, `.env.example`, `README.md`, `MANUAL_TESTING.md`, `tests/test_config.py`, `tests/test_state_machine.py`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
 
-Verification surface: disabled/WebRTC VAD unit tests, ARMED high-RMS rejection and speech acceptance tests, disabled-path regressions, wake-model constructor threshold tests and unsupported-version errors, recorder short-pause/non-voice/disabled/max-duration tests, configuration and diagnostics tests, documentation/manual checks, `python -m src.main --dry-run`, `--fake-backend`, `--diagnose`, full `python -m unittest`, and final `./init.sh`.
+Verification surface: ACK-without-quiet cancellation, clipped/overflow residue clearing, quiet-then-user-speech pre-roll, no ACK-enabled zero-noise-floor trigger, ACK-disabled immediate speech, post-ACK diagnostics, default configuration/docs assertions, full `python3 -m unittest discover -s tests`, dry-run, fake-backend, diagnose execution, and final `./init.sh`.
 
-Decomposition decision: this remains one feature because the VAD abstraction, ARMED gate, wake-model forwarding, and recorder endpointing are one optional audio-classification capability with shared configuration, construction, diagnostics, and deterministic PCM verification. The default-disabled compatibility boundary makes the feature independently releasable as one stacked PR; splitting it would create settings or runtime wiring without a complete user flow.
+Decomposition decision: this is one focused PR1 follow-up because boundary suppression, baseline eligibility, pre-roll safety, diagnostics, and regression tests are one state transition contract. VAD remains isolated in the already reserved stacked PR2 feature F037, so this follow-up uses F038.
+
+### Preserve Clipped User Speech After The ACK Boundary
+
+Goal: stop ARMED from deleting the beginning of a legitimate post-ACK question when real user speech contains clipped chunks, and remove the misleading unused `ACK_GUARD_SECONDS` setting.
+
+Included scope: delete `ACK_GUARD_SECONDS` from defaults, Settings, loading, examples, docs, tests, logs, and local `.env`; keep `ACK_GUARD_MAX_BUFFER_SECONDS` as the only bounded post-ACK wait; change post-boundary ARMED pre-roll handling so overflowed chunks are omitted individually while clipped chunks are preserved as potentially intelligible user audio but remain ineligible for voice/noise decisions; retain previously collected safe pre-roll across invalid chunks; add clipped-user-speech regression coverage and diagnostics/documentation updates; update existing PR1.
+
+Excluded scope: changing the pre-boundary rule that clipped/overflowed acknowledgement residue resets quiet/noise candidates, changing ARMED RMS thresholds, VAD/PR2 behavior, automatic gain control, echo cancellation, audio repair, recorder endpointing, wake detection, or extra prompts.
+
+Core flows: ACK residue is suppressed until the F038 quiet boundary. After that boundary, ARMED begins user-speech collection. A microphone overflow chunk is skipped without erasing earlier user chunks. A clipped chunk is kept in pre-roll/WAV because clipped speech may still be intelligible, but it is marked non-voiced and does not update the noise floor. Later valid voiced chunks satisfy the rolling trigger, and recording begins with the full bounded pre-roll including the initial `1+1` audio instead of only the final `等于几` tail.
+
+Constraints: the safe quiet boundary remains mandatory and ACK residue before it never enters recording. Clipped post-boundary audio is accepted only into pre-roll, not as trigger evidence. Overflowed audio remains excluded because it may be incomplete. Default-disabled ACK compatibility and guarded no-quiet cancellation remain unchanged. `ACK_GUARD_MAX_BUFFER_SECONDS` must stay positive and is the sole post-ACK suppression timeout. Automated tests use synthetic PCM and fakes; user log files remain untracked and uncommitted.
+
+Ambiguities or assumptions: real evidence showed `max_peak=32768`, 18 checked versus 12 valid chunks, and only 240ms of an 800ms configured pre-roll before transcription became `等于几`. This is treated as legitimate clipped user speech after an already verified quiet boundary. Preserving clipped PCM may retain distortion, but it is preferable to deleting the utterance prefix; future VAD/DSP work can classify or repair it more precisely.
+
+Required capabilities: existing post-ACK boundary result, `_ArmedChunk` metadata, bounded pre-roll, synthetic clipped/overflow PCM fixtures, captureable recorder source, configuration/documentation tests, and root recovery verification.
+
+Implementation paths: `src/config.py`, `src/state_machine.py`, `.env`, `.env.example`, `README.md`, `MANUAL_TESTING.md`, `tests/test_config.py`, `tests/test_state_machine.py`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: absence of `ACK_GUARD_SECONDS` across tracked runtime/docs/tests, configuration tolerance for existing unknown local keys only after local cleanup, clipped user chunks retained in captured recording pre-roll, overflow omitted without clearing earlier safe chunks, clipped chunks excluded from trigger/noise decisions, original no-quiet and ACK-disabled regressions, full unittest discovery, dry-run, fake-backend, diagnose execution, and final `./init.sh`.
+
+Decomposition decision: this is one focused PR1 correction because the unused setting removal and pre-roll behavior change directly resolve one observed `1+1` prefix-loss path. It uses F039 because F037 is reserved for stacked PR2 and F038 is already evaluator-approved.
 
 ## 5. Verification Plan
+
+### Optional VAD Gating And Recording Endpointing
+
+Goal: reduce false ARMED triggers from high-energy non-speech noise and make recording stop more naturally through an optional local WebRTC VAD boundary, while preserving all merged PR1 post-ACK safety behavior when VAD is disabled.
+
+Included scope: disabled and lazily loaded WebRTC VAD implementations; validated VAD, ARMED, recording, hangover, end-silence, and wake-threshold settings; ARMED energy-plus-VAD gating and diagnostics; optional openWakeWord `vad_threshold`; backward-compatible recorder VAD endpointing; runtime wiring, diagnostics, docs, manual tests, and deterministic coverage.
+
+Excluded scope: mandatory or cloud VAD, streaming STT, wake-model replacement, acknowledgement wording changes, resampling, echo cancellation, or removing RMS and maximum-duration safety gates.
+
+Core flows: disabled VAD preserves the merged PR1 wake, safe post-ACK boundary, ARMED, clipped-pre-roll, and recording behavior. With WebRTC enabled, ARMED additionally requires configured VAD evidence and high-RMS non-voice times out locally. Recording VAD keeps speech through short gaps and stops only after configured RMS-low/VAD-low audio; max duration remains a cap. Optional `WAKE_VAD_THRESHOLD` is forwarded to openWakeWord with explicit compatibility errors.
+
+Constraints and assumptions: WebRTC is optional and lazily imported; it accepts supported mono 16-bit PCM sample rates and 20ms frames. `RECORDING_VAD_ENABLED=true` requires an enabled backend. Existing silence, RMS, max-duration, post-ACK quiet-boundary, overflow omission, and clipped-pre-roll rules remain valid. Automated tests use fakes and synthetic PCM without live services.
+
+Required capabilities and implementation paths: existing PCM helpers, fake VAD/model factories, configuration diagnostics, and recovery verification across `src/vad.py`, `src/config.py`, `src/state_machine.py`, `src/recorder.py`, `src/wake_word.py`, `src/main.py`, environment/docs files, tests, and harness evidence.
+
+Verification surface: VAD unit tests; ARMED speech/non-speech and merged post-ACK regressions; wake constructor compatibility; recorder pause/endpoint/max-duration tests; config/diagnostic/docs checks; dry-run, fake-backend, diagnose, full unittest, and final `./init.sh`.
+
+Decomposition decision: this is one optional audio-classification capability with shared configuration and runtime wiring. The default-disabled boundary keeps it independently releasable while F038/F039 remain merged prerequisites.
 
 Run:
 
