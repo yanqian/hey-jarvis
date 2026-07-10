@@ -90,13 +90,17 @@ F034 has been completed by manual fast-work fallback because the installed hidde
 
 F035 has been completed through evaluator-gated `work-fast` after the hidden-layout harness repair restored the target. ARMED now confirms speech through an adaptive recent voiced window, rejects overflowed or clipped chunks, preserves pre-roll audio when recording starts, logs structured `armed_trigger` and `armed_summary` diagnostics with RMS/peak/overflow/threshold/noise-floor/pre-roll context, and keeps local short/empty/filler/acknowledgement-only cancellation before AI routing. Focused config/state-machine/documentation tests, full project tests, fake-backend smoke, final recovery verification, fast coding evidence, and cold-start evaluator approval pass. Coding evidence is recorded in `.agent-harness/runs/20260709T085604Z-F035-fast-coding-retry.md`, and evaluator approval is recorded as `EVAL_PASS: F035` in `.agent-harness/runs/20260709T090453Z-F035-evaluation-pass.md`.
 
+F036 has been planned from the user-reported post-F035 real-test failures. It adds an explicit ARMED baseline gate so a cold `noise_floor=0.0` cannot immediately satisfy the voiced window, optionally requires the latest chunk to remain voiced, and replaces blind acknowledgement draining with a conservative bounded guard that can preserve a small late speech tail as pre-roll. The feature explicitly excludes VAD, new dependencies, and recorder endpointing changes.
+
+F036 has been completed through interactive manual coding fallback and separate cold-start evaluator approval. ARMED now requires configurable baseline time plus valid chunks before triggering, can require the latest chunk to remain voiced, preserves baseline and guard-tail audio in pre-roll without letting initial guard chunks force a trigger, and logs baseline readiness/chunks/seconds with threshold context. The acknowledgement path now uses a bounded quiet-aware guard by default, retains the legacy fixed drain when disabled, and logs discarded/preserved counts plus quiet/RMS/peak metrics. Focused tests and final `./init.sh` pass with 170 project tests; coding evidence is in `.agent-harness/runs/F036-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F036` in `.agent-harness/runs/F036-evaluation.md`.
+
 ## Last Completed Feature
 
-F035 - Confirm ARMED speech with adaptive pre-roll.
+F036 - Guard ARMED startup and acknowledgement boundary.
 
 ## Next Feature
 
-No currently planned todo feature.
+No unfinished feature is currently planned.
 
 ## Known Issues
 

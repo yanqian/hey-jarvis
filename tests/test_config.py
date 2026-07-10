@@ -94,6 +94,11 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_acknowledgement_text, DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT)
         self.assertEqual(settings.wake_acknowledgement_audio_path, DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH)
         self.assertEqual(settings.wake_acknowledgement_drain_seconds, DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS)
+        self.assertTrue(settings.ack_guard_enabled)
+        self.assertEqual(settings.ack_guard_seconds, 0.60)
+        self.assertEqual(settings.ack_guard_min_quiet_seconds, 0.16)
+        self.assertEqual(settings.ack_guard_quiet_rms, 600.0)
+        self.assertEqual(settings.ack_guard_max_buffer_seconds, 1.0)
         self.assertEqual(settings.wake_debug, DEFAULT_WAKE_DEBUG)
         self.assertEqual(settings.post_playback_wake_cooldown_seconds, DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS)
         self.assertEqual(settings.post_playback_quiet_seconds, DEFAULT_POST_PLAYBACK_QUIET_SECONDS)
@@ -108,6 +113,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.armed_voice_required_ratio, DEFAULT_ARMED_VOICE_REQUIRED_RATIO)
         self.assertEqual(settings.armed_clip_reject_peak, DEFAULT_ARMED_CLIP_REJECT_PEAK)
         self.assertEqual(settings.armed_pre_roll_seconds, DEFAULT_ARMED_PRE_ROLL_SECONDS)
+        self.assertEqual(settings.armed_baseline_seconds, 0.30)
+        self.assertEqual(settings.armed_baseline_min_chunks, 3)
+        self.assertTrue(settings.armed_require_baseline)
+        self.assertTrue(settings.armed_last_chunk_must_be_voiced)
         self.assertEqual(settings.min_valid_speech_seconds, DEFAULT_MIN_VALID_SPEECH_SECONDS)
         self.assertEqual(settings.min_transcript_length, DEFAULT_MIN_TRANSCRIPT_LENGTH)
         self.assertEqual(settings.cancel_phrases, DEFAULT_CANCEL_PHRASES)
@@ -145,6 +154,11 @@ class ConfigTests(unittest.TestCase):
                 "WAKE_ACKNOWLEDGEMENT_TEXT": "yes?",
                 "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "tmp/custom-ack.mp3",
                 "WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS": "0.8",
+                "ACK_GUARD_ENABLED": "0",
+                "ACK_GUARD_SECONDS": "0.7",
+                "ACK_GUARD_MIN_QUIET_SECONDS": "0.2",
+                "ACK_GUARD_QUIET_RMS": "700",
+                "ACK_GUARD_MAX_BUFFER_SECONDS": "1.2",
                 "WAKE_DEBUG": "1",
                 "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS": "2.5",
                 "POST_PLAYBACK_QUIET_SECONDS": "0.75",
@@ -159,6 +173,10 @@ class ConfigTests(unittest.TestCase):
                 "ARMED_VOICE_REQUIRED_RATIO": "0.8",
                 "ARMED_CLIP_REJECT_PEAK": "31000",
                 "ARMED_PRE_ROLL_SECONDS": "0.6",
+                "ARMED_BASELINE_SECONDS": "0.5",
+                "ARMED_BASELINE_MIN_CHUNKS": "4",
+                "ARMED_REQUIRE_BASELINE": "0",
+                "ARMED_LAST_CHUNK_MUST_BE_VOICED": "0",
                 "MIN_VALID_SPEECH_SECONDS": "0.4",
                 "MIN_TRANSCRIPT_LENGTH": "3",
                 "CANCEL_PHRASES": "stop,no thanks,算了",
@@ -196,6 +214,11 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_acknowledgement_text, "yes?")
         self.assertEqual(settings.wake_acknowledgement_audio_path, Path("tmp/custom-ack.mp3"))
         self.assertEqual(settings.wake_acknowledgement_drain_seconds, 0.8)
+        self.assertFalse(settings.ack_guard_enabled)
+        self.assertEqual(settings.ack_guard_seconds, 0.7)
+        self.assertEqual(settings.ack_guard_min_quiet_seconds, 0.2)
+        self.assertEqual(settings.ack_guard_quiet_rms, 700.0)
+        self.assertEqual(settings.ack_guard_max_buffer_seconds, 1.2)
         self.assertTrue(settings.wake_debug)
         self.assertEqual(settings.post_playback_wake_cooldown_seconds, 2.5)
         self.assertEqual(settings.post_playback_quiet_seconds, 0.75)
@@ -210,6 +233,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.armed_voice_required_ratio, 0.8)
         self.assertEqual(settings.armed_clip_reject_peak, 31000)
         self.assertEqual(settings.armed_pre_roll_seconds, 0.6)
+        self.assertEqual(settings.armed_baseline_seconds, 0.5)
+        self.assertEqual(settings.armed_baseline_min_chunks, 4)
+        self.assertFalse(settings.armed_require_baseline)
+        self.assertFalse(settings.armed_last_chunk_must_be_voiced)
         self.assertEqual(settings.min_valid_speech_seconds, 0.4)
         self.assertEqual(settings.min_transcript_length, 3)
         self.assertEqual(settings.cancel_phrases, ("stop", "no thanks", "算了"))

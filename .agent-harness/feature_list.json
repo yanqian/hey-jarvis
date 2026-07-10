@@ -727,6 +727,27 @@
         "F029",
         "F033"
       ]
+    },
+    {
+      "id": "F036",
+      "title": "Guard ARMED startup and acknowledgement boundary",
+      "description": "Prevent ARMED cold-start false triggers until a configurable noise baseline is ready, require current speech when configured, and replace blind acknowledgement draining with a conservative bounded guard that can preserve immediate user-speech pre-roll.",
+      "acceptance": [
+        "Configuration loads, validates, and documents ARMED_BASELINE_SECONDS=0.30, ARMED_BASELINE_MIN_CHUNKS=3, ARMED_REQUIRE_BASELINE=true, and ARMED_LAST_CHUNK_MUST_BE_VOICED=true while preserving ARMED_VOICE_RMS as the legacy ARMED_MIN_RMS fallback.",
+        "ARMED preserves all baseline-period audio in pre-roll but cannot trigger until both baseline elapsed audio and valid non-overflow chunk count are ready when required; overflowed and clipped chunks cannot drive voice decisions, and only valid dynamically non-voiced chunks update noise samples.",
+        "ARMED optionally requires the latest chunk to be voiced, and armed_trigger/armed_summary logs include baseline_ready, baseline_chunks, baseline_seconds, noise_floor, dynamic_threshold, and the existing result markers.",
+        "Configuration loads, validates, and documents ACK_GUARD_ENABLED=true, ACK_GUARD_SECONDS=0.60, ACK_GUARD_MIN_QUIET_SECONDS=0.16, ACK_GUARD_QUIET_RMS=600, and ACK_GUARD_MAX_BUFFER_SECONDS=1.00; the bounded guard suppresses acknowledgement residue, logs discarded/preserved counts and quiet/max metrics, and passes only a conservative late non-quiet tail into ARMED pre-roll.",
+        "A wake followed by acknowledgement residue and silence cancels locally as no_speech_after_wake without recording, transcription, chat/tool routing, answer TTS, or answer playback, while immediate speech near the acknowledgement boundary can be preserved into eventual recording without guard chunks automatically forcing ARMED trigger.",
+        "Focused configuration, state-machine, documentation, dry-run, fake-backend, diagnose, full unittest, and final ./init.sh verification pass without VAD, new dependencies, recorder endpointing changes, live audio, OpenAI, speaker, or network access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F035"
+      ]
     }
   ]
 }

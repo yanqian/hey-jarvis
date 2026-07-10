@@ -137,10 +137,12 @@ class VoiceAssistantStateMachine:
                 "State ACK_PLAYING: played wake acknowledgement from %s",
                 self.settings.wake_acknowledgement_audio_path,
             )
-            self._drain_wake_acknowledgement_audio()
+            guard_chunks = self._guard_wake_acknowledgement_audio()
+        else:
+            guard_chunks = ()
 
         self._set_state(AssistantState.ARMED)
-        speech_start_chunks = self._wait_for_armed_speech()
+        speech_start_chunks = self._wait_for_armed_speech(initial_pre_roll=guard_chunks)
         if speech_start_chunks is None:
             return self._cancel_to_wait_wake("no_speech_after_wake")
 
@@ -336,7 +338,9 @@ class VoiceAssistantStateMachine:
         )
         return detected
 
-    def _wait_for_armed_speech(self) -> tuple[bytes, ...] | None:
+    def _wait_for_armed_speech(
+        self, *, initial_pre_roll: Sequence[bytes] | None = None
+    ) -> tuple[bytes, ...] | None:
         timeout_seconds = self.settings.armed_no_speech_timeout_seconds
         minimum_chunk_seconds = 1.0 / self.settings.sample_rate
         expected_frame_seconds = _detector_frame_seconds(self.wake_detector, self.settings.sample_rate)
@@ -353,6 +357,30 @@ class VoiceAssistantStateMachine:
         voiced_window: deque[bool] = deque(maxlen=window_chunks_required)
         pre_roll: deque[_ArmedChunk] = deque()
         pre_roll_seconds = 0.0
+        for initial_chunk in initial_pre_roll or ():
+            initial_seconds = max(
+                _chunk_duration_seconds(initial_chunk, self.settings.sample_rate),
+                minimum_chunk_seconds,
+            )
+            initial_rms, initial_peak = pcm_rms_and_peak(initial_chunk)
+            pre_roll.append(
+                _ArmedChunk(
+                    pcm=initial_chunk,
+                    seconds=initial_seconds,
+                    rms=initial_rms,
+                    peak=initial_peak,
+                    overflowed=False,
+                    voiced=False,
+                    dynamic_threshold=self.settings.armed_min_rms,
+                    noise_floor=0.0,
+                )
+            )
+            pre_roll_seconds += initial_seconds
+        pre_roll_seconds = _trim_pre_roll(
+            pre_roll,
+            pre_roll_seconds=pre_roll_seconds,
+            max_seconds=self.settings.armed_pre_roll_seconds,
+        )
         self._logger.info(
             (
                 "State ARMED: waiting up to %.2fs for speech; min_rms=%.1f "
@@ -405,7 +433,8 @@ class VoiceAssistantStateMachine:
                 self._logger.info("State ARMED: ignoring overflowed microphone chunk")
                 voiced_window.append(False)
                 continue
-            valid_chunks += 1
+            if not clipped:
+                valid_chunks += 1
             voiced_window.append(voiced)
             if voiced:
                 voiced_chunks += 1
@@ -413,7 +442,18 @@ class VoiceAssistantStateMachine:
                 noise_samples.append(rms)
 
             window_voiced_chunks = sum(1 for item in voiced_window if item)
-            if len(voiced_window) >= window_chunks_required and window_voiced_chunks >= voiced_chunks_required:
+            baseline_ready = (
+                elapsed_seconds >= self.settings.armed_baseline_seconds
+                and valid_chunks >= self.settings.armed_baseline_min_chunks
+            )
+            baseline_gate_open = baseline_ready or not self.settings.armed_require_baseline
+            latest_chunk_ready = voiced or not self.settings.armed_last_chunk_must_be_voiced
+            if (
+                baseline_gate_open
+                and latest_chunk_ready
+                and len(voiced_window) >= window_chunks_required
+                and window_voiced_chunks >= voiced_chunks_required
+            ):
                 pre_roll_chunks = tuple(item.pcm for item in pre_roll if item.pcm)
                 pre_roll_overflow_chunks = sum(1 for item in pre_roll if item.overflowed)
                 pre_roll_ms = int(round(sum(item.seconds for item in pre_roll) * 1000))
@@ -422,7 +462,8 @@ class VoiceAssistantStateMachine:
                         "armed_trigger after=%.2fs duration_pcm=%.2fs chunks=%s valid_chunks=%s "
                         "rms=%.1f peak=%s overflow=%s max_rms=%.1f max_peak=%s "
                         "overflow_chunks=%s voiced_chunks=%s threshold=%.1f "
-                        "dynamic_threshold=%.1f noise_floor=%.1f voiced_window=%s/%s "
+                        "dynamic_threshold=%.1f noise_floor=%.1f baseline_ready=%s "
+                        "baseline_chunks=%s baseline_seconds=%.2f voiced_window=%s/%s "
                         "pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
                         "result=recording_started"
                     ),
@@ -440,6 +481,9 @@ class VoiceAssistantStateMachine:
                     self.settings.armed_min_rms,
                     dynamic_threshold,
                     noise_floor,
+                    _bool_text(baseline_ready),
+                    valid_chunks,
+                    elapsed_seconds,
                     window_voiced_chunks,
                     len(voiced_window),
                     pre_roll_ms,
@@ -453,11 +497,16 @@ class VoiceAssistantStateMachine:
             self.settings.armed_min_rms,
             final_noise_floor * self.settings.armed_snr_multiplier,
         )
+        final_baseline_ready = (
+            elapsed_seconds >= self.settings.armed_baseline_seconds
+            and valid_chunks >= self.settings.armed_baseline_min_chunks
+        )
         self._logger.info(
             (
                 "armed_summary duration_pcm=%.2fs chunks=%s valid_chunks=%s max_rms=%.1f max_peak=%s "
                 "overflow_chunks=%s voiced_chunks=%s threshold=%.1f dynamic_threshold=%.1f "
-                "noise_floor=%.1f pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
+                "noise_floor=%.1f baseline_ready=%s baseline_chunks=%s baseline_seconds=%.2f "
+                "pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
                 "result=no_speech_timeout"
             ),
             elapsed_seconds,
@@ -470,6 +519,9 @@ class VoiceAssistantStateMachine:
             self.settings.armed_min_rms,
             final_dynamic_threshold,
             final_noise_floor,
+            _bool_text(final_baseline_ready),
+            valid_chunks,
+            elapsed_seconds,
             int(round(sum(item.seconds for item in pre_roll) * 1000)),
             sum(1 for item in pre_roll if item.pcm),
             sum(1 for item in pre_roll if item.overflowed),
@@ -537,6 +589,79 @@ class VoiceAssistantStateMachine:
                 compact,
             )
         return None
+
+    def _guard_wake_acknowledgement_audio(self) -> tuple[bytes, ...]:
+        if not self.settings.ack_guard_enabled:
+            self._drain_wake_acknowledgement_audio()
+            return ()
+
+        guard_seconds = self.settings.ack_guard_seconds
+        quiet_required = self.settings.ack_guard_min_quiet_seconds
+        if guard_seconds <= 0 and quiet_required <= 0:
+            return ()
+
+        minimum_chunk_seconds = 1.0 / self.settings.sample_rate
+        expected_frame_seconds = _detector_frame_seconds(self.wake_detector, self.settings.sample_rate)
+        max_guard_seconds = max(guard_seconds, quiet_required)
+        max_chunks = max(1, math.ceil(max_guard_seconds / expected_frame_seconds))
+        buffer: deque[tuple[bytes, float, bool]] = deque()
+        buffer_seconds = 0.0
+        elapsed_seconds = 0.0
+        quiet_seconds = 0.0
+        chunks_read = 0
+        max_rms = 0.0
+        max_peak = 0
+        saw_quiet = False
+
+        self._logger.info(
+            "State ACK_PLAYING: guarding acknowledgement microphone residue for %.2fs",
+            guard_seconds,
+        )
+        while chunks_read < max_chunks and elapsed_seconds < max_guard_seconds:
+            chunk = self.audio_source.read_chunk()
+            chunk_seconds = max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+            elapsed_seconds += chunk_seconds
+            chunks_read += 1
+            rms, peak = pcm_rms_and_peak(chunk)
+            max_rms = max(max_rms, rms)
+            max_peak = max(max_peak, peak)
+            overflowed = bool(getattr(self.audio_source, "last_overflowed", False))
+            quiet = not overflowed and rms <= self.settings.ack_guard_quiet_rms
+            if quiet:
+                quiet_seconds += chunk_seconds
+                saw_quiet = True
+            else:
+                quiet_seconds = 0.0
+            buffer.append((chunk, chunk_seconds, quiet))
+            buffer_seconds += chunk_seconds
+            while buffer and buffer_seconds > self.settings.ack_guard_max_buffer_seconds:
+                _, removed_seconds, _ = buffer.popleft()
+                buffer_seconds -= removed_seconds
+            if quiet_required > 0 and quiet_seconds >= quiet_required:
+                break
+            if guard_seconds > 0 and elapsed_seconds >= guard_seconds:
+                break
+
+        preserved: list[bytes] = []
+        if saw_quiet:
+            for chunk, _, quiet in reversed(buffer):
+                if quiet:
+                    break
+                preserved.append(chunk)
+            preserved.reverse()
+        discarded = chunks_read - len(preserved)
+        self._logger.info(
+            (
+                "State ACK_PLAYING: discarded %s acknowledgement microphone chunks; "
+                "preserved %s guard chunks; quiet=%.2fs max_rms=%.1f max_peak=%s"
+            ),
+            discarded,
+            len(preserved),
+            quiet_seconds,
+            max_rms,
+            max_peak,
+        )
+        return tuple(preserved)
 
     def _drain_wake_acknowledgement_audio(self) -> None:
         drain_seconds = self.settings.wake_acknowledgement_drain_seconds

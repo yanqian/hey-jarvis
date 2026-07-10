@@ -828,6 +828,28 @@ fetching and parsing remain separate completed features; splitting by weather,
 FX, and stock would duplicate the same naturalization boundary without adding
 independent project value.
 
+### ARMED Baseline Gate And Acknowledgement Guard
+
+Goal: prevent cold-start ARMED false triggers before a useful noise baseline exists, while conservatively preserving immediate post-acknowledgement user speech so the first syllable is less likely to be lost.
+
+Included scope: configurable ARMED baseline duration and minimum valid-chunk gate, optional latest-chunk-voiced trigger requirement, baseline-aware diagnostics, a bounded acknowledgement guard that observes quiet and may preserve a small non-quiet tail, passing preserved guard audio into ARMED pre-roll, environment examples, README configuration guidance, manual tests, and deterministic state-machine/configuration tests.
+
+Excluded scope: voice activity detection, new runtime dependencies, recorder endpointing changes, wake-word model changes, streaming transcription, additional spoken prompts, or broad audio-pipeline redesign.
+
+Core flows: after wake acknowledgement playback, the assistant guards microphone residue for a bounded interval, discards obvious acknowledgement residue and quiet audio, preserves only a conservative late non-quiet tail, enters ARMED with that tail available as pre-roll, waits until both configured baseline time and valid-chunk count are satisfied, and triggers recording only when the voiced-window rule and optional latest-chunk rule pass. A wake followed by silence times out locally and returns to WAIT_WAKE without recording or any OpenAI, tool, TTS, or answer-playback call.
+
+Constraints: preserve `ARMED_VOICE_RMS` as the legacy fallback for `ARMED_MIN_RMS`; existing environment variables and CLI modes must keep working; overflowed and clipped chunks cannot contribute voice decisions; only valid non-voiced chunks update the noise sample set; acknowledgement-only residue must not be enough to trigger recording; preserving too little guard audio is preferable to recording the acknowledgement; automated tests use fakes and synthetic PCM with no live microphone, OpenAI, speaker, or network access.
+
+Ambiguities or assumptions: `ACK_GUARD_SECONDS` replaces the active fixed acknowledgement drain behavior when the guard is enabled, while the existing drain setting remains backward-compatible when the guard is disabled. Guard-tail preservation uses the configured quiet RMS as the conservative residue boundary and keeps only contiguous non-quiet chunks at the end of the bounded buffer. Initial guard chunks seed eventual pre-roll but do not count toward ARMED baseline readiness or directly force a trigger.
+
+Required capabilities: existing PCM RMS/peak helpers, fake audio source overflow signaling, deterministic logging capture, configuration parsing/validation, temporary WAV fixtures, and root recovery verification. No additional package or external service is required.
+
+Implementation paths: `src/config.py`, `src/state_machine.py`, `.env.example`, `README.md`, `MANUAL_TESTING.md`, `tests/test_config.py`, `tests/test_state_machine.py`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: focused tests for baseline gating, cold-noise-floor silence timeout, latest-chunk voice requirement, acknowledgement-only guard cancellation, boundary-speech preservation, configuration defaults/overrides/validation, and documentation; then `python -m src.main --dry-run`, `python -m src.main --fake-backend`, `python -m src.main --diagnose`, `python -m unittest`, and final `./init.sh`.
+
+Decomposition decision: this remains one feature because the baseline gate and acknowledgement-boundary guard jointly address the same ARMED entry boundary and share one state-machine, logging, documentation, and synthetic-audio verification surface. Splitting them would leave either the false-trigger or first-syllable failure active at the same transition.
+
 ## 5. Verification Plan
 
 Run:
