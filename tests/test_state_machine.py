@@ -6,6 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.config import (
+    DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS,
+    DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS,
+    DEFAULT_ACK_GUARD_QUIET_RMS,
+    DEFAULT_ARMED_BASELINE_MIN_CHUNKS,
+    DEFAULT_ARMED_BASELINE_SECONDS,
     DEFAULT_ARMED_CLIP_REJECT_PEAK,
     DEFAULT_ARMED_MIN_RMS,
     DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS,
@@ -42,7 +47,7 @@ from src.config import (
 )
 from src.openai_client import OpenAIClientError
 from src.recorder import RecordingResult
-from src.state_machine import AssistantState, VoiceAssistantStateMachine
+from src.state_machine import AssistantState, VoiceAssistantStateMachine, _PostAckBoundaryResult
 from src.tools import ToolResult, ToolRoute
 
 
@@ -58,6 +63,10 @@ def make_settings(
     wake_acknowledgement_enabled=False,
     wake_acknowledgement_audio_path=DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
     wake_acknowledgement_drain_seconds=DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
+    ack_guard_enabled=False,
+    ack_guard_min_quiet_seconds=DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS,
+    ack_guard_quiet_rms=DEFAULT_ACK_GUARD_QUIET_RMS,
+    ack_guard_max_buffer_seconds=DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS,
     armed_no_speech_timeout_seconds=DEFAULT_ARMED_NO_SPEECH_TIMEOUT_SECONDS,
     armed_voice_rms=DEFAULT_ARMED_VOICE_RMS,
     armed_min_rms=DEFAULT_ARMED_MIN_RMS,
@@ -66,6 +75,10 @@ def make_settings(
     armed_voice_required_ratio=DEFAULT_ARMED_VOICE_REQUIRED_RATIO,
     armed_clip_reject_peak=DEFAULT_ARMED_CLIP_REJECT_PEAK,
     armed_pre_roll_seconds=DEFAULT_ARMED_PRE_ROLL_SECONDS,
+    armed_baseline_seconds=DEFAULT_ARMED_BASELINE_SECONDS,
+    armed_baseline_min_chunks=DEFAULT_ARMED_BASELINE_MIN_CHUNKS,
+    armed_require_baseline=True,
+    armed_last_chunk_must_be_voiced=True,
     min_valid_speech_seconds=DEFAULT_MIN_VALID_SPEECH_SECONDS,
     min_transcript_length=DEFAULT_MIN_TRANSCRIPT_LENGTH,
     cancel_phrases=DEFAULT_CANCEL_PHRASES,
@@ -91,6 +104,10 @@ def make_settings(
         wake_acknowledgement_text=DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
         wake_acknowledgement_drain_seconds=wake_acknowledgement_drain_seconds,
+        ack_guard_enabled=ack_guard_enabled,
+        ack_guard_min_quiet_seconds=ack_guard_min_quiet_seconds,
+        ack_guard_quiet_rms=ack_guard_quiet_rms,
+        ack_guard_max_buffer_seconds=ack_guard_max_buffer_seconds,
         wake_debug=wake_debug,
         post_playback_wake_cooldown_seconds=post_playback_wake_cooldown_seconds,
         post_playback_quiet_seconds=post_playback_quiet_seconds,
@@ -105,6 +122,10 @@ def make_settings(
         armed_voice_required_ratio=armed_voice_required_ratio,
         armed_clip_reject_peak=armed_clip_reject_peak,
         armed_pre_roll_seconds=armed_pre_roll_seconds,
+        armed_baseline_seconds=armed_baseline_seconds,
+        armed_baseline_min_chunks=armed_baseline_min_chunks,
+        armed_require_baseline=armed_require_baseline,
+        armed_last_chunk_must_be_voiced=armed_last_chunk_must_be_voiced,
         min_valid_speech_seconds=min_valid_speech_seconds,
         min_transcript_length=min_transcript_length,
         cancel_phrases=cancel_phrases,
@@ -121,6 +142,7 @@ LOUD_CHUNK = pcm_chunk(2000)
 MODERATE_CHUNK = pcm_chunk(800)
 NOISE_CHUNK = pcm_chunk(400)
 CLIPPED_CHUNK = pcm_chunk(32767)
+USER_CLIPPED_CHUNK = pcm_chunk(-32768)
 SPEECH_CHUNKS = [LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK]
 
 
@@ -215,6 +237,16 @@ def fake_silent_record_audio(source, *, sample_rate, output_path, **kwargs):
 
 
 class StateMachineTests(unittest.TestCase):
+    def _machine_for_armed_test(self, audio_source, *, logger, **setting_overrides):
+        return VoiceAssistantStateMachine(
+            settings=make_settings(**setting_overrides),
+            audio_source=audio_source,
+            wake_detector=FakeWakeDetector(),
+            openai_client=FakeOpenAIClient(),
+            player=FakePlayer(),
+            logger=logger,
+        )
+
     def test_wake_acknowledgement_plays_and_drains_before_recording(self):
         logger = logging.getLogger("tests.state_machine.acknowledgement")
         audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, QUIET_CHUNK, *SPEECH_CHUNKS])
@@ -339,6 +371,294 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("pre_roll_ms=160 pre_roll_chunks=2 pre_roll_overflow_chunks=0", log_output)
         self.assertIn("result=no_speech_timeout", log_output)
         self.assertIn("local cancellation reason=no_speech_after_wake", log_output)
+
+    def test_armed_requires_baseline_before_trigger(self):
+        logger = logging.getLogger("tests.state_machine.armed_baseline")
+        audio_source = FakeAudioSource([LOUD_CHUNK] * 5)
+        machine = self._machine_for_armed_test(
+            audio_source,
+            logger=logger,
+            armed_baseline_seconds=0.40,
+            armed_baseline_min_chunks=3,
+            armed_pre_roll_seconds=0.50,
+        )
+
+        with self.assertLogs(logger, level="INFO") as logs:
+            chunks = machine._wait_for_armed_speech()
+
+        self.assertEqual(chunks, tuple([LOUD_CHUNK] * 5))
+        log_output = "\n".join(logs.output)
+        self.assertIn("armed_trigger", log_output)
+        self.assertIn("baseline_ready=true", log_output)
+        self.assertIn("baseline_chunks=5", log_output)
+        self.assertNotIn("baseline_ready=false", log_output)
+
+    def test_no_speech_after_wake_does_not_record_with_cold_noise_floor(self):
+        logger = logging.getLogger("tests.state_machine.cold_noise_floor")
+        audio_source = FakeAudioSource(
+            [WAKE_CHUNK, WAKE_CHUNK, MODERATE_CHUNK, MODERATE_CHUNK, MODERATE_CHUNK, QUIET_CHUNK],
+            fallback_chunk=QUIET_CHUNK,
+        )
+        openai_client = FakeOpenAIClient()
+        player = FakePlayer()
+
+        def fail_record(*args, **kwargs):
+            raise AssertionError("record_audio must not be called")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    armed_no_speech_timeout_seconds=0.64,
+                    armed_baseline_seconds=0.30,
+                    armed_baseline_min_chunks=3,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=openai_client,
+                player=player,
+                record_audio=fail_record,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertTrue(result.cancelled)
+        self.assertEqual(result.cancellation_reason, "no_speech_after_wake")
+        self.assertIsNone(openai_client.transcribed_path)
+        self.assertEqual(openai_client.chat_calls, 0)
+        self.assertEqual(openai_client.tts_calls, 0)
+        self.assertEqual(player.played, [])
+        log_output = "\n".join(logs.output)
+        self.assertIn("armed_summary", log_output)
+        self.assertIn("result=no_speech_timeout", log_output)
+        self.assertNotIn("result=recording_started", log_output)
+
+    def test_armed_last_chunk_must_be_voiced(self):
+        logger = logging.getLogger("tests.state_machine.armed_latest_chunk")
+        audio_source = FakeAudioSource([LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK, QUIET_CHUNK, LOUD_CHUNK])
+        machine = self._machine_for_armed_test(
+            audio_source,
+            logger=logger,
+            armed_baseline_seconds=0.30,
+            armed_baseline_min_chunks=3,
+            armed_last_chunk_must_be_voiced=True,
+        )
+
+        with self.assertLogs(logger, level="INFO") as logs:
+            chunks = machine._wait_for_armed_speech()
+
+        self.assertIsNotNone(chunks)
+        self.assertEqual(len(audio_source.read_chunks), 5)
+        self.assertIn("baseline_ready=true", "\n".join(logs.output))
+
+    def test_ack_guard_ack_only_does_not_enter_recording(self):
+        logger = logging.getLogger("tests.state_machine.ack_guard_only")
+        audio_source = FakeAudioSource(
+            [WAKE_CHUNK, WAKE_CHUNK, MODERATE_CHUNK, QUIET_CHUNK, QUIET_CHUNK],
+            fallback_chunk=QUIET_CHUNK,
+        )
+        openai_client = FakeOpenAIClient()
+        player = FakePlayer()
+
+        def fail_record(*args, **kwargs):
+            raise AssertionError("record_audio must not be called")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            acknowledgement_path = Path(tmp_dir) / "ack.mp3"
+            acknowledgement_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=acknowledgement_path,
+                    ack_guard_enabled=True,
+                    ack_guard_min_quiet_seconds=0.16,
+                    armed_no_speech_timeout_seconds=0.40,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=openai_client,
+                player=player,
+                record_audio=fail_record,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertTrue(result.cancelled)
+        self.assertEqual(result.cancellation_reason, "no_speech_after_wake")
+        self.assertEqual(openai_client.chat_calls, 0)
+        self.assertEqual(openai_client.tts_calls, 0)
+        self.assertEqual(player.played, [acknowledgement_path])
+        self.assertIn("preserved_chunks=0", "\n".join(logs.output))
+        self.assertIn("post_ack_quiet_observed=true", "\n".join(logs.output))
+
+    def test_ack_guard_can_preserve_boundary_speech(self):
+        logger = logging.getLogger("tests.state_machine.ack_guard_boundary")
+        audio_source = FakeAudioSource(
+            [
+                WAKE_CHUNK,
+                WAKE_CHUNK,
+                CLIPPED_CHUNK,
+                b"overflow",
+                QUIET_CHUNK,
+                QUIET_CHUNK,
+                LOUD_CHUNK,
+                USER_CLIPPED_CHUNK,
+                LOUD_CHUNK,
+                LOUD_CHUNK,
+            ],
+            fallback_chunk=QUIET_CHUNK,
+        )
+        preserved_first_chunk = []
+
+        def capture_recording(source, *, sample_rate, output_path, **kwargs):
+            for _ in range(4):
+                preserved_first_chunk.append(source.read_chunk())
+            return fake_record_audio(source, sample_rate=sample_rate, output_path=output_path, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            acknowledgement_path = Path(tmp_dir) / "ack.mp3"
+            acknowledgement_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=acknowledgement_path,
+                    ack_guard_enabled=True,
+                    ack_guard_min_quiet_seconds=0.16,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=capture_recording,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        self.assertEqual(
+            preserved_first_chunk,
+            [LOUD_CHUNK, USER_CLIPPED_CHUNK, LOUD_CHUNK, LOUD_CHUNK],
+        )
+        self.assertNotIn(CLIPPED_CHUNK, preserved_first_chunk)
+        self.assertIn(USER_CLIPPED_CHUNK, preserved_first_chunk)
+        self.assertIn("post_ack_quiet_observed=true", "\n".join(logs.output))
+        self.assertIn("noise_seed_count=2", "\n".join(logs.output))
+        self.assertIn("post_ack_overflow_chunks=1", "\n".join(logs.output))
+        self.assertIn("post_ack_clipped_chunks=1", "\n".join(logs.output))
+
+    def test_post_boundary_overflow_is_omitted_without_clearing_safe_pre_roll(self):
+        logger = logging.getLogger("tests.state_machine.post_boundary_overflow")
+        audio_source = FakeAudioSource(
+            [LOUD_CHUNK, b"overflow", LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK]
+        )
+        boundary = _PostAckBoundaryResult(
+            True, 2, (), (QUIET_CHUNK, QUIET_CHUNK), 0.0, 0, 0, 0, False
+        )
+        machine = self._machine_for_armed_test(
+            audio_source, logger=logger, ack_guard_enabled=True
+        )
+        with self.assertLogs(logger, level="INFO"):
+            chunks = machine._wait_for_armed_speech(
+                initial_noise_seed=boundary.noise_seed_chunks,
+                post_ack_boundary=boundary,
+            )
+        self.assertEqual(chunks, tuple([LOUD_CHUNK] * 3))
+
+    def test_ack_guard_without_quiet_does_not_enter_recording(self):
+        logger = logging.getLogger("tests.state_machine.ack_no_quiet")
+        audio_source = FakeAudioSource(
+            [WAKE_CHUNK, WAKE_CHUNK, CLIPPED_CHUNK, b"overflow", LOUD_CHUNK, LOUD_CHUNK],
+            fallback_chunk=LOUD_CHUNK,
+        )
+        openai_client = FakeOpenAIClient()
+        player = FakePlayer()
+
+        def fail_record(*args, **kwargs):
+            raise AssertionError("record_audio must not be called without a safe post-ACK boundary")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            acknowledgement_path = Path(tmp_dir) / "ack.mp3"
+            acknowledgement_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=acknowledgement_path,
+                    ack_guard_enabled=True,
+                    ack_guard_min_quiet_seconds=0.16,
+                    ack_guard_max_buffer_seconds=0.32,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=openai_client,
+                player=player,
+                record_audio=fail_record,
+                logger=logger,
+            )
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertTrue(result.cancelled)
+        self.assertEqual(result.cancellation_reason, "no_speech_after_wake")
+        self.assertIsNone(openai_client.transcribed_path)
+        self.assertEqual(openai_client.chat_calls, 0)
+        self.assertEqual(openai_client.tts_calls, 0)
+        log_output = "\n".join(logs.output)
+        self.assertIn("post_ack_quiet_observed=false", log_output)
+        self.assertIn("timed_out=true", log_output)
+        self.assertNotIn("result=recording_started", log_output)
+
+    def test_ack_disabled_still_allows_immediate_speech(self):
+        logger = logging.getLogger("tests.state_machine.ack_disabled_immediate")
+        audio_source = FakeAudioSource([WAKE_CHUNK, WAKE_CHUNK, *SPEECH_CHUNKS])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=False,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        log_output = "\n".join(logs.output)
+        self.assertIn("result=recording_started", log_output)
+        self.assertIn("post_ack_quiet_observed=true", log_output)
+
+    def test_zero_post_ack_quiet_requirement_fails_closed(self):
+        machine = self._machine_for_armed_test(
+            FakeAudioSource([LOUD_CHUNK], fallback_chunk=LOUD_CHUNK),
+            logger=logging.getLogger("tests.state_machine.zero_ack_quiet"),
+        )
+        machine.settings = make_settings(
+            wake_acknowledgement_enabled=True,
+            ack_guard_enabled=True,
+            ack_guard_min_quiet_seconds=0,
+        )
+        boundary = machine._wait_for_post_ack_boundary()
+        self.assertTrue(boundary.timed_out)
+        self.assertFalse(boundary.quiet_observed)
+        self.assertEqual(boundary.noise_seed_chunks, ())
 
     def test_armed_trigger_preserves_pre_roll_chunks(self):
         logger = logging.getLogger("tests.state_machine.armed_pre_roll")

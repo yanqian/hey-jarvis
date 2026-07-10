@@ -167,6 +167,10 @@ WAKE_ACKNOWLEDGEMENT_ENABLED=1
 WAKE_ACKNOWLEDGEMENT_TEXT=在呢
 WAKE_ACKNOWLEDGEMENT_AUDIO_PATH=var/ack.mp3
 WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS=0.35
+ACK_GUARD_ENABLED=1
+ACK_GUARD_MIN_QUIET_SECONDS=0.16
+ACK_GUARD_QUIET_RMS=900
+ACK_GUARD_MAX_BUFFER_SECONDS=1.50
 POST_PLAYBACK_WAKE_COOLDOWN_SECONDS=1.0
 POST_PLAYBACK_QUIET_SECONDS=0.5
 POST_PLAYBACK_QUIET_RMS=500
@@ -180,6 +184,10 @@ ARMED_VOICE_WINDOW_SECONDS=0.30
 ARMED_VOICE_REQUIRED_RATIO=0.75
 ARMED_CLIP_REJECT_PEAK=32000
 ARMED_PRE_ROLL_SECONDS=0.50
+ARMED_BASELINE_SECONDS=0.30
+ARMED_BASELINE_MIN_CHUNKS=3
+ARMED_REQUIRE_BASELINE=1
+ARMED_LAST_CHUNK_MUST_BE_VOICED=1
 MIN_VALID_SPEECH_SECONDS=0.50
 MIN_TRANSCRIPT_LENGTH=2
 CANCEL_PHRASES=取消,没事,不用了,算了,stop,cancel,never mind
@@ -216,9 +224,14 @@ the API default behavior.
 src.main --prepare-acknowledgement`, defaulting to `在呢`.
 `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` points to the prepared local MP3, defaulting to
 `var/ack.mp3`. Normal wake handling reuses that file and does not make a fresh
-TTS request for every wake event. `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS` controls
-how long microphone residue is discarded after acknowledgement playback before
-the assistant enters `ARMED`.
+TTS request for every wake event. With `ACK_GUARD_ENABLED=1`, the assistant
+suppresses acknowledgement residue until it observes
+`ACK_GUARD_MIN_QUIET_SECONDS` below `ACK_GUARD_QUIET_RMS`, bounded by
+`ACK_GUARD_MAX_BUFFER_SECONDS`. Clipped and overflowed chunks reset the safe
+boundary and never enter recording pre-roll. If no quiet boundary appears, the
+loop cancels locally as `no_speech_after_wake`; it cannot enter triggerable
+ARMED with `post_ack_quiet_observed=false`. `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`
+remains the legacy fixed drain when the guard is disabled.
 
 `ARMED_NO_SPEECH_TIMEOUT_SECONDS` controls how long the assistant waits after
 wake acknowledgement for user speech before quietly returning to `WAIT_WAKE`.
@@ -229,9 +242,23 @@ ARMED_SNR_MULTIPLIER)`. `ARMED_VOICE_WINDOW_SECONDS` and
 `ARMED_VOICE_REQUIRED_RATIO` require sustained speech-like chunks before
 recording starts, `ARMED_CLIP_REJECT_PEAK` rejects clipped spikes, and
 `ARMED_PRE_ROLL_SECONDS` preserves recent audio so the beginning of the user's
-utterance is not dropped. ARMED logs `armed_summary` on timeout and
+utterance is not dropped. With `ARMED_REQUIRE_BASELINE=1`, recording cannot
+start until at least `ARMED_BASELINE_SECONDS` and
+`ARMED_BASELINE_MIN_CHUNKS` of valid ARMED audio are observed.
+`ARMED_LAST_CHUNK_MUST_BE_VOICED=1` prevents a stale voiced window from
+triggering after speech or noise has stopped. ARMED logs `armed_summary` on timeout and
 `armed_trigger` on recording start with RMS, peak, overflow, noise-floor,
-voiced-window, threshold, and pre-roll context.
+voiced-window, threshold, baseline readiness/chunks/seconds, and pre-roll
+context. A default recording start must show `baseline_ready=true`.
+Guarded ACK flows also require `noise_floor_has_samples=true` and log
+`post_ack_quiet_observed`, suppressed/clipped/overflow chunk counts, and the
+post-ACK maximum RMS and peak. If speaker echo still reaches `max_peak=32768`,
+lower playback volume or regenerate a shorter acknowledgement such as `嗯`.
+After that safe boundary, ARMED treats audio as potential user speech:
+overflowed chunks are omitted individually, while clipped PCM is retained in
+the bounded pre-roll because it may still contain intelligible words. Neither
+type counts as voiced or updates the noise floor, and neither erases earlier
+safe user chunks.
 `MIN_VALID_SPEECH_SECONDS` and `MIN_TRANSCRIPT_LENGTH` reject accidental,
 silent, or unusably short requests before chat/tool routing and TTS.
 `CANCEL_PHRASES` is a comma-separated local cancellation list; defaults include
@@ -253,17 +280,12 @@ for observed quiet before becoming wake-ready again. This uses the same
 as post-playback suppression, and logs the cancellation reason, discarded chunk
 counts, quiet-gate status, and maximum suppressed wake score.
 
-Current manual-test note: the acknowledgement drain still discards microphone
-audio before ARMED pre-roll begins. For the most reliable test, say `Hey
-Jarvis`, wait for `在呢` to finish, pause roughly 0.3-0.5 seconds, then ask the
-question. If a question such as `一加一等于几` is transcribed as `加一等于几`,
-the first syllable likely landed during acknowledgement playback, the drain
-window, or an overflowed chunk. If saying only `Hey Jarvis` and then staying
-silent logs `armed_trigger ... result=recording_started` followed by
-`stopped_by=max_duration` and `empty_transcript`, that is a known bug: ARMED
-misclassified acknowledgement residue or background noise as speech before a
-useful noise-floor baseline existed. See `MANUAL_TESTING.md` for the current
-log patterns and temporary mitigation settings.
+For the most reliable manual test, say `Hey Jarvis`, wait until acknowledgement
+echo settles, then ask the question. A safe run logs
+`post_ack_quiet_observed=true` before ARMED and never includes clipped ACK audio
+in `tmp/input.wav`. A run that reaches the bounded suppression limit without
+quiet cancels locally instead of recording residue. See `MANUAL_TESTING.md` for
+the ACK-disabled, delayed-question, and immediate-question comparison cases.
 
 `SILENCE_SECONDS` controls how much post-question quiet is required before the
 question recording stops. `RECORDING_SILENCE_RMS`, default `750`, is the RMS

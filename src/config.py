@@ -60,6 +60,10 @@ DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED = True
 DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT = "在呢"
 DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH = Path("var/ack.mp3")
 DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS = 0.35
+DEFAULT_ACK_GUARD_ENABLED = True
+DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS = 0.16
+DEFAULT_ACK_GUARD_QUIET_RMS = 900.0
+DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS = 1.50
 DEFAULT_WAKE_DEBUG = False
 DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS = 1.0
 DEFAULT_POST_PLAYBACK_QUIET_SECONDS = 0.5
@@ -74,6 +78,10 @@ DEFAULT_ARMED_VOICE_WINDOW_SECONDS = 0.30
 DEFAULT_ARMED_VOICE_REQUIRED_RATIO = 0.75
 DEFAULT_ARMED_CLIP_REJECT_PEAK = 32000
 DEFAULT_ARMED_PRE_ROLL_SECONDS = 0.50
+DEFAULT_ARMED_BASELINE_SECONDS = 0.30
+DEFAULT_ARMED_BASELINE_MIN_CHUNKS = 3
+DEFAULT_ARMED_REQUIRE_BASELINE = True
+DEFAULT_ARMED_LAST_CHUNK_MUST_BE_VOICED = True
 DEFAULT_MIN_VALID_SPEECH_SECONDS = 0.50
 DEFAULT_MIN_TRANSCRIPT_LENGTH = 2
 DEFAULT_CANCEL_PHRASES = ("取消", "没事", "不用了", "算了", "stop", "cancel", "never mind")
@@ -130,6 +138,10 @@ class Settings:
     wake_acknowledgement_text: str = DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT
     wake_acknowledgement_audio_path: Path = DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH
     wake_acknowledgement_drain_seconds: float = DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS
+    ack_guard_enabled: bool = DEFAULT_ACK_GUARD_ENABLED
+    ack_guard_min_quiet_seconds: float = DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS
+    ack_guard_quiet_rms: float = DEFAULT_ACK_GUARD_QUIET_RMS
+    ack_guard_max_buffer_seconds: float = DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS
     wake_debug: bool = DEFAULT_WAKE_DEBUG
     post_playback_wake_cooldown_seconds: float = DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS
     post_playback_quiet_seconds: float = DEFAULT_POST_PLAYBACK_QUIET_SECONDS
@@ -144,6 +156,10 @@ class Settings:
     armed_voice_required_ratio: float = DEFAULT_ARMED_VOICE_REQUIRED_RATIO
     armed_clip_reject_peak: int = DEFAULT_ARMED_CLIP_REJECT_PEAK
     armed_pre_roll_seconds: float = DEFAULT_ARMED_PRE_ROLL_SECONDS
+    armed_baseline_seconds: float = DEFAULT_ARMED_BASELINE_SECONDS
+    armed_baseline_min_chunks: int = DEFAULT_ARMED_BASELINE_MIN_CHUNKS
+    armed_require_baseline: bool = DEFAULT_ARMED_REQUIRE_BASELINE
+    armed_last_chunk_must_be_voiced: bool = DEFAULT_ARMED_LAST_CHUNK_MUST_BE_VOICED
     min_valid_speech_seconds: float = DEFAULT_MIN_VALID_SPEECH_SECONDS
     min_transcript_length: int = DEFAULT_MIN_TRANSCRIPT_LENGTH
     cancel_phrases: tuple[str, ...] = DEFAULT_CANCEL_PHRASES
@@ -309,6 +325,26 @@ def load_settings(
         errors,
         minimum=0.0,
     )
+    ack_guard_enabled = _bool_value(raw_env, "ACK_GUARD_ENABLED", DEFAULT_ACK_GUARD_ENABLED, errors)
+    ack_guard_min_quiet_seconds = _float_value(
+        raw_env,
+        "ACK_GUARD_MIN_QUIET_SECONDS",
+        DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS,
+        errors,
+        minimum=0.0,
+    )
+    if ack_guard_enabled and ack_guard_min_quiet_seconds <= 0:
+        errors.append("ACK_GUARD_MIN_QUIET_SECONDS must be greater than 0 when ACK_GUARD_ENABLED is true")
+    ack_guard_quiet_rms = _float_value(
+        raw_env, "ACK_GUARD_QUIET_RMS", DEFAULT_ACK_GUARD_QUIET_RMS, errors, minimum=0.0
+    )
+    ack_guard_max_buffer_seconds = _float_value(
+        raw_env,
+        "ACK_GUARD_MAX_BUFFER_SECONDS",
+        DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS,
+        errors,
+        minimum=0.0,
+    )
     wake_debug = _bool_value(raw_env, "WAKE_DEBUG", DEFAULT_WAKE_DEBUG, errors)
     post_playback_wake_cooldown_seconds = _float_value(
         raw_env,
@@ -404,6 +440,21 @@ def load_settings(
         errors,
         minimum=0.0,
     )
+    armed_baseline_seconds = _float_value(
+        raw_env, "ARMED_BASELINE_SECONDS", DEFAULT_ARMED_BASELINE_SECONDS, errors, minimum=0.0
+    )
+    armed_baseline_min_chunks = _int_value(
+        raw_env, "ARMED_BASELINE_MIN_CHUNKS", DEFAULT_ARMED_BASELINE_MIN_CHUNKS, errors, minimum=0
+    )
+    armed_require_baseline = _bool_value(
+        raw_env, "ARMED_REQUIRE_BASELINE", DEFAULT_ARMED_REQUIRE_BASELINE, errors
+    )
+    armed_last_chunk_must_be_voiced = _bool_value(
+        raw_env,
+        "ARMED_LAST_CHUNK_MUST_BE_VOICED",
+        DEFAULT_ARMED_LAST_CHUNK_MUST_BE_VOICED,
+        errors,
+    )
     min_valid_speech_seconds = _float_value(
         raw_env,
         "MIN_VALID_SPEECH_SECONDS",
@@ -462,6 +513,10 @@ def load_settings(
         wake_acknowledgement_text=wake_acknowledgement_text,
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
         wake_acknowledgement_drain_seconds=wake_acknowledgement_drain_seconds,
+        ack_guard_enabled=ack_guard_enabled,
+        ack_guard_min_quiet_seconds=ack_guard_min_quiet_seconds,
+        ack_guard_quiet_rms=ack_guard_quiet_rms,
+        ack_guard_max_buffer_seconds=ack_guard_max_buffer_seconds,
         wake_debug=wake_debug,
         post_playback_wake_cooldown_seconds=post_playback_wake_cooldown_seconds,
         post_playback_quiet_seconds=post_playback_quiet_seconds,
@@ -476,6 +531,10 @@ def load_settings(
         armed_voice_required_ratio=armed_voice_required_ratio,
         armed_clip_reject_peak=armed_clip_reject_peak,
         armed_pre_roll_seconds=armed_pre_roll_seconds,
+        armed_baseline_seconds=armed_baseline_seconds,
+        armed_baseline_min_chunks=armed_baseline_min_chunks,
+        armed_require_baseline=armed_require_baseline,
+        armed_last_chunk_must_be_voiced=armed_last_chunk_must_be_voiced,
         min_valid_speech_seconds=min_valid_speech_seconds,
         min_transcript_length=min_transcript_length,
         cancel_phrases=cancel_phrases,

@@ -94,6 +94,19 @@ class _ArmedChunk:
     noise_floor: float
 
 
+@dataclass(frozen=True)
+class _PostAckBoundaryResult:
+    quiet_observed: bool
+    suppressed_chunks: int
+    preserved_chunks: tuple[bytes, ...]
+    noise_seed_chunks: tuple[bytes, ...]
+    max_rms: float
+    max_peak: int
+    overflow_chunks: int
+    clipped_chunks: int
+    timed_out: bool
+
+
 class VoiceAssistantStateMachine:
     """Run the WAIT_WAKE to PLAYING flow and return to wake listening."""
 
@@ -137,10 +150,18 @@ class VoiceAssistantStateMachine:
                 "State ACK_PLAYING: played wake acknowledgement from %s",
                 self.settings.wake_acknowledgement_audio_path,
             )
-            self._drain_wake_acknowledgement_audio()
+            post_ack_boundary = self._wait_for_post_ack_boundary()
+            if post_ack_boundary.timed_out and not post_ack_boundary.preserved_chunks:
+                return self._cancel_to_wait_wake("no_speech_after_wake")
+        else:
+            post_ack_boundary = None
 
         self._set_state(AssistantState.ARMED)
-        speech_start_chunks = self._wait_for_armed_speech()
+        speech_start_chunks = self._wait_for_armed_speech(
+            initial_pre_roll=() if post_ack_boundary is None else post_ack_boundary.preserved_chunks,
+            initial_noise_seed=() if post_ack_boundary is None else post_ack_boundary.noise_seed_chunks,
+            post_ack_boundary=post_ack_boundary,
+        )
         if speech_start_chunks is None:
             return self._cancel_to_wait_wake("no_speech_after_wake")
 
@@ -336,7 +357,13 @@ class VoiceAssistantStateMachine:
         )
         return detected
 
-    def _wait_for_armed_speech(self) -> tuple[bytes, ...] | None:
+    def _wait_for_armed_speech(
+        self,
+        *,
+        initial_pre_roll: Sequence[bytes] | None = None,
+        initial_noise_seed: Sequence[bytes] | None = None,
+        post_ack_boundary: _PostAckBoundaryResult | None = None,
+    ) -> tuple[bytes, ...] | None:
         timeout_seconds = self.settings.armed_no_speech_timeout_seconds
         minimum_chunk_seconds = 1.0 / self.settings.sample_rate
         expected_frame_seconds = _detector_frame_seconds(self.wake_detector, self.settings.sample_rate)
@@ -349,10 +376,39 @@ class VoiceAssistantStateMachine:
         voiced_chunks = 0
         max_rms = 0.0
         max_peak = 0
-        noise_samples: list[float] = []
+        noise_samples = [pcm_rms_and_peak(chunk)[0] for chunk in (initial_noise_seed or ())]
+        noise_seed_count = len(noise_samples)
+        post_ack_quiet_observed = post_ack_boundary is None or post_ack_boundary.quiet_observed
+        protected_post_ack = post_ack_boundary is not None and self.settings.ack_guard_enabled
+        baseline_ready_after: float | None = None
+        baseline_ready_at_chunks: int | None = None
         voiced_window: deque[bool] = deque(maxlen=window_chunks_required)
         pre_roll: deque[_ArmedChunk] = deque()
         pre_roll_seconds = 0.0
+        for initial_chunk in initial_pre_roll or ():
+            initial_seconds = max(
+                _chunk_duration_seconds(initial_chunk, self.settings.sample_rate),
+                minimum_chunk_seconds,
+            )
+            initial_rms, initial_peak = pcm_rms_and_peak(initial_chunk)
+            pre_roll.append(
+                _ArmedChunk(
+                    pcm=initial_chunk,
+                    seconds=initial_seconds,
+                    rms=initial_rms,
+                    peak=initial_peak,
+                    overflowed=False,
+                    voiced=False,
+                    dynamic_threshold=self.settings.armed_min_rms,
+                    noise_floor=0.0,
+                )
+            )
+            pre_roll_seconds += initial_seconds
+        pre_roll_seconds = _trim_pre_roll(
+            pre_roll,
+            pre_roll_seconds=pre_roll_seconds,
+            max_seconds=self.settings.armed_pre_roll_seconds,
+        )
         self._logger.info(
             (
                 "State ARMED: waiting up to %.2fs for speech; min_rms=%.1f "
@@ -392,20 +448,22 @@ class VoiceAssistantStateMachine:
                 dynamic_threshold=dynamic_threshold,
                 noise_floor=noise_floor,
             )
-            pre_roll.append(armed_chunk)
-            pre_roll_seconds += chunk_seconds
-            pre_roll_seconds = _trim_pre_roll(
-                pre_roll,
-                pre_roll_seconds=pre_roll_seconds,
-                max_seconds=self.settings.armed_pre_roll_seconds,
-            )
+            if not (protected_post_ack and overflowed):
+                pre_roll.append(armed_chunk)
+                pre_roll_seconds += chunk_seconds
+                pre_roll_seconds = _trim_pre_roll(
+                    pre_roll,
+                    pre_roll_seconds=pre_roll_seconds,
+                    max_seconds=self.settings.armed_pre_roll_seconds,
+                )
 
             if overflowed:
                 overflow_chunks += 1
                 self._logger.info("State ARMED: ignoring overflowed microphone chunk")
                 voiced_window.append(False)
                 continue
-            valid_chunks += 1
+            if not clipped:
+                valid_chunks += 1
             voiced_window.append(voiced)
             if voiced:
                 voiced_chunks += 1
@@ -413,7 +471,23 @@ class VoiceAssistantStateMachine:
                 noise_samples.append(rms)
 
             window_voiced_chunks = sum(1 for item in voiced_window if item)
-            if len(voiced_window) >= window_chunks_required and window_voiced_chunks >= voiced_chunks_required:
+            baseline_ready = (
+                elapsed_seconds >= self.settings.armed_baseline_seconds
+                and valid_chunks >= self.settings.armed_baseline_min_chunks
+                and post_ack_quiet_observed
+                and (not protected_post_ack or bool(noise_samples))
+            )
+            if baseline_ready and baseline_ready_after is None:
+                baseline_ready_after = elapsed_seconds
+                baseline_ready_at_chunks = valid_chunks
+            baseline_gate_open = baseline_ready or not self.settings.armed_require_baseline
+            latest_chunk_ready = voiced or not self.settings.armed_last_chunk_must_be_voiced
+            if (
+                baseline_gate_open
+                and latest_chunk_ready
+                and len(voiced_window) >= window_chunks_required
+                and window_voiced_chunks >= voiced_chunks_required
+            ):
                 pre_roll_chunks = tuple(item.pcm for item in pre_roll if item.pcm)
                 pre_roll_overflow_chunks = sum(1 for item in pre_roll if item.overflowed)
                 pre_roll_ms = int(round(sum(item.seconds for item in pre_roll) * 1000))
@@ -422,7 +496,12 @@ class VoiceAssistantStateMachine:
                         "armed_trigger after=%.2fs duration_pcm=%.2fs chunks=%s valid_chunks=%s "
                         "rms=%.1f peak=%s overflow=%s max_rms=%.1f max_peak=%s "
                         "overflow_chunks=%s voiced_chunks=%s threshold=%.1f "
-                        "dynamic_threshold=%.1f noise_floor=%.1f voiced_window=%s/%s "
+                        "dynamic_threshold=%.1f noise_floor=%.1f noise_floor_has_samples=%s "
+                        "noise_seed_count=%s baseline_ready=%s baseline_ready_after=%.2f "
+                        "baseline_ready_at_chunks=%s baseline_chunks=%s baseline_seconds=%.2f "
+                        "post_ack_quiet_observed=%s post_ack_suppressed_chunks=%s "
+                        "post_ack_max_rms=%.1f post_ack_max_peak=%s post_ack_overflow_chunks=%s "
+                        "post_ack_clipped_chunks=%s voiced_window=%s/%s "
                         "pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
                         "result=recording_started"
                     ),
@@ -440,6 +519,19 @@ class VoiceAssistantStateMachine:
                     self.settings.armed_min_rms,
                     dynamic_threshold,
                     noise_floor,
+                    _bool_text(bool(noise_samples)),
+                    noise_seed_count,
+                    _bool_text(baseline_ready),
+                    baseline_ready_after or elapsed_seconds,
+                    baseline_ready_at_chunks or valid_chunks,
+                    valid_chunks,
+                    elapsed_seconds,
+                    _bool_text(post_ack_quiet_observed),
+                    0 if post_ack_boundary is None else post_ack_boundary.suppressed_chunks,
+                    0.0 if post_ack_boundary is None else post_ack_boundary.max_rms,
+                    0 if post_ack_boundary is None else post_ack_boundary.max_peak,
+                    0 if post_ack_boundary is None else post_ack_boundary.overflow_chunks,
+                    0 if post_ack_boundary is None else post_ack_boundary.clipped_chunks,
                     window_voiced_chunks,
                     len(voiced_window),
                     pre_roll_ms,
@@ -453,11 +545,22 @@ class VoiceAssistantStateMachine:
             self.settings.armed_min_rms,
             final_noise_floor * self.settings.armed_snr_multiplier,
         )
+        final_baseline_ready = (
+            elapsed_seconds >= self.settings.armed_baseline_seconds
+            and valid_chunks >= self.settings.armed_baseline_min_chunks
+            and post_ack_quiet_observed
+            and (not protected_post_ack or bool(noise_samples))
+        )
         self._logger.info(
             (
                 "armed_summary duration_pcm=%.2fs chunks=%s valid_chunks=%s max_rms=%.1f max_peak=%s "
                 "overflow_chunks=%s voiced_chunks=%s threshold=%.1f dynamic_threshold=%.1f "
-                "noise_floor=%.1f pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
+                "noise_floor=%.1f noise_floor_has_samples=%s noise_seed_count=%s "
+                "baseline_ready=%s baseline_ready_after=%s baseline_ready_at_chunks=%s "
+                "baseline_chunks=%s baseline_seconds=%.2f post_ack_quiet_observed=%s "
+                "post_ack_suppressed_chunks=%s post_ack_max_rms=%.1f post_ack_max_peak=%s "
+                "post_ack_overflow_chunks=%s post_ack_clipped_chunks=%s "
+                "pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
                 "result=no_speech_timeout"
             ),
             elapsed_seconds,
@@ -470,6 +573,19 @@ class VoiceAssistantStateMachine:
             self.settings.armed_min_rms,
             final_dynamic_threshold,
             final_noise_floor,
+            _bool_text(bool(noise_samples)),
+            noise_seed_count,
+            _bool_text(final_baseline_ready),
+            "unset" if baseline_ready_after is None else f"{baseline_ready_after:.2f}",
+            "unset" if baseline_ready_at_chunks is None else str(baseline_ready_at_chunks),
+            valid_chunks,
+            elapsed_seconds,
+            _bool_text(post_ack_quiet_observed),
+            0 if post_ack_boundary is None else post_ack_boundary.suppressed_chunks,
+            0.0 if post_ack_boundary is None else post_ack_boundary.max_rms,
+            0 if post_ack_boundary is None else post_ack_boundary.max_peak,
+            0 if post_ack_boundary is None else post_ack_boundary.overflow_chunks,
+            0 if post_ack_boundary is None else post_ack_boundary.clipped_chunks,
             int(round(sum(item.seconds for item in pre_roll) * 1000)),
             sum(1 for item in pre_roll if item.pcm),
             sum(1 for item in pre_roll if item.overflowed),
@@ -537,6 +653,89 @@ class VoiceAssistantStateMachine:
                 compact,
             )
         return None
+
+    def _wait_for_post_ack_boundary(self) -> _PostAckBoundaryResult:
+        if not self.settings.ack_guard_enabled:
+            self._drain_wake_acknowledgement_audio()
+            return _PostAckBoundaryResult(True, 0, (), (), 0.0, 0, 0, 0, False)
+
+        quiet_required = self.settings.ack_guard_min_quiet_seconds
+        max_suppression_seconds = self.settings.ack_guard_max_buffer_seconds
+        if quiet_required <= 0 or max_suppression_seconds <= 0:
+            return _PostAckBoundaryResult(False, 0, (), (), 0.0, 0, 0, 0, True)
+
+        minimum_chunk_seconds = 1.0 / self.settings.sample_rate
+        expected_frame_seconds = _detector_frame_seconds(self.wake_detector, self.settings.sample_rate)
+        max_chunks = max(1, math.ceil(max_suppression_seconds / expected_frame_seconds))
+        noise_seed_chunks: deque[bytes] = deque()
+        elapsed_seconds = 0.0
+        quiet_seconds = 0.0
+        chunks_read = 0
+        max_rms = 0.0
+        max_peak = 0
+        overflow_chunks = 0
+        clipped_chunks = 0
+
+        self._logger.info(
+            (
+                "State ACK_PLAYING: waiting for safe post-ACK boundary; "
+                "quiet_required=%.2fs max_suppression=%.2fs"
+            ),
+            quiet_required,
+            max_suppression_seconds,
+        )
+        while chunks_read < max_chunks and elapsed_seconds < max_suppression_seconds:
+            chunk = self.audio_source.read_chunk()
+            chunk_seconds = max(_chunk_duration_seconds(chunk, self.settings.sample_rate), minimum_chunk_seconds)
+            elapsed_seconds += chunk_seconds
+            chunks_read += 1
+            rms, peak = pcm_rms_and_peak(chunk)
+            max_rms = max(max_rms, rms)
+            max_peak = max(max_peak, peak)
+            overflowed = bool(getattr(self.audio_source, "last_overflowed", False))
+            clipped = peak >= self.settings.armed_clip_reject_peak
+            overflow_chunks += int(overflowed)
+            clipped_chunks += int(clipped)
+            quiet = not overflowed and not clipped and rms <= self.settings.ack_guard_quiet_rms
+            if quiet:
+                quiet_seconds += chunk_seconds
+                noise_seed_chunks.append(chunk)
+            else:
+                quiet_seconds = 0.0
+                noise_seed_chunks.clear()
+            if quiet_seconds >= quiet_required:
+                break
+
+        quiet_observed = quiet_seconds >= quiet_required
+        timed_out = not quiet_observed
+        self._logger.info(
+            (
+                "State ACK_PLAYING: post-ACK boundary post_ack_quiet_observed=%s "
+                "post_ack_suppressed_chunks=%s preserved_chunks=0 noise_seed_count=%s "
+                "quiet=%.2fs post_ack_max_rms=%.1f post_ack_max_peak=%s "
+                "post_ack_overflow_chunks=%s post_ack_clipped_chunks=%s timed_out=%s"
+            ),
+            _bool_text(quiet_observed),
+            chunks_read,
+            len(noise_seed_chunks),
+            quiet_seconds,
+            max_rms,
+            max_peak,
+            overflow_chunks,
+            clipped_chunks,
+            _bool_text(timed_out),
+        )
+        return _PostAckBoundaryResult(
+            quiet_observed=quiet_observed,
+            suppressed_chunks=chunks_read,
+            preserved_chunks=(),
+            noise_seed_chunks=tuple(noise_seed_chunks) if quiet_observed else (),
+            max_rms=max_rms,
+            max_peak=max_peak,
+            overflow_chunks=overflow_chunks,
+            clipped_chunks=clipped_chunks,
+            timed_out=timed_out,
+        )
 
     def _drain_wake_acknowledgement_audio(self) -> None:
         drain_seconds = self.settings.wake_acknowledgement_drain_seconds

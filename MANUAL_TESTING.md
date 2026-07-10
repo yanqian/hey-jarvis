@@ -86,23 +86,25 @@ result as a failure.
 
 ## Current ARMED Real-Test Findings
 
-The current acknowledgement flow is sensitive to timing. For the most reliable
-manual test, say `Hey Jarvis`, wait for the acknowledgement such as `在呢` to
-finish, pause roughly 0.3-0.5 seconds, and then start the question. Do not begin
-speaking while the acknowledgement is still playing or immediately on its tail.
-`WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`, default `0.35`, discards microphone audio
-after acknowledgement playback to clear speaker residue. Audio that lands in
-that drain window is intentionally discarded and is not recoverable by
-`ARMED_PRE_ROLL_SECONDS`, because the pre-roll buffer currently starts after
-the assistant enters `ARMED`.
+The acknowledgement boundary now has a mandatory quiet gate. With the defaults,
+logs begin with `State ACK_PLAYING: waiting for safe post-ACK boundary` and end
+with `post_ack_quiet_observed`, suppressed/noise-seed chunk counts, maximum RMS
+and peak, plus clipped/overflow counts. ARMED is not entered if the boundary
+times out without quiet, and clipped or overflowed acknowledgement residue is
+never added to recording pre-roll.
+
+After `post_ack_quiet_observed=true`, clipped audio is treated differently from
+ACK residue: it is preserved as possible user speech in pre-roll but cannot
+trigger ARMED or update the noise floor. Overflowed chunks are skipped. A later
+clipped/overflowed user chunk must not clear earlier words; if an 800ms pre-roll
+collapses to only the final 240ms, record that as a regression.
 
 If a transcript is missing the first syllable, such as spoken `一加一等于几`
 being transcribed as `加一等于几`, inspect the preceding `armed_trigger` log.
-An early trigger such as `after=0.32s` with `pre_roll_ms=320` means the
-assistant could only preserve 320ms of ARMED audio; the missing first syllable
-may have occurred during acknowledgement playback, acknowledgement drain, or an
-overflowed microphone chunk before ARMED pre-roll began. Record this as a
-timing failure, not as proof that pre-roll failed.
+The normal expectation is that immediate speech after `在呢` retains its first
+syllable in `tmp/input.wav`. Inspect the acknowledgement guard summary for a
+non-zero preserved count and the later `armed_trigger` for
+`baseline_ready=true`, `baseline_chunks`, and `baseline_seconds`.
 
 A no-speech wake should normally produce an ARMED timeout:
 
@@ -110,8 +112,7 @@ A no-speech wake should normally produce an ARMED timeout:
 armed_summary ... result=no_speech_timeout
 ```
 
-It is a known current bug if the user says only `Hey Jarvis`, stays silent, and
-the log instead shows an early recording start:
+The previous bad pattern was an early recording start with a cold noise floor:
 
 ```text
 armed_trigger after=0.32s ... noise_floor=0.0 ... voiced_window=4/4 ... result=recording_started
@@ -119,31 +120,37 @@ State RECORDING: wrote ... chunks to tmp/input.wav; stopped_by=max_duration
 State TRANSCRIBE: local cancellation reason=empty_transcript
 ```
 
-That pattern means ARMED treated acknowledgement residue or background noise as
-speech before it had a useful noise-floor baseline. The downstream
-`empty_transcript` or `silent_recording` cancellation prevents an AI answer, but
-recording 20 seconds of background audio is still a failure. Capture the
-`armed_trigger`, `State RECORDING`, and local cancellation lines when reporting
-it.
+With defaults, ARMED cannot trigger until `baseline_ready=true`, and the latest
+chunk must still be voiced. Saying only `Hey Jarvis` and remaining silent must
+show `armed_summary ... result=no_speech_timeout`, return to `WAIT_WAKE`, and
+must not enter `RECORDING`, transcription, routing, answer TTS, or playback.
+Capture the guard summary, `armed_summary`, and any unexpected `State RECORDING`
+line when reporting a regression.
 
-Temporary mitigation while testing:
+Relevant default settings while testing:
 
 ```text
-ARMED_NO_SPEECH_TIMEOUT_SECONDS=4.0
-ARMED_MIN_RMS=1200
-ARMED_VOICE_RMS=1200
+ARMED_NO_SPEECH_TIMEOUT_SECONDS=2.0
+ARMED_MIN_RMS=750
+ARMED_VOICE_RMS=750
 ARMED_SNR_MULTIPLIER=2.5
-WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS=0.20
-ARMED_PRE_ROLL_SECONDS=0.70
-RECORDING_SILENCE_RMS=1000
-MAX_RECORD_SECONDS=8
+ARMED_BASELINE_SECONDS=0.30
+ARMED_BASELINE_MIN_CHUNKS=3
+ARMED_REQUIRE_BASELINE=1
+ARMED_LAST_CHUNK_MUST_BE_VOICED=1
+ACK_GUARD_ENABLED=1
+ACK_GUARD_MIN_QUIET_SECONDS=0.16
+ACK_GUARD_QUIET_RMS=900
+ACK_GUARD_MAX_BUFFER_SECONDS=1.50
 ```
 
-These values are not a final fix. They make false ARMED triggers and long
-background recordings less likely, but they can also make quiet speech harder
-to trigger. A future code fix should preserve audio safely around the
-acknowledgement/drain boundary while preventing ARMED from triggering before
-the last chunk is speech-like and before the noise-floor baseline is useful.
+Manual case 1: say only `Hey Jarvis`, allow `在呢` to play, and remain silent.
+Confirm the guard summary is followed by `armed_summary ...
+result=no_speech_timeout` and no `State RECORDING` line. Manual case 2: say
+`Hey Jarvis`, then begin `一加一等于几` immediately after `在呢`. Confirm
+`tmp/input.wav` contains the full question under normal timing, the guard log
+reports any preserved boundary chunks, and `armed_trigger` shows
+`baseline_ready=true` before recording starts.
 
 ## Acceptance Standard
 
