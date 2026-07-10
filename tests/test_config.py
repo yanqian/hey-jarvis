@@ -56,6 +56,58 @@ from src.config import (
 
 
 class ConfigTests(unittest.TestCase):
+    def test_vad_defaults_and_overrides_are_typed(self):
+        defaults = load_settings(env={}, env_file=None)
+        self.assertEqual(defaults.vad_backend, "disabled")
+        self.assertEqual(defaults.vad_mode, 2)
+        self.assertEqual(defaults.armed_vad_required_ratio, 0.5)
+        self.assertEqual(defaults.armed_vad_min_frames, 2)
+        self.assertFalse(defaults.recording_vad_enabled)
+        self.assertEqual(defaults.recording_end_silence_seconds, defaults.silence_seconds)
+        self.assertIsNone(defaults.wake_vad_threshold)
+
+        settings = load_settings(
+            env={
+                "VAD_BACKEND": "webrtc",
+                "VAD_MODE": "3",
+                "ARMED_VAD_REQUIRED_RATIO": "0.6",
+                "ARMED_VAD_MIN_FRAMES": "3",
+                "RECORDING_VAD_ENABLED": "1",
+                "RECORDING_VAD_END_RATIO": "0.2",
+                "RECORDING_VAD_SPEECH_RATIO": "0.7",
+                "RECORDING_HANGOVER_SECONDS": "0.4",
+                "RECORDING_END_SILENCE_SECONDS": "1.0",
+                "WAKE_VAD_THRESHOLD": "0.35",
+            },
+            env_file=None,
+        )
+        self.assertEqual(settings.vad_backend, "webrtc")
+        self.assertEqual(settings.vad_mode, 3)
+        self.assertTrue(settings.recording_vad_enabled)
+        self.assertEqual(settings.recording_vad_speech_ratio, 0.7)
+        self.assertEqual(settings.recording_end_silence_seconds, 1.0)
+        self.assertEqual(settings.wake_vad_threshold, 0.35)
+
+    def test_recording_vad_requires_enabled_backend(self):
+        with self.assertRaisesRegex(ConfigError, "requires VAD_BACKEND=webrtc"):
+            load_settings(env={"RECORDING_VAD_ENABLED": "1"}, env_file=None)
+
+    def test_diagnostics_report_missing_configured_webrtc_extra(self):
+        def find_spec(name):
+            return None if name == "webrtcvad" else object()
+
+        with patch("src.config.importlib.util.find_spec", side_effect=find_spec):
+            report = collect_diagnostics(
+                env={"VAD_BACKEND": "webrtc"},
+                env_file=None,
+                python_version=(3, 12),
+                afplay_path="/usr/bin/afplay",
+                wake_word_model_paths={},
+            )
+        check = next(item for item in report.checks if item.name == "dependency:webrtcvad")
+        self.assertEqual(check.status, "error")
+        self.assertIn("python -m pip install webrtcvad", check.message)
+
     def test_defaults_do_not_require_openai_key(self):
         settings = load_settings(env={}, env_file=None)
 

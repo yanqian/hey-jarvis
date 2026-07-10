@@ -850,6 +850,28 @@ Verification surface: focused tests for baseline gating, cold-noise-floor silenc
 
 Decomposition decision: this remains one feature because the baseline gate and acknowledgement-boundary guard jointly address the same ARMED entry boundary and share one state-machine, logging, documentation, and synthetic-audio verification surface. Splitting them would leave either the false-trigger or first-syllable failure active at the same transition.
 
+### Optional VAD Gating And Recording Endpointing
+
+Goal: reduce false ARMED triggers from high-energy non-speech noise and make question recording stop more naturally by adding an optional local WebRTC VAD boundary, optional openWakeWord VAD threshold forwarding, and VAD-aware recording hysteresis while preserving all PR1 behavior when VAD is disabled.
+
+Included scope: a project-owned VAD protocol plus disabled and lazily loaded WebRTC implementations; validated VAD, ARMED VAD, recording VAD, hangover, end-silence, and wake VAD threshold settings; ARMED energy-plus-VAD gating and structured diagnostics; conditional openWakeWord `vad_threshold` construction with compatibility errors; backward-compatible optional recorder VAD parameters and endpointing; runtime wiring and diagnostics; environment examples, README/manual testing, and deterministic unit/smoke coverage.
+
+Excluded scope: mandatory VAD for default operation, cloud VAD, streaming STT, wake-model replacement, changes to acknowledgement wording, new clarification TTS, broad audio resampling/channel conversion, or removing RMS and maximum-duration safety gates.
+
+Core flows: with VAD disabled, wake, acknowledgement guard, ARMED, recording, transcription, routing, TTS, and playback behave as in F036. With WebRTC VAD enabled, 16-bit mono PCM is split into valid 20ms frames and ARMED requires both its existing baseline/energy gates and configured VAD evidence; high-RMS non-voice times out locally. When recording VAD is enabled, speech or energy keeps recording alive through short gaps and recording stops only after a configured quiet/non-voice window, while max duration remains a safety cap. When `WAKE_VAD_THRESHOLD` is configured, openWakeWord receives it or fails with explicit compatibility guidance.
+
+Constraints: `VAD_BACKEND=disabled` is the default and must not require `webrtcvad`; selecting `webrtc` with a missing or unusable package fails clearly and is diagnosable. WebRTC accepts only 8/16/32/48 kHz mono 16-bit PCM and uses 20ms frames, ignoring incomplete trailing bytes. Existing `SILENCE_SECONDS`, `RECORDING_SILENCE_RMS`, and `MAX_RECORD_SECONDS` remain valid; `RECORDING_END_SILENCE_SECONDS` defaults to legacy `SILENCE_SECONDS`. Automated verification uses fake VAD/model factories and synthetic PCM without live audio, OpenAI, speaker, or network.
+
+Ambiguities or assumptions: `ARMED_VAD_MIN_FRAMES` refers to the minimum number of voiced 20ms frames inside the current microphone chunk; the VAD result therefore exposes both ratio and frame counts through a small immutable result while retaining a ratio convenience method. `RECORDING_VAD_ENABLED=true` requires an enabled VAD backend. The optional WebRTC package is documented as an explicit extra installation rather than added to default `requirements.txt`, so default installation remains compatible. Recorder hysteresis treats RMS above the existing silence threshold as speech-like even when VAD is low, but only VAD-low plus RMS-low audio accumulates the final quiet window; this preserves quiet speech and makes moderate non-voice below the recording threshold end naturally.
+
+Required capabilities: lazy import and fake module injection for WebRTC behavior, existing PCM RMS helpers and recorder synthetic sources, openWakeWord fake model factories, dependency/config diagnostics, optional user installation of `webrtcvad`, project test fixtures, and root recovery verification.
+
+Implementation paths: `src/vad.py`, `src/config.py`, `src/state_machine.py`, `src/recorder.py`, `src/wake_word.py`, `src/main.py`, `.env.example`, `README.md`, `MANUAL_TESTING.md`, `tests/test_vad.py`, `tests/test_config.py`, `tests/test_state_machine.py`, `tests/test_recorder.py`, `tests/test_wake_word.py`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: disabled/WebRTC VAD unit tests, ARMED high-RMS rejection and speech acceptance tests, disabled-path regressions, wake-model constructor threshold tests and unsupported-version errors, recorder short-pause/non-voice/disabled/max-duration tests, configuration and diagnostics tests, documentation/manual checks, `python -m src.main --dry-run`, `--fake-backend`, `--diagnose`, full `python -m unittest`, and final `./init.sh`.
+
+Decomposition decision: this remains one feature because the VAD abstraction, ARMED gate, wake-model forwarding, and recorder endpointing are one optional audio-classification capability with shared configuration, construction, diagnostics, and deterministic PCM verification. The default-disabled compatibility boundary makes the feature independently releasable as one stacked PR; splitting it would create settings or runtime wiring without a complete user flow.
+
 ## 5. Verification Plan
 
 Run:

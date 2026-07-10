@@ -49,6 +49,7 @@ from src.config import (
 from src.openai_client import OpenAIClientError
 from src.recorder import RecordingResult
 from src.state_machine import AssistantState, VoiceAssistantStateMachine
+from src.vad import VadResult
 from src.tools import ToolResult, ToolRoute
 
 
@@ -85,6 +86,13 @@ def make_settings(
     min_transcript_length=DEFAULT_MIN_TRANSCRIPT_LENGTH,
     cancel_phrases=DEFAULT_CANCEL_PHRASES,
     recording_silence_rms=DEFAULT_RECORDING_SILENCE_RMS,
+    armed_vad_required_ratio=0.50,
+    armed_vad_min_frames=2,
+    recording_vad_enabled=False,
+    recording_vad_end_ratio=0.25,
+    recording_vad_speech_ratio=0.50,
+    recording_hangover_seconds=0.30,
+    recording_end_silence_seconds=DEFAULT_SILENCE_SECONDS,
 ):
     return Settings(
         openai_api_key="sk-test",
@@ -132,6 +140,13 @@ def make_settings(
         min_valid_speech_seconds=min_valid_speech_seconds,
         min_transcript_length=min_transcript_length,
         cancel_phrases=cancel_phrases,
+        armed_vad_required_ratio=armed_vad_required_ratio,
+        armed_vad_min_frames=armed_vad_min_frames,
+        recording_vad_enabled=recording_vad_enabled,
+        recording_vad_end_ratio=recording_vad_end_ratio,
+        recording_vad_speech_ratio=recording_vad_speech_ratio,
+        recording_hangover_seconds=recording_hangover_seconds,
+        recording_end_silence_seconds=recording_end_silence_seconds,
     )
 
 
@@ -173,6 +188,21 @@ class FakeWakeDetector:
     def score(self, pcm_chunk):
         self.detected_chunks.append(pcm_chunk)
         return 1.0 if pcm_chunk.startswith(b"\x01\x00") else 0.0
+
+
+class FakeVadDetector:
+    is_enabled = True
+
+    def __init__(self, ratio):
+        self.ratio = ratio
+
+    def analyze(self, pcm_chunk, sample_rate):
+        total_frames = max(1, len(pcm_chunk) // 640)
+        voiced_frames = round(total_frames * self.ratio)
+        return VadResult(self.ratio, voiced_frames, total_frames)
+
+    def voiced_ratio(self, pcm_chunk, sample_rate):
+        return self.ratio
 
 
 class FakeOpenAIClient:
@@ -240,6 +270,7 @@ def fake_silent_record_audio(source, *, sample_rate, output_path, **kwargs):
 
 class StateMachineTests(unittest.TestCase):
     def _machine_for_armed_test(self, audio_source, *, logger, **setting_overrides):
+        vad_detector = setting_overrides.pop("vad_detector", None)
         return VoiceAssistantStateMachine(
             settings=make_settings(**setting_overrides),
             audio_source=audio_source,
@@ -247,6 +278,7 @@ class StateMachineTests(unittest.TestCase):
             openai_client=FakeOpenAIClient(),
             player=FakePlayer(),
             logger=logger,
+            vad_detector=vad_detector,
         )
 
     def test_wake_acknowledgement_plays_and_drains_before_recording(self):
@@ -394,6 +426,71 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("baseline_ready=true", log_output)
         self.assertIn("baseline_chunks=5", log_output)
         self.assertNotIn("baseline_ready=false", log_output)
+
+    def test_armed_vad_rejects_high_rms_non_voice(self):
+        logger = logging.getLogger("tests.state_machine.armed_vad_reject")
+        openai_client = FakeOpenAIClient()
+        player = FakePlayer()
+
+        def fail_record(*args, **kwargs):
+            raise AssertionError("VAD-rejected noise must not start recording")
+
+        machine = VoiceAssistantStateMachine(
+            settings=make_settings(armed_no_speech_timeout_seconds=0.80),
+            audio_source=FakeAudioSource(
+                [WAKE_CHUNK, WAKE_CHUNK, *([QUIET_CHUNK] * 4), *([LOUD_CHUNK] * 8)],
+                fallback_chunk=LOUD_CHUNK,
+            ),
+            wake_detector=FakeWakeDetector(),
+            openai_client=openai_client,
+            player=player,
+            record_audio=fail_record,
+            logger=logger,
+            vad_detector=FakeVadDetector(0.0),
+        )
+
+        with self.assertLogs(logger, level="INFO") as logs:
+            result = machine.run_once()
+
+        self.assertTrue(result.cancelled)
+        self.assertEqual(result.cancellation_reason, "no_speech_after_wake")
+        self.assertIsNone(openai_client.transcribed_path)
+        self.assertEqual(openai_client.chat_calls, 0)
+        self.assertEqual(openai_client.tts_calls, 0)
+        self.assertEqual(player.played, [])
+        log_output = "\n".join(logs.output)
+        self.assertIn("armed_summary", log_output)
+        self.assertIn("vad_ok=false", log_output)
+        self.assertIn("max_vad_ratio=0.000", log_output)
+
+    def test_armed_vad_allows_voice_when_energy_and_vad_pass(self):
+        logger = logging.getLogger("tests.state_machine.armed_vad_allow")
+        machine = self._machine_for_armed_test(
+            FakeAudioSource([QUIET_CHUNK] * 4 + [LOUD_CHUNK] * 4),
+            logger=logger,
+            vad_detector=FakeVadDetector(1.0),
+        )
+
+        with self.assertLogs(logger, level="INFO") as logs:
+            chunks = machine._wait_for_armed_speech()
+
+        self.assertIsNotNone(chunks)
+        log_output = "\n".join(logs.output)
+        self.assertIn("armed_trigger", log_output)
+        self.assertIn("energy_ok=true", log_output)
+        self.assertIn("vad_ratio=1.000", log_output)
+        self.assertIn("vad_ok=true", log_output)
+
+    def test_vad_disabled_preserves_existing_armed_behavior(self):
+        logger = logging.getLogger("tests.state_machine.armed_vad_disabled")
+        machine = self._machine_for_armed_test(
+            FakeAudioSource([LOUD_CHUNK] * 4),
+            logger=logger,
+        )
+        with self.assertLogs(logger, level="INFO") as logs:
+            chunks = machine._wait_for_armed_speech()
+        self.assertEqual(chunks, tuple([LOUD_CHUNK] * 4))
+        self.assertIn("vad_ratio=disabled", "\n".join(logs.output))
 
     def test_no_speech_after_wake_does_not_record_with_cold_noise_floor(self):
         logger = logging.getLogger("tests.state_machine.cold_noise_floor")

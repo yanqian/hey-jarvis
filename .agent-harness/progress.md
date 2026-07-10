@@ -94,9 +94,13 @@ F036 has been planned from the user-reported post-F035 real-test failures. It ad
 
 F036 has been completed through interactive manual coding fallback and separate cold-start evaluator approval. ARMED now requires configurable baseline time plus valid chunks before triggering, can require the latest chunk to remain voiced, preserves baseline and guard-tail audio in pre-roll without letting initial guard chunks force a trigger, and logs baseline readiness/chunks/seconds with threshold context. The acknowledgement path now uses a bounded quiet-aware guard by default, retains the legacy fixed drain when disabled, and logs discarded/preserved counts plus quiet/RMS/peak metrics. Focused tests and final `./init.sh` pass with 170 project tests; coding evidence is in `.agent-harness/runs/F036-manual-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F036` in `.agent-harness/runs/F036-evaluation.md`.
 
+F037 has been planned as stacked PR2 after F036. It adds an optional, default-disabled local WebRTC VAD capability across ARMED and recording endpointing, plus optional openWakeWord `vad_threshold` forwarding. The plan keeps default behavior and existing RMS/max-duration settings compatible, makes the WebRTC dependency explicit and lazy, and verifies high-energy non-voice rejection, ordinary speech acceptance, short-pause preservation, and sustained non-voice stopping with deterministic fakes.
+
+F037 has been completed through interactive manual coding fallback and cold-start evaluator approval after one implementation-gap retry. The implementation adds a lazy optional WebRTC VAD boundary, disabled compatibility path, energy-plus-VAD ARMED gating and diagnostics, optional openWakeWord threshold forwarding with version guidance, VAD-aware recorder hangover/endpointing, real-runtime wiring, configuration diagnostics, docs, and deterministic tests. The retry corrected recorder endpointing so final silence requires both RMS-low and VAD-low evidence, with a high-RMS/VAD-low safety regression. Focused tests and final recovery verification pass with 188 project tests and the default-disabled smoke path intact; coding evidence is recorded in `.agent-harness/runs/F037-manual-coding.md` and `.agent-harness/runs/F037-coding-retry.md`, and evaluator approval is recorded as `EVAL_PASS: F037` in `.agent-harness/runs/F037-evaluation-pass.md`.
+
 ## Last Completed Feature
 
-F036 - Guard ARMED startup and acknowledgement boundary.
+F037 - Add optional VAD-gated audio handling.
 
 ## Next Feature
 

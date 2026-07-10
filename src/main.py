@@ -26,6 +26,7 @@ from .wake_word import (
     pcm_rms_and_peak,
     prepare_wake_word_models,
 )
+from .vad import build_vad_detector
 
 
 LOGGER_NAME = "hey_jarvis"
@@ -256,6 +257,7 @@ def run_assistant_forever() -> int:
     wake_detector: object | None = None
     try:
         wake_detector = _build_wake_detector(settings, logger=logger)
+        vad_detector = build_vad_detector(settings.vad_backend, mode=settings.vad_mode)
         logger.info("Preparing %s wake-word detector", settings.wake_phrase)
         wake_detector.preload()
         logger.info("%s wake-word detector ready", settings.wake_phrase.title())
@@ -272,6 +274,7 @@ def run_assistant_forever() -> int:
                 player=MacOSPlayer(logger=logger),
                 history=history,
                 logger=logger,
+                vad_detector=vad_detector,
             )
             while True:
                 machine.run_once()
@@ -584,6 +587,7 @@ def _build_wake_detector(settings: Settings, *, logger: logging.Logger) -> WakeW
         settings.wake_threshold,
         model_name=settings.wake_model,
         inference_framework=settings.wake_inference_framework,
+        vad_threshold=settings.wake_vad_threshold,
         logger=logger,
     )
 

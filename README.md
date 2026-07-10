@@ -163,6 +163,9 @@ WAKE_BACKEND=openwakeword
 WAKE_MODEL=hey_jarvis
 WAKE_INFERENCE_FRAMEWORK=tflite
 WAKE_THRESHOLD=0.5
+WAKE_VAD_THRESHOLD=
+VAD_BACKEND=disabled
+VAD_MODE=2
 WAKE_ACKNOWLEDGEMENT_ENABLED=1
 WAKE_ACKNOWLEDGEMENT_TEXT=在呢
 WAKE_ACKNOWLEDGEMENT_AUDIO_PATH=var/ack.mp3
@@ -189,6 +192,13 @@ ARMED_BASELINE_SECONDS=0.30
 ARMED_BASELINE_MIN_CHUNKS=3
 ARMED_REQUIRE_BASELINE=1
 ARMED_LAST_CHUNK_MUST_BE_VOICED=1
+ARMED_VAD_REQUIRED_RATIO=0.50
+ARMED_VAD_MIN_FRAMES=2
+RECORDING_VAD_ENABLED=0
+RECORDING_VAD_END_RATIO=0.25
+RECORDING_VAD_SPEECH_RATIO=0.50
+RECORDING_HANGOVER_SECONDS=0.30
+RECORDING_END_SILENCE_SECONDS=1.5
 MIN_VALID_SPEECH_SECONDS=0.50
 MIN_TRANSCRIPT_LENGTH=2
 CANCEL_PHRASES=取消,没事,不用了,算了,stop,cancel,never mind
@@ -249,6 +259,19 @@ triggering after speech or noise has stopped. ARMED logs `armed_summary` on time
 `armed_trigger` on recording start with RMS, peak, overflow, noise-floor,
 voiced-window, threshold, baseline readiness/chunks/seconds, and pre-roll
 context. A default recording start must show `baseline_ready=true`.
+
+VAD is optional and disabled by default. To enable local WebRTC classification,
+install the extra with `python -m pip install webrtcvad`, set
+`VAD_BACKEND=webrtc`, and choose `VAD_MODE` from 0 through 3. ARMED then
+requires both its RMS gate and `ARMED_VAD_REQUIRED_RATIO` with at least
+`ARMED_VAD_MIN_FRAMES` voiced 20ms frames. Its trigger/summary logs include
+`vad_ratio`, `vad_ok`, `max_vad_ratio`, and voiced-chunk context. Setting
+`RECORDING_VAD_ENABLED=1` adds VAD-aware endpointing using the documented end,
+speech, hangover, and end-silence settings; existing `SILENCE_SECONDS`,
+`RECORDING_SILENCE_RMS`, and `MAX_RECORD_SECONDS` remain active compatibility
+and safety controls. `WAKE_VAD_THRESHOLD` is independently optional: when set,
+it is forwarded to openWakeWord, and an older incompatible openWakeWord version
+fails with guidance to upgrade or unset the setting.
 `MIN_VALID_SPEECH_SECONDS` and `MIN_TRANSCRIPT_LENGTH` reject accidental,
 silent, or unusably short requests before chat/tool routing and TTS.
 `CANCEL_PHRASES` is a comma-separated local cancellation list; defaults include

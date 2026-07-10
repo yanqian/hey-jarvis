@@ -67,10 +67,11 @@ class FakeWakeWordDetector:
     frame_length = 1280
     sample_rate = DEFAULT_SAMPLE_RATE
 
-    def __init__(self, threshold, model_name=None, inference_framework=None, logger=None):
+    def __init__(self, threshold, model_name=None, inference_framework=None, vad_threshold=None, logger=None):
         self.threshold = threshold
         self.model_name = model_name
         self.inference_framework = inference_framework
+        self.vad_threshold = vad_threshold
         self.logger = logger
 
     def preload(self):

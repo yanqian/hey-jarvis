@@ -18,6 +18,7 @@ from .recorder import DEFAULT_INPUT_WAV, RecordingResult, record_to_wav
 from .tools import answer_with_tools
 from .tools.providers import provider_config_from_settings
 from .wake_word import pcm_rms_and_peak
+from .vad import DisabledVad, VoiceActivityDetector
 
 
 DEFAULT_OUTPUT_MP3 = Path("tmp/output.mp3")
@@ -92,6 +93,10 @@ class _ArmedChunk:
     voiced: bool
     dynamic_threshold: float
     noise_floor: float
+    energy_ok: bool
+    vad_ratio: float | None
+    vad_ok: bool
+    baseline_ready: bool
 
 
 class VoiceAssistantStateMachine:
@@ -110,6 +115,7 @@ class VoiceAssistantStateMachine:
         input_path: str | Path = DEFAULT_INPUT_WAV,
         output_path: str | Path = DEFAULT_OUTPUT_MP3,
         logger: logging.Logger | None = None,
+        vad_detector: VoiceActivityDetector | None = None,
     ) -> None:
         self.settings = settings
         self.audio_source = audio_source
@@ -122,6 +128,7 @@ class VoiceAssistantStateMachine:
         self.output_path = Path(output_path)
         self.state = AssistantState.WAIT_WAKE
         self._logger = logger or logging.getLogger(__name__)
+        self.vad_detector = vad_detector or DisabledVad()
 
     def run_once(self) -> AssistantLoopResult:
         """Complete one question-answer loop and return to WAIT_WAKE."""
@@ -351,6 +358,9 @@ class VoiceAssistantStateMachine:
         valid_chunks = 0
         overflow_chunks = 0
         voiced_chunks = 0
+        vad_voiced_chunks = 0
+        max_vad_ratio = 0.0
+        last_vad_ok = not self.vad_detector.is_enabled
         max_rms = 0.0
         max_peak = 0
         noise_samples: list[float] = []
@@ -373,6 +383,10 @@ class VoiceAssistantStateMachine:
                     voiced=False,
                     dynamic_threshold=self.settings.armed_min_rms,
                     noise_floor=0.0,
+                    energy_ok=False,
+                    vad_ratio=None,
+                    vad_ok=not self.vad_detector.is_enabled,
+                    baseline_ready=False,
                 )
             )
             pre_roll_seconds += initial_seconds
@@ -409,7 +423,31 @@ class VoiceAssistantStateMachine:
                 self.settings.armed_min_rms,
                 noise_floor * self.settings.armed_snr_multiplier,
             )
-            voiced = not overflowed and not clipped and rms >= dynamic_threshold
+            energy_ok = rms >= dynamic_threshold
+            vad_result = self.vad_detector.analyze(chunk, self.settings.sample_rate)
+            vad_ratio = None if vad_result is None else vad_result.voiced_ratio
+            if vad_ratio is not None:
+                max_vad_ratio = max(max_vad_ratio, vad_ratio)
+            vad_ok = (
+                not self.vad_detector.is_enabled
+                or (
+                    vad_result is not None
+                    and vad_ratio is not None
+                    and vad_ratio >= self.settings.armed_vad_required_ratio
+                    and vad_result.voiced_frames >= self.settings.armed_vad_min_frames
+                )
+            )
+            last_vad_ok = vad_ok
+            baseline_ready = (
+                elapsed_seconds >= self.settings.armed_baseline_seconds
+                and valid_chunks + (0 if overflowed or clipped else 1)
+                >= self.settings.armed_baseline_min_chunks
+            )
+            baseline_gate_open = baseline_ready or not self.settings.armed_require_baseline
+            candidate_voice = not overflowed and not clipped and energy_ok and vad_ok
+            voiced = candidate_voice and (
+                baseline_gate_open or not self.vad_detector.is_enabled
+            )
             armed_chunk = _ArmedChunk(
                 pcm=chunk,
                 seconds=chunk_seconds,
@@ -419,6 +457,10 @@ class VoiceAssistantStateMachine:
                 voiced=voiced,
                 dynamic_threshold=dynamic_threshold,
                 noise_floor=noise_floor,
+                energy_ok=energy_ok,
+                vad_ratio=vad_ratio,
+                vad_ok=vad_ok,
+                baseline_ready=baseline_ready,
             )
             pre_roll.append(armed_chunk)
             pre_roll_seconds += chunk_seconds
@@ -438,14 +480,12 @@ class VoiceAssistantStateMachine:
             voiced_window.append(voiced)
             if voiced:
                 voiced_chunks += 1
-            elif not clipped:
+                if vad_ratio is not None:
+                    vad_voiced_chunks += 1
+            elif not clipped and not candidate_voice:
                 noise_samples.append(rms)
 
             window_voiced_chunks = sum(1 for item in voiced_window if item)
-            baseline_ready = (
-                elapsed_seconds >= self.settings.armed_baseline_seconds
-                and valid_chunks >= self.settings.armed_baseline_min_chunks
-            )
             baseline_gate_open = baseline_ready or not self.settings.armed_require_baseline
             latest_chunk_ready = voiced or not self.settings.armed_last_chunk_must_be_voiced
             if (
@@ -462,7 +502,8 @@ class VoiceAssistantStateMachine:
                         "armed_trigger after=%.2fs duration_pcm=%.2fs chunks=%s valid_chunks=%s "
                         "rms=%.1f peak=%s overflow=%s max_rms=%.1f max_peak=%s "
                         "overflow_chunks=%s voiced_chunks=%s threshold=%.1f "
-                        "dynamic_threshold=%.1f noise_floor=%.1f baseline_ready=%s "
+                        "dynamic_threshold=%.1f noise_floor=%.1f energy_ok=%s vad_ratio=%s "
+                        "vad_ok=%s baseline_ready=%s "
                         "baseline_chunks=%s baseline_seconds=%.2f voiced_window=%s/%s "
                         "pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
                         "result=recording_started"
@@ -481,6 +522,9 @@ class VoiceAssistantStateMachine:
                     self.settings.armed_min_rms,
                     dynamic_threshold,
                     noise_floor,
+                    _bool_text(energy_ok),
+                    _format_vad_ratio(vad_ratio),
+                    _bool_text(vad_ok),
                     _bool_text(baseline_ready),
                     valid_chunks,
                     elapsed_seconds,
@@ -505,7 +549,8 @@ class VoiceAssistantStateMachine:
             (
                 "armed_summary duration_pcm=%.2fs chunks=%s valid_chunks=%s max_rms=%.1f max_peak=%s "
                 "overflow_chunks=%s voiced_chunks=%s threshold=%.1f dynamic_threshold=%.1f "
-                "noise_floor=%.1f baseline_ready=%s baseline_chunks=%s baseline_seconds=%.2f "
+                "noise_floor=%.1f vad_ok=%s max_vad_ratio=%s vad_voiced_chunks=%s "
+                "baseline_ready=%s baseline_chunks=%s baseline_seconds=%.2f "
                 "pre_roll_ms=%s pre_roll_chunks=%s pre_roll_overflow_chunks=%s "
                 "result=no_speech_timeout"
             ),
@@ -519,6 +564,9 @@ class VoiceAssistantStateMachine:
             self.settings.armed_min_rms,
             final_dynamic_threshold,
             final_noise_floor,
+            _bool_text(last_vad_ok),
+            _format_vad_ratio(max_vad_ratio if self.vad_detector.is_enabled else None),
+            vad_voiced_chunks,
             _bool_text(final_baseline_ready),
             valid_chunks,
             elapsed_seconds,
@@ -540,6 +588,12 @@ class VoiceAssistantStateMachine:
             silence_threshold=self.settings.recording_silence_rms,
             output_path=self.input_path,
             logger=self._logger,
+            vad_detector=self.vad_detector if self.settings.recording_vad_enabled else None,
+            vad_enabled=self.settings.recording_vad_enabled,
+            vad_speech_ratio=self.settings.recording_vad_speech_ratio,
+            vad_end_ratio=self.settings.recording_vad_end_ratio,
+            hangover_seconds=self.settings.recording_hangover_seconds,
+            end_silence_seconds=self.settings.recording_end_silence_seconds,
         )
 
     def _recording_cancellation_reason(self, recording: RecordingResult) -> str | None:
@@ -889,6 +943,10 @@ def _overflow_value(audio_source: object) -> str:
 
 def _bool_text(value: bool) -> str:
     return "true" if value else "false"
+
+
+def _format_vad_ratio(value: float | None) -> str:
+    return "disabled" if value is None else f"{value:.3f}"
 
 
 def _chunk_duration_seconds(pcm_chunk: bytes, sample_rate: int) -> float:

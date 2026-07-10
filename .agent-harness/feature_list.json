@@ -748,6 +748,27 @@
       "depends_on": [
         "F035"
       ]
+    },
+    {
+      "id": "F037",
+      "title": "Add optional VAD-gated audio handling",
+      "description": "Add an optional local WebRTC VAD abstraction, gate ARMED on energy plus voice evidence, optionally forward a wake-model VAD threshold, and use VAD-aware recording endpoint hysteresis without changing default disabled behavior.",
+      "acceptance": [
+        "A new project-owned VAD module provides a neutral DisabledVad and lazily loaded WebRtcVadDetector that validates supported sample rates, splits mono int16 PCM into 20ms frames, ignores incomplete trailing data deterministically, reports voiced ratio/counts, and raises actionable errors when the configured optional dependency is unavailable.",
+        "Configuration validates and documents VAD_BACKEND=disabled|webrtc, VAD_MODE=0..3, ARMED_VAD_REQUIRED_RATIO=0.50, ARMED_VAD_MIN_FRAMES=2, RECORDING_VAD_ENABLED=false, RECORDING_VAD_END_RATIO=0.25, RECORDING_VAD_SPEECH_RATIO=0.50, RECORDING_HANGOVER_SECONDS=0.30, RECORDING_END_SILENCE_SECONDS with SILENCE_SECONDS fallback, and optional WAKE_VAD_THRESHOLD while preserving existing settings.",
+        "When VAD is enabled, ARMED requires baseline readiness, energy, and configured VAD ratio/frame evidence; high-RMS non-voice cancels as no_speech_after_wake without recording or OpenAI, valid energy plus speech triggers recording, and armed_trigger/armed_summary expose useful non-spammy VAD diagnostics. Disabled VAD preserves F036 behavior.",
+        "WakeWordDetector passes vad_threshold to openWakeWord Model only when WAKE_VAD_THRESHOLD is configured, preserves the prior constructor arguments when unset, and raises a clear WakeWordError if a configured threshold is unsupported by the installed openWakeWord version.",
+        "record_to_wav remains backward compatible and, when recording VAD is enabled, preserves speech after short pauses, stops on sustained RMS-low/VAD-low non-voice before max duration, retains silence/max_duration/source_exhausted outcomes, and keeps maximum duration safety. State-machine wiring passes VAD only when configured.",
+        "README, .env.example, diagnostics, and MANUAL_TESTING explain optional installation and cover non-speech noise, background speech, and immediate-request tests; focused VAD/config/ARMED/wake/recorder/docs tests plus dry-run, fake-backend, diagnose, full unittest, and final ./init.sh pass without live audio, OpenAI, speaker, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F036"
+      ]
     }
   ]
 }

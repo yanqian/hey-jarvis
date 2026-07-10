@@ -37,9 +37,18 @@ DEFAULT_WAKE_MODEL = OPENWAKEWORD_MODEL_NAME
 DEFAULT_WAKE_INFERENCE_FRAMEWORK = OPENWAKEWORD_INFERENCE_FRAMEWORK
 DEFAULT_WAKE_PHRASE = "hey jarvis"
 DEFAULT_WAKE_THRESHOLD = 0.5
+DEFAULT_WAKE_VAD_THRESHOLD: float | None = None
 DEFAULT_SILENCE_SECONDS = 1.5
 DEFAULT_MAX_RECORD_SECONDS = 20.0
 DEFAULT_RECORDING_SILENCE_RMS = 750.0
+DEFAULT_VAD_BACKEND = "disabled"
+DEFAULT_VAD_MODE = 2
+DEFAULT_ARMED_VAD_REQUIRED_RATIO = 0.50
+DEFAULT_ARMED_VAD_MIN_FRAMES = 2
+DEFAULT_RECORDING_VAD_ENABLED = False
+DEFAULT_RECORDING_VAD_END_RATIO = 0.25
+DEFAULT_RECORDING_VAD_SPEECH_RATIO = 0.50
+DEFAULT_RECORDING_HANGOVER_SECONDS = 0.30
 DEFAULT_SAMPLE_RATE = 16000
 DEFAULT_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
@@ -123,6 +132,7 @@ class Settings:
     chat_model: str
     tts_model: str
     tts_voice: str
+    wake_vad_threshold: float | None = DEFAULT_WAKE_VAD_THRESHOLD
     tts_instructions: str | None = DEFAULT_TTS_INSTRUCTIONS
     tts_speed: float = DEFAULT_TTS_SPEED
     enable_tools: bool = DEFAULT_ENABLE_TOOLS
@@ -166,6 +176,15 @@ class Settings:
     min_transcript_length: int = DEFAULT_MIN_TRANSCRIPT_LENGTH
     cancel_phrases: tuple[str, ...] = DEFAULT_CANCEL_PHRASES
     recording_silence_rms: float = DEFAULT_RECORDING_SILENCE_RMS
+    vad_backend: str = DEFAULT_VAD_BACKEND
+    vad_mode: int = DEFAULT_VAD_MODE
+    armed_vad_required_ratio: float = DEFAULT_ARMED_VAD_REQUIRED_RATIO
+    armed_vad_min_frames: int = DEFAULT_ARMED_VAD_MIN_FRAMES
+    recording_vad_enabled: bool = DEFAULT_RECORDING_VAD_ENABLED
+    recording_vad_end_ratio: float = DEFAULT_RECORDING_VAD_END_RATIO
+    recording_vad_speech_ratio: float = DEFAULT_RECORDING_VAD_SPEECH_RATIO
+    recording_hangover_seconds: float = DEFAULT_RECORDING_HANGOVER_SECONDS
+    recording_end_silence_seconds: float = DEFAULT_SILENCE_SECONDS
 
 
 @dataclass(frozen=True)
@@ -240,6 +259,9 @@ def load_settings(
         minimum=0.0,
         maximum=1.0,
     )
+    wake_vad_threshold = _optional_float_value(
+        raw_env, "WAKE_VAD_THRESHOLD", errors, minimum=0.0, maximum=1.0
+    )
     silence_seconds = _float_value(
         raw_env,
         "SILENCE_SECONDS",
@@ -247,6 +269,65 @@ def load_settings(
         errors,
         minimum=0.1,
     )
+    vad_backend = _choice_value(
+        raw_env,
+        "VAD_BACKEND",
+        DEFAULT_VAD_BACKEND,
+        ("disabled", "webrtc"),
+        errors,
+        normalizer=lambda value: value.strip().lower(),
+    )
+    vad_mode = _int_value(raw_env, "VAD_MODE", DEFAULT_VAD_MODE, errors, minimum=0, maximum=3)
+    armed_vad_required_ratio = _float_value(
+        raw_env,
+        "ARMED_VAD_REQUIRED_RATIO",
+        DEFAULT_ARMED_VAD_REQUIRED_RATIO,
+        errors,
+        minimum=0.0,
+        maximum=1.0,
+    )
+    armed_vad_min_frames = _int_value(
+        raw_env, "ARMED_VAD_MIN_FRAMES", DEFAULT_ARMED_VAD_MIN_FRAMES, errors, minimum=1
+    )
+    recording_vad_enabled = _bool_value(
+        raw_env, "RECORDING_VAD_ENABLED", DEFAULT_RECORDING_VAD_ENABLED, errors
+    )
+    recording_vad_end_ratio = _float_value(
+        raw_env,
+        "RECORDING_VAD_END_RATIO",
+        DEFAULT_RECORDING_VAD_END_RATIO,
+        errors,
+        minimum=0.0,
+        maximum=1.0,
+    )
+    recording_vad_speech_ratio = _float_value(
+        raw_env,
+        "RECORDING_VAD_SPEECH_RATIO",
+        DEFAULT_RECORDING_VAD_SPEECH_RATIO,
+        errors,
+        minimum=0.0,
+        maximum=1.0,
+    )
+    recording_hangover_seconds = _float_value(
+        raw_env,
+        "RECORDING_HANGOVER_SECONDS",
+        DEFAULT_RECORDING_HANGOVER_SECONDS,
+        errors,
+        minimum=0.0,
+    )
+    recording_end_silence_seconds = _float_value(
+        raw_env,
+        "RECORDING_END_SILENCE_SECONDS",
+        silence_seconds,
+        errors,
+        minimum=0.1,
+    )
+    if recording_vad_enabled and vad_backend == "disabled":
+        errors.append("RECORDING_VAD_ENABLED requires VAD_BACKEND=webrtc")
+    if recording_vad_speech_ratio < recording_vad_end_ratio:
+        errors.append(
+            "RECORDING_VAD_SPEECH_RATIO must be greater than or equal to RECORDING_VAD_END_RATIO"
+        )
     max_record_seconds = _float_value(
         raw_env,
         "MAX_RECORD_SECONDS",
@@ -476,6 +557,8 @@ def load_settings(
 
     if max_record_seconds <= silence_seconds:
         errors.append("MAX_RECORD_SECONDS must be greater than SILENCE_SECONDS")
+    if max_record_seconds <= recording_end_silence_seconds:
+        errors.append("MAX_RECORD_SECONDS must be greater than RECORDING_END_SILENCE_SECONDS")
     if post_playback_max_suppression_seconds < post_playback_wake_cooldown_seconds:
         errors.append(
             "POST_PLAYBACK_MAX_SUPPRESSION_SECONDS must be greater than or equal to "
@@ -492,6 +575,7 @@ def load_settings(
         wake_inference_framework=wake_inference_framework,
         wake_phrase=wake_phrase,
         wake_threshold=wake_threshold,
+        wake_vad_threshold=wake_vad_threshold,
         silence_seconds=silence_seconds,
         max_record_seconds=max_record_seconds,
         recording_silence_rms=recording_silence_rms,
@@ -542,6 +626,15 @@ def load_settings(
         min_valid_speech_seconds=min_valid_speech_seconds,
         min_transcript_length=min_transcript_length,
         cancel_phrases=cancel_phrases,
+        vad_backend=vad_backend,
+        vad_mode=vad_mode,
+        armed_vad_required_ratio=armed_vad_required_ratio,
+        armed_vad_min_frames=armed_vad_min_frames,
+        recording_vad_enabled=recording_vad_enabled,
+        recording_vad_end_ratio=recording_vad_end_ratio,
+        recording_vad_speech_ratio=recording_vad_speech_ratio,
+        recording_hangover_seconds=recording_hangover_seconds,
+        recording_end_silence_seconds=recording_end_silence_seconds,
     )
 
 
@@ -617,6 +710,20 @@ def collect_diagnostics(
 
     if settings is not None and dependency_modules is None:
         checks.extend(_wake_runtime_dependency_checks(settings))
+        if settings.vad_backend == "webrtc":
+            if importlib.util.find_spec("webrtcvad") is None:
+                checks.append(
+                    DiagnosticCheck(
+                        "dependency:webrtcvad",
+                        "error",
+                        "VAD_BACKEND=webrtc requires the optional webrtcvad package; "
+                        "install it with `python -m pip install webrtcvad`",
+                    )
+                )
+            else:
+                checks.append(
+                    DiagnosticCheck("dependency:webrtcvad", "ok", "webrtcvad is importable")
+                )
 
     checks.extend(_wake_word_model_checks(wake_word_model_paths, modules_to_check, settings))
     checks.extend(_wake_acknowledgement_audio_checks(settings))
@@ -938,6 +1045,20 @@ def _float_value(
     return value
 
 
+def _optional_float_value(
+    env: Mapping[str, str],
+    name: str,
+    errors: list[str],
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float | None:
+    raw_value = env.get(name)
+    if raw_value is None or raw_value.strip() == "":
+        return None
+    return _float_value(env, name, 0.0, errors, minimum=minimum, maximum=maximum)
+
+
 def _int_value(
     env: Mapping[str, str],
     name: str,
@@ -945,6 +1066,7 @@ def _int_value(
     errors: list[str],
     *,
     minimum: int | None = None,
+    maximum: int | None = None,
 ) -> int:
     raw_value = env.get(name)
     if raw_value is None or raw_value.strip() == "":
@@ -956,4 +1078,6 @@ def _int_value(
         return default
     if minimum is not None and value < minimum:
         errors.append(f"{name} must be at least {minimum}")
+    if maximum is not None and value > maximum:
+        errors.append(f"{name} must be at most {maximum}")
     return value

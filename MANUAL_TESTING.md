@@ -149,6 +149,32 @@ reports any preserved boundary chunks, and `armed_trigger` shows
 
 ## Acceptance Standard
 
+### Optional VAD checks
+
+Keep `VAD_BACKEND=disabled` first and confirm the F036 silence and immediate
+request cases behave unchanged. Then install `webrtcvad`, set
+`VAD_BACKEND=webrtc`, and repeat these checks:
+
+1. Say `Hey Jarvis`, let the acknowledgement play, do not speak, and make
+   keyboard, fan, or light object noise. ARMED should return to `WAIT_WAKE`
+   without `RECORDING`; its summary should show low VAD evidence or
+   `vad_ok=false`.
+2. Play unrelated background human speech without intentionally saying the wake
+   phrase. There should be no wake, ARMED recording, chat, or TTS. If the wake
+   model itself fires, capture both wake and ARMED VAD diagnostics.
+3. Say `Hey Jarvis` and ask a normal question shortly after `在呢`. The first
+   syllable should remain in `tmp/input.wav`; `armed_trigger` should show
+   `baseline_ready=true`, `vad_ok=true`, and its VAD ratio.
+4. With `RECORDING_VAD_ENABLED=1`, speak a question with a short natural pause.
+   Recording should continue after the pause, then finish on sustained
+   non-voice silence rather than `MAX_RECORD_SECONDS`.
+
+The relevant controls are `VAD_BACKEND`, `VAD_MODE`,
+`ARMED_VAD_REQUIRED_RATIO`, `ARMED_VAD_MIN_FRAMES`, optional
+`WAKE_VAD_THRESHOLD`, `RECORDING_VAD_ENABLED`,
+`RECORDING_VAD_END_RATIO`, `RECORDING_VAD_SPEECH_RATIO`,
+`RECORDING_HANGOVER_SECONDS`, and `RECORDING_END_SILENCE_SECONDS`.
+
 The MVP is acceptable when:
 
 - Wake-word detection succeeds at least 8 out of 10 attempts in a normal local

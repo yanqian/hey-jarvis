@@ -7,7 +7,7 @@ import wave
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Protocol
+from typing import Any, Iterable, Protocol
 
 from .silence import SAMPLE_WIDTH_BYTES, rms_level
 
@@ -45,6 +45,12 @@ class Recorder:
         silence_threshold: float = 500.0,
         output_path: str | Path = DEFAULT_INPUT_WAV,
         logger: logging.Logger | None = None,
+        vad_detector: Any | None = None,
+        vad_enabled: bool = False,
+        vad_speech_ratio: float = 0.50,
+        vad_end_ratio: float = 0.25,
+        hangover_seconds: float = 0.30,
+        end_silence_seconds: float | None = None,
     ) -> None:
         if sample_rate <= 0:
             raise ValueError("sample_rate must be positive")
@@ -56,6 +62,19 @@ class Recorder:
             raise ValueError("max_record_seconds must be greater than silence_seconds")
         if silence_threshold < 0:
             raise ValueError("silence_threshold must be non-negative")
+        if not 0.0 <= vad_end_ratio <= 1.0 or not 0.0 <= vad_speech_ratio <= 1.0:
+            raise ValueError("VAD ratios must be between 0.0 and 1.0")
+        if vad_speech_ratio < vad_end_ratio:
+            raise ValueError("vad_speech_ratio must be greater than or equal to vad_end_ratio")
+        if hangover_seconds < 0:
+            raise ValueError("hangover_seconds must be non-negative")
+        resolved_end_silence = silence_seconds if end_silence_seconds is None else end_silence_seconds
+        if resolved_end_silence <= 0:
+            raise ValueError("end_silence_seconds must be positive")
+        if max_record_seconds <= resolved_end_silence:
+            raise ValueError("max_record_seconds must be greater than end_silence_seconds")
+        if vad_enabled and vad_detector is None:
+            raise ValueError("vad_detector is required when vad_enabled is true")
 
         self.source = source
         self.sample_rate = sample_rate
@@ -65,14 +84,21 @@ class Recorder:
         self.output_path = Path(output_path)
         self._logger = logger or logging.getLogger(__name__)
         self._source_iter: Iterable[bytes] | None = None
+        self.vad_detector = vad_detector
+        self.vad_enabled = vad_enabled
+        self.vad_speech_ratio = vad_speech_ratio
+        self.vad_end_ratio = vad_end_ratio
+        self.hangover_seconds = hangover_seconds
+        self.end_silence_seconds = resolved_end_silence
 
     def record(self) -> RecordingResult:
         """Record until consecutive silence, max duration, or source exhaustion."""
 
         chunks: list[bytes] = []
         duration_seconds = 0.0
-        silence_window = _SilenceWindow(self.silence_seconds)
+        silence_window = _SilenceWindow(self.end_silence_seconds)
         speech_like_threshold = self.silence_threshold * SPEECH_LIKE_RMS_MULTIPLIER
+        hangover_remaining = 0.0
         stopped_by = "source_exhausted"
 
         while duration_seconds < self.max_record_seconds:
@@ -95,10 +121,27 @@ class Recorder:
             duration_seconds += chunk_seconds
 
             rms = rms_level(chunk)
-            if rms > speech_like_threshold:
+            vad_ratio = None
+            if self.vad_enabled:
+                vad_result = self.vad_detector.analyze(chunk, self.sample_rate)
+                vad_ratio = None if vad_result is None else vad_result.voiced_ratio
+            speech_like = (
+                vad_ratio is not None and vad_ratio >= self.vad_speech_ratio
+            ) or (vad_ratio is None and rms > speech_like_threshold)
+            if speech_like:
                 silence_window.clear()
+                hangover_remaining = self.hangover_seconds if self.vad_enabled else 0.0
             else:
-                silence_window.add(chunk_seconds, quiet=rms <= self.silence_threshold)
+                if hangover_remaining > 0:
+                    hangover_remaining = max(0.0, hangover_remaining - chunk_seconds)
+                    silence_window.clear()
+                else:
+                    quiet = (
+                        rms <= self.silence_threshold
+                        if vad_ratio is None
+                        else rms <= self.silence_threshold and vad_ratio <= self.vad_end_ratio
+                    )
+                    silence_window.add(chunk_seconds, quiet=quiet)
 
             if duration_seconds >= self.max_record_seconds:
                 stopped_by = "max_duration"
@@ -142,6 +185,12 @@ def record_to_wav(
     silence_threshold: float = 500.0,
     output_path: str | Path = DEFAULT_INPUT_WAV,
     logger: logging.Logger | None = None,
+    vad_detector: Any | None = None,
+    vad_enabled: bool = False,
+    vad_speech_ratio: float = 0.50,
+    vad_end_ratio: float = 0.25,
+    hangover_seconds: float = 0.30,
+    end_silence_seconds: float | None = None,
 ) -> RecordingResult:
     """Record PCM chunks from a source and write a mono int16 WAV file."""
 
@@ -153,6 +202,12 @@ def record_to_wav(
         silence_threshold=silence_threshold,
         output_path=output_path,
         logger=logger,
+        vad_detector=vad_detector,
+        vad_enabled=vad_enabled,
+        vad_speech_ratio=vad_speech_ratio,
+        vad_end_ratio=vad_end_ratio,
+        hangover_seconds=hangover_seconds,
+        end_silence_seconds=end_silence_seconds,
     ).record()
 
 

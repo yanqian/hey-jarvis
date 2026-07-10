@@ -15,6 +15,7 @@ from src.wake_word import (
     MACOS_ARM64_ONNX_ERROR,
     WakeWordDetector,
     WakeWordError,
+    _load_openwakeword_model,
     pad_pcm_chunk,
     pcm_rms_and_peak,
     prepare_wake_word_models,
@@ -36,6 +37,53 @@ class FakeWakeWordModel:
 
 
 class WakeWordDetectorTests(unittest.TestCase):
+    def test_wake_vad_threshold_is_passed_when_configured(self):
+        captured = {}
+
+        def model_factory(**kwargs):
+            captured.update(kwargs)
+            return FakeWakeWordModel([])
+
+        model_module = types.ModuleType("openwakeword.model")
+        model_module.Model = model_factory
+        package = types.ModuleType("openwakeword")
+        package.model = model_module
+        with patch.dict(sys.modules, {"openwakeword": package, "openwakeword.model": model_module}):
+            with patch("src.wake_word.platform.system", return_value="Linux"):
+                _load_openwakeword_model(
+                    inference_framework="onnx", vad_threshold=0.35
+                )
+        self.assertEqual(captured["vad_threshold"], 0.35)
+
+    def test_wake_vad_threshold_unset_preserves_old_constructor_args(self):
+        captured = {}
+
+        def model_factory(**kwargs):
+            captured.update(kwargs)
+            return FakeWakeWordModel([])
+
+        model_module = types.ModuleType("openwakeword.model")
+        model_module.Model = model_factory
+        package = types.ModuleType("openwakeword")
+        package.model = model_module
+        with patch.dict(sys.modules, {"openwakeword": package, "openwakeword.model": model_module}):
+            with patch("src.wake_word.platform.system", return_value="Linux"):
+                _load_openwakeword_model(inference_framework="onnx")
+        self.assertNotIn("vad_threshold", captured)
+
+    def test_configured_unsupported_wake_vad_threshold_has_clear_error(self):
+        def model_factory(**kwargs):
+            raise TypeError("unexpected keyword argument 'vad_threshold'")
+
+        model_module = types.ModuleType("openwakeword.model")
+        model_module.Model = model_factory
+        package = types.ModuleType("openwakeword")
+        package.model = model_module
+        with patch.dict(sys.modules, {"openwakeword": package, "openwakeword.model": model_module}):
+            with patch("src.wake_word.platform.system", return_value="Linux"):
+                with self.assertRaisesRegex(WakeWordError, "does not support"):
+                    _load_openwakeword_model(inference_framework="onnx", vad_threshold=0.35)
+
     def test_detect_returns_false_below_threshold_and_true_at_threshold(self):
         model = FakeWakeWordModel(
             [

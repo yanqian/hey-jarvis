@@ -53,23 +53,28 @@ class WakeWordDetector:
         *,
         model_name: str = OPENWAKEWORD_MODEL_NAME,
         inference_framework: str = OPENWAKEWORD_INFERENCE_FRAMEWORK,
+        vad_threshold: float | None = None,
         model: WakeWordModel | None = None,
         model_factory: Callable[[], WakeWordModel] | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         if threshold < 0.0 or threshold > 1.0:
             raise ValueError("threshold must be between 0.0 and 1.0")
+        if vad_threshold is not None and (vad_threshold < 0.0 or vad_threshold > 1.0):
+            raise ValueError("vad_threshold must be between 0.0 and 1.0")
 
         self.threshold = threshold
         self.model_name = normalize_wake_model(model_name)
         self.model_key = wake_model_key(self.model_name)
         self.inference_framework = normalize_inference_framework(inference_framework)
+        self.vad_threshold = vad_threshold
         reject_macos_arm64_onnx(self.inference_framework)
         self._model = model
         self._model_factory = model_factory or (
             lambda: _load_openwakeword_model(
                 model_name=self.model_name,
                 inference_framework=self.inference_framework,
+                vad_threshold=self.vad_threshold,
             )
         )
         self._logger = logger or logging.getLogger(__name__)
@@ -154,6 +159,7 @@ def _load_openwakeword_model(
     *,
     model_name: str = OPENWAKEWORD_MODEL_NAME,
     inference_framework: str = OPENWAKEWORD_INFERENCE_FRAMEWORK,
+    vad_threshold: float | None = None,
 ) -> WakeWordModel:
     inference_framework = normalize_inference_framework(inference_framework)
     reject_macos_arm64_onnx(inference_framework)
@@ -162,10 +168,21 @@ def _load_openwakeword_model(
 
     from openwakeword.model import Model
 
-    return Model(
-        wakeword_models=[normalize_wake_model(model_name)],
-        inference_framework=inference_framework,
-    )
+    kwargs: dict[str, Any] = {
+        "wakeword_models": [normalize_wake_model(model_name)],
+        "inference_framework": inference_framework,
+    }
+    if vad_threshold is not None:
+        kwargs["vad_threshold"] = vad_threshold
+    try:
+        return Model(**kwargs)
+    except TypeError as exc:
+        if vad_threshold is not None and "vad_threshold" in str(exc):
+            raise WakeWordError(
+                "WAKE_VAD_THRESHOLD is configured, but this openWakeWord version does not "
+                "support the vad_threshold model argument; upgrade openwakeword or unset the setting"
+            ) from exc
+        raise
 
 
 def required_wake_word_model_paths(
