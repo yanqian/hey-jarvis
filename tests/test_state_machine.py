@@ -9,7 +9,6 @@ from src.config import (
     DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS,
     DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS,
     DEFAULT_ACK_GUARD_QUIET_RMS,
-    DEFAULT_ACK_GUARD_SECONDS,
     DEFAULT_ARMED_BASELINE_MIN_CHUNKS,
     DEFAULT_ARMED_BASELINE_SECONDS,
     DEFAULT_ARMED_CLIP_REJECT_PEAK,
@@ -48,7 +47,7 @@ from src.config import (
 )
 from src.openai_client import OpenAIClientError
 from src.recorder import RecordingResult
-from src.state_machine import AssistantState, VoiceAssistantStateMachine
+from src.state_machine import AssistantState, VoiceAssistantStateMachine, _PostAckBoundaryResult
 from src.tools import ToolResult, ToolRoute
 
 
@@ -65,7 +64,6 @@ def make_settings(
     wake_acknowledgement_audio_path=DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
     wake_acknowledgement_drain_seconds=DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
     ack_guard_enabled=False,
-    ack_guard_seconds=DEFAULT_ACK_GUARD_SECONDS,
     ack_guard_min_quiet_seconds=DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS,
     ack_guard_quiet_rms=DEFAULT_ACK_GUARD_QUIET_RMS,
     ack_guard_max_buffer_seconds=DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS,
@@ -107,7 +105,6 @@ def make_settings(
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
         wake_acknowledgement_drain_seconds=wake_acknowledgement_drain_seconds,
         ack_guard_enabled=ack_guard_enabled,
-        ack_guard_seconds=ack_guard_seconds,
         ack_guard_min_quiet_seconds=ack_guard_min_quiet_seconds,
         ack_guard_quiet_rms=ack_guard_quiet_rms,
         ack_guard_max_buffer_seconds=ack_guard_max_buffer_seconds,
@@ -145,6 +142,7 @@ LOUD_CHUNK = pcm_chunk(2000)
 MODERATE_CHUNK = pcm_chunk(800)
 NOISE_CHUNK = pcm_chunk(400)
 CLIPPED_CHUNK = pcm_chunk(32767)
+USER_CLIPPED_CHUNK = pcm_chunk(-32768)
 SPEECH_CHUNKS = [LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK]
 
 
@@ -475,7 +473,6 @@ class StateMachineTests(unittest.TestCase):
                     wake_acknowledgement_enabled=True,
                     wake_acknowledgement_audio_path=acknowledgement_path,
                     ack_guard_enabled=True,
-                    ack_guard_seconds=0.60,
                     ack_guard_min_quiet_seconds=0.16,
                     armed_no_speech_timeout_seconds=0.40,
                 ),
@@ -502,7 +499,18 @@ class StateMachineTests(unittest.TestCase):
     def test_ack_guard_can_preserve_boundary_speech(self):
         logger = logging.getLogger("tests.state_machine.ack_guard_boundary")
         audio_source = FakeAudioSource(
-            [WAKE_CHUNK, WAKE_CHUNK, CLIPPED_CHUNK, b"overflow", QUIET_CHUNK, QUIET_CHUNK, *SPEECH_CHUNKS],
+            [
+                WAKE_CHUNK,
+                WAKE_CHUNK,
+                CLIPPED_CHUNK,
+                b"overflow",
+                QUIET_CHUNK,
+                QUIET_CHUNK,
+                LOUD_CHUNK,
+                USER_CLIPPED_CHUNK,
+                LOUD_CHUNK,
+                LOUD_CHUNK,
+            ],
             fallback_chunk=QUIET_CHUNK,
         )
         preserved_first_chunk = []
@@ -520,7 +528,6 @@ class StateMachineTests(unittest.TestCase):
                     wake_acknowledgement_enabled=True,
                     wake_acknowledgement_audio_path=acknowledgement_path,
                     ack_guard_enabled=True,
-                    ack_guard_seconds=0.16,
                     ack_guard_min_quiet_seconds=0.16,
                     post_playback_wake_cooldown_seconds=0,
                     post_playback_quiet_seconds=0,
@@ -538,12 +545,34 @@ class StateMachineTests(unittest.TestCase):
                 result = machine.run_once()
 
         self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
-        self.assertEqual(preserved_first_chunk, SPEECH_CHUNKS)
+        self.assertEqual(
+            preserved_first_chunk,
+            [LOUD_CHUNK, USER_CLIPPED_CHUNK, LOUD_CHUNK, LOUD_CHUNK],
+        )
         self.assertNotIn(CLIPPED_CHUNK, preserved_first_chunk)
+        self.assertIn(USER_CLIPPED_CHUNK, preserved_first_chunk)
         self.assertIn("post_ack_quiet_observed=true", "\n".join(logs.output))
         self.assertIn("noise_seed_count=2", "\n".join(logs.output))
         self.assertIn("post_ack_overflow_chunks=1", "\n".join(logs.output))
         self.assertIn("post_ack_clipped_chunks=1", "\n".join(logs.output))
+
+    def test_post_boundary_overflow_is_omitted_without_clearing_safe_pre_roll(self):
+        logger = logging.getLogger("tests.state_machine.post_boundary_overflow")
+        audio_source = FakeAudioSource(
+            [LOUD_CHUNK, b"overflow", LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK]
+        )
+        boundary = _PostAckBoundaryResult(
+            True, 2, (), (QUIET_CHUNK, QUIET_CHUNK), 0.0, 0, 0, 0, False
+        )
+        machine = self._machine_for_armed_test(
+            audio_source, logger=logger, ack_guard_enabled=True
+        )
+        with self.assertLogs(logger, level="INFO"):
+            chunks = machine._wait_for_armed_speech(
+                initial_noise_seed=boundary.noise_seed_chunks,
+                post_ack_boundary=boundary,
+            )
+        self.assertEqual(chunks, tuple([LOUD_CHUNK] * 3))
 
     def test_ack_guard_without_quiet_does_not_enter_recording(self):
         logger = logging.getLogger("tests.state_machine.ack_no_quiet")
@@ -565,7 +594,6 @@ class StateMachineTests(unittest.TestCase):
                     wake_acknowledgement_enabled=True,
                     wake_acknowledgement_audio_path=acknowledgement_path,
                     ack_guard_enabled=True,
-                    ack_guard_seconds=0.16,
                     ack_guard_min_quiet_seconds=0.16,
                     ack_guard_max_buffer_seconds=0.32,
                     post_playback_wake_cooldown_seconds=0,

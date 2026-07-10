@@ -102,7 +102,6 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_acknowledgement_audio_path, DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH)
         self.assertEqual(settings.wake_acknowledgement_drain_seconds, DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS)
         self.assertTrue(settings.ack_guard_enabled)
-        self.assertEqual(settings.ack_guard_seconds, 0.80)
         self.assertEqual(settings.ack_guard_min_quiet_seconds, 0.16)
         self.assertEqual(settings.ack_guard_quiet_rms, 900.0)
         self.assertEqual(settings.ack_guard_max_buffer_seconds, 1.5)
@@ -162,7 +161,6 @@ class ConfigTests(unittest.TestCase):
                 "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "tmp/custom-ack.mp3",
                 "WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS": "0.8",
                 "ACK_GUARD_ENABLED": "0",
-                "ACK_GUARD_SECONDS": "0.7",
                 "ACK_GUARD_MIN_QUIET_SECONDS": "0.2",
                 "ACK_GUARD_QUIET_RMS": "700",
                 "ACK_GUARD_MAX_BUFFER_SECONDS": "1.2",
@@ -222,7 +220,6 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.wake_acknowledgement_audio_path, Path("tmp/custom-ack.mp3"))
         self.assertEqual(settings.wake_acknowledgement_drain_seconds, 0.8)
         self.assertFalse(settings.ack_guard_enabled)
-        self.assertEqual(settings.ack_guard_seconds, 0.7)
         self.assertEqual(settings.ack_guard_min_quiet_seconds, 0.2)
         self.assertEqual(settings.ack_guard_quiet_rms, 700.0)
         self.assertEqual(settings.ack_guard_max_buffer_seconds, 1.2)

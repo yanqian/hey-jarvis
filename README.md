@@ -168,7 +168,6 @@ WAKE_ACKNOWLEDGEMENT_TEXT=在呢
 WAKE_ACKNOWLEDGEMENT_AUDIO_PATH=var/ack.mp3
 WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS=0.35
 ACK_GUARD_ENABLED=1
-ACK_GUARD_SECONDS=0.80
 ACK_GUARD_MIN_QUIET_SECONDS=0.16
 ACK_GUARD_QUIET_RMS=900
 ACK_GUARD_MAX_BUFFER_SECONDS=1.50
@@ -255,6 +254,11 @@ Guarded ACK flows also require `noise_floor_has_samples=true` and log
 `post_ack_quiet_observed`, suppressed/clipped/overflow chunk counts, and the
 post-ACK maximum RMS and peak. If speaker echo still reaches `max_peak=32768`,
 lower playback volume or regenerate a shorter acknowledgement such as `嗯`.
+After that safe boundary, ARMED treats audio as potential user speech:
+overflowed chunks are omitted individually, while clipped PCM is retained in
+the bounded pre-roll because it may still contain intelligible words. Neither
+type counts as voiced or updates the noise floor, and neither erases earlier
+safe user chunks.
 `MIN_VALID_SPEECH_SECONDS` and `MIN_TRANSCRIPT_LENGTH` reject accidental,
 silent, or unusably short requests before chat/tool routing and TTS.
 `CANCEL_PHRASES` is a comma-separated local cancellation list; defaults include

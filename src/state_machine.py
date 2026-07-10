@@ -448,10 +448,7 @@ class VoiceAssistantStateMachine:
                 dynamic_threshold=dynamic_threshold,
                 noise_floor=noise_floor,
             )
-            if protected_post_ack and (overflowed or clipped):
-                pre_roll.clear()
-                pre_roll_seconds = 0.0
-            else:
+            if not (protected_post_ack and overflowed):
                 pre_roll.append(armed_chunk)
                 pre_roll_seconds += chunk_seconds
                 pre_roll_seconds = _trim_pre_roll(
@@ -681,10 +678,9 @@ class VoiceAssistantStateMachine:
 
         self._logger.info(
             (
-                "State ACK_PLAYING: waiting for safe post-ACK boundary; initial_guard=%.2fs "
+                "State ACK_PLAYING: waiting for safe post-ACK boundary; "
                 "quiet_required=%.2fs max_suppression=%.2fs"
             ),
-            self.settings.ack_guard_seconds,
             quiet_required,
             max_suppression_seconds,
         )

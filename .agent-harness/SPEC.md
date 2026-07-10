@@ -872,6 +872,28 @@ Verification surface: ACK-without-quiet cancellation, clipped/overflow residue c
 
 Decomposition decision: this is one focused PR1 follow-up because boundary suppression, baseline eligibility, pre-roll safety, diagnostics, and regression tests are one state transition contract. VAD remains isolated in the already reserved stacked PR2 feature F037, so this follow-up uses F038.
 
+### Preserve Clipped User Speech After The ACK Boundary
+
+Goal: stop ARMED from deleting the beginning of a legitimate post-ACK question when real user speech contains clipped chunks, and remove the misleading unused `ACK_GUARD_SECONDS` setting.
+
+Included scope: delete `ACK_GUARD_SECONDS` from defaults, Settings, loading, examples, docs, tests, logs, and local `.env`; keep `ACK_GUARD_MAX_BUFFER_SECONDS` as the only bounded post-ACK wait; change post-boundary ARMED pre-roll handling so overflowed chunks are omitted individually while clipped chunks are preserved as potentially intelligible user audio but remain ineligible for voice/noise decisions; retain previously collected safe pre-roll across invalid chunks; add clipped-user-speech regression coverage and diagnostics/documentation updates; update existing PR1.
+
+Excluded scope: changing the pre-boundary rule that clipped/overflowed acknowledgement residue resets quiet/noise candidates, changing ARMED RMS thresholds, VAD/PR2 behavior, automatic gain control, echo cancellation, audio repair, recorder endpointing, wake detection, or extra prompts.
+
+Core flows: ACK residue is suppressed until the F038 quiet boundary. After that boundary, ARMED begins user-speech collection. A microphone overflow chunk is skipped without erasing earlier user chunks. A clipped chunk is kept in pre-roll/WAV because clipped speech may still be intelligible, but it is marked non-voiced and does not update the noise floor. Later valid voiced chunks satisfy the rolling trigger, and recording begins with the full bounded pre-roll including the initial `1+1` audio instead of only the final `等于几` tail.
+
+Constraints: the safe quiet boundary remains mandatory and ACK residue before it never enters recording. Clipped post-boundary audio is accepted only into pre-roll, not as trigger evidence. Overflowed audio remains excluded because it may be incomplete. Default-disabled ACK compatibility and guarded no-quiet cancellation remain unchanged. `ACK_GUARD_MAX_BUFFER_SECONDS` must stay positive and is the sole post-ACK suppression timeout. Automated tests use synthetic PCM and fakes; user log files remain untracked and uncommitted.
+
+Ambiguities or assumptions: real evidence showed `max_peak=32768`, 18 checked versus 12 valid chunks, and only 240ms of an 800ms configured pre-roll before transcription became `等于几`. This is treated as legitimate clipped user speech after an already verified quiet boundary. Preserving clipped PCM may retain distortion, but it is preferable to deleting the utterance prefix; future VAD/DSP work can classify or repair it more precisely.
+
+Required capabilities: existing post-ACK boundary result, `_ArmedChunk` metadata, bounded pre-roll, synthetic clipped/overflow PCM fixtures, captureable recorder source, configuration/documentation tests, and root recovery verification.
+
+Implementation paths: `src/config.py`, `src/state_machine.py`, `.env`, `.env.example`, `README.md`, `MANUAL_TESTING.md`, `tests/test_config.py`, `tests/test_state_machine.py`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: absence of `ACK_GUARD_SECONDS` across tracked runtime/docs/tests, configuration tolerance for existing unknown local keys only after local cleanup, clipped user chunks retained in captured recording pre-roll, overflow omitted without clearing earlier safe chunks, clipped chunks excluded from trigger/noise decisions, original no-quiet and ACK-disabled regressions, full unittest discovery, dry-run, fake-backend, diagnose execution, and final `./init.sh`.
+
+Decomposition decision: this is one focused PR1 correction because the unused setting removal and pre-roll behavior change directly resolve one observed `1+1` prefix-loss path. It uses F039 because F037 is reserved for stacked PR2 and F038 is already evaluator-approved.
+
 ## 5. Verification Plan
 
 Run:

@@ -61,7 +61,6 @@ DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT = "在呢"
 DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH = Path("var/ack.mp3")
 DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS = 0.35
 DEFAULT_ACK_GUARD_ENABLED = True
-DEFAULT_ACK_GUARD_SECONDS = 0.80
 DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS = 0.16
 DEFAULT_ACK_GUARD_QUIET_RMS = 900.0
 DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS = 1.50
@@ -140,7 +139,6 @@ class Settings:
     wake_acknowledgement_audio_path: Path = DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH
     wake_acknowledgement_drain_seconds: float = DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS
     ack_guard_enabled: bool = DEFAULT_ACK_GUARD_ENABLED
-    ack_guard_seconds: float = DEFAULT_ACK_GUARD_SECONDS
     ack_guard_min_quiet_seconds: float = DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS
     ack_guard_quiet_rms: float = DEFAULT_ACK_GUARD_QUIET_RMS
     ack_guard_max_buffer_seconds: float = DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS
@@ -328,9 +326,6 @@ def load_settings(
         minimum=0.0,
     )
     ack_guard_enabled = _bool_value(raw_env, "ACK_GUARD_ENABLED", DEFAULT_ACK_GUARD_ENABLED, errors)
-    ack_guard_seconds = _float_value(
-        raw_env, "ACK_GUARD_SECONDS", DEFAULT_ACK_GUARD_SECONDS, errors, minimum=0.0
-    )
     ack_guard_min_quiet_seconds = _float_value(
         raw_env,
         "ACK_GUARD_MIN_QUIET_SECONDS",
@@ -519,7 +514,6 @@ def load_settings(
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
         wake_acknowledgement_drain_seconds=wake_acknowledgement_drain_seconds,
         ack_guard_enabled=ack_guard_enabled,
-        ack_guard_seconds=ack_guard_seconds,
         ack_guard_min_quiet_seconds=ack_guard_min_quiet_seconds,
         ack_guard_quiet_rms=ack_guard_quiet_rms,
         ack_guard_max_buffer_seconds=ack_guard_max_buffer_seconds,

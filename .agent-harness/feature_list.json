@@ -769,6 +769,27 @@
       "depends_on": [
         "F036"
       ]
+    },
+    {
+      "id": "F039",
+      "title": "Preserve clipped post-ACK user speech",
+      "description": "Remove the unused ACK_GUARD_SECONDS setting and stop post-boundary clipped or overflowed chunks from clearing earlier safe ARMED pre-roll, preserving clipped user speech as audio while excluding it from trigger and noise decisions.",
+      "acceptance": [
+        "ACK_GUARD_SECONDS and ack_guard_seconds are removed from tracked defaults, Settings, loading, examples, README, manual guidance, tests, and post-ACK logs; ACK_GUARD_MAX_BUFFER_SECONDS remains the single documented bounded suppression timeout.",
+        "Before the verified quiet boundary, clipped/overflowed ACK residue continues resetting quiet/noise candidates and never enters recording; no-quiet guarded flow still cancels locally without ARMED or OpenAI.",
+        "After the quiet boundary, overflowed ARMED chunks are omitted individually and clipped chunks are retained in bounded recording pre-roll, while neither invalid type clears earlier safe pre-roll or counts as voiced/noise-floor evidence.",
+        "A synthetic question with valid speech, clipped middle chunks, and later valid voiced chunks triggers recording with the initial speech and clipped audio still present, preventing the observed configured-800ms pre-roll from collapsing to only the final 240ms tail.",
+        "ACK-disabled immediate speech and F038 post-ACK diagnostics/baseline safety remain compatible, with useful pre-roll metrics that expose retained duration/counts.",
+        "Focused config/state-machine/docs tests, full unittest discovery, dry-run, fake-backend, diagnose execution, and final ./init.sh pass without VAD, recorder endpointing changes, live audio, OpenAI, speaker, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F038"
+      ]
     }
   ]
 }

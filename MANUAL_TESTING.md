@@ -93,6 +93,12 @@ and peak, plus clipped/overflow counts. ARMED is not entered if the boundary
 times out without quiet, and clipped or overflowed acknowledgement residue is
 never added to recording pre-roll.
 
+After `post_ack_quiet_observed=true`, clipped audio is treated differently from
+ACK residue: it is preserved as possible user speech in pre-roll but cannot
+trigger ARMED or update the noise floor. Overflowed chunks are skipped. A later
+clipped/overflowed user chunk must not clear earlier words; if an 800ms pre-roll
+collapses to only the final 240ms, record that as a regression.
+
 If a transcript is missing the first syllable, such as spoken `一加一等于几`
 being transcribed as `加一等于几`, inspect the preceding `armed_trigger` log.
 The normal expectation is that immediate speech after `在呢` retains its first
@@ -133,7 +139,6 @@ ARMED_BASELINE_MIN_CHUNKS=3
 ARMED_REQUIRE_BASELINE=1
 ARMED_LAST_CHUNK_MUST_BE_VOICED=1
 ACK_GUARD_ENABLED=1
-ACK_GUARD_SECONDS=0.80
 ACK_GUARD_MIN_QUIET_SECONDS=0.16
 ACK_GUARD_QUIET_RMS=900
 ACK_GUARD_MAX_BUFFER_SECONDS=1.50

@@ -102,9 +102,15 @@ F038 cold-start evaluation failed in the `implementation_gap` domain: configurat
 
 F038 has been completed after a coding retry and separate cold-start evaluator approval. Enabled ACK guard configuration now rejects a non-positive quiet duration, while the runtime boundary independently fails closed if invalid settings bypass configuration. The original explicit boundary metrics, bounded local cancellation, safe noise seeding, protected ARMED gating, clipped/overflow pre-roll exclusion, compatibility paths, defaults, documentation, and diagnostics remain accepted. Focused tests pass with 53 tests, full discovery and final recovery verification pass with 174 project tests, the original evaluator failure remains in `.agent-harness/runs/F038-evaluation.md`, and approval is recorded as `EVAL_PASS: F038` in `.agent-harness/runs/F038-evaluation-pass.md`.
 
+F039 has been planned from real PR1 testing where an ACK-enabled request transcribed only `等于几`. The decisive log showed 18 ARMED chunks, only 12 valid chunks, `max_peak=32768`, and just 240ms/3 chunks retained despite `ARMED_PRE_ROLL_SECONDS=0.80`. Code review confirmed every clipped post-boundary user chunk cleared the whole pre-roll. F039 removes the unused `ACK_GUARD_SECONDS`, keeps the safe boundary, omits overflow individually, and retains clipped user PCM without using it as trigger or noise evidence.
+
+F039 coding is complete through interactive manual fallback after both normal and approved escalated `make -C .agent-harness work-fast` attempts failed the configured Codex Evaluator Agent runtime check before handoff. `ACK_GUARD_SECONDS` is removed from runtime, tracked configuration/docs/tests, logs, and local `.env`; `ACK_GUARD_MAX_BUFFER_SECONDS` is now the sole post-ACK bound. After quiet, overflowed chunks are skipped without erasing earlier pre-roll, while clipped user PCM is retained but remains excluded from voice and noise-floor decisions. Synthetic regressions preserve the utterance prefix across clipped/overflowed chunks. Focused tests and final recovery verification pass with 175 project tests. Coding evidence is recorded in `.agent-harness/runs/F039-manual-coding.md`; F039 remains in progress pending cold-start evaluator approval.
+
+F039 has been completed after separate cold-start evaluator approval. The evaluator confirmed complete removal of the unused ACK guard duration, preservation of the F038 safe quiet boundary and local no-quiet cancellation, clipped post-boundary PCM retention without voice/noise contribution, individual overflow omission without clearing earlier pre-roll, ACK-disabled compatibility, useful diagnostics, untouched untracked user logs, and passing focused plus recovery verification. Approval is recorded as `EVAL_PASS: F039` in `.agent-harness/runs/F039-evaluation-pass.md`.
+
 ## Last Completed Feature
 
-F038 - Require a safe post-ACK boundary.
+F039 - Preserve clipped post-ACK user speech.
 
 ## Next Feature
 
