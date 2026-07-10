@@ -108,11 +108,11 @@ F039 coding is complete through interactive manual fallback after both normal an
 
 F039 has been completed after separate cold-start evaluator approval. The evaluator confirmed complete removal of the unused ACK guard duration, preservation of the F038 safe quiet boundary and local no-quiet cancellation, clipped post-boundary PCM retention without voice/noise contribution, individual overflow omission without clearing earlier pre-roll, ACK-disabled compatibility, useful diagnostics, untouched untracked user logs, and passing focused plus recovery verification. Approval is recorded as `EVAL_PASS: F039` in `.agent-harness/runs/F039-evaluation-pass.md`.
 
-F037 was reconciled onto the merged PR1 implementation. The optional WebRTC VAD boundary, energy-plus-VAD ARMED gate, wake-model threshold forwarding, and VAD-aware recorder endpointing are retained while F038/F039's mandatory safe post-ACK quiet boundary and clipped-user pre-roll preservation remain authoritative. A fresh post-merge evaluator run is required before PR2 is considered ready.
+F037 was reconciled onto the merged PR1 implementation. The optional WebRTC VAD boundary, energy-plus-VAD ARMED gate, wake-model threshold forwarding, and VAD-aware recorder endpointing are retained while F038/F039's mandatory safe post-ACK quiet boundary and clipped-user pre-roll preservation remain authoritative. A fresh cold-start post-merge evaluation passed and is recorded in `.agent-harness/runs/F037-post-pr1-evaluation.md`.
 
 ## Last Completed Feature
 
-F037 - Add optional VAD-gated audio handling (post-PR1 reconciliation pending fresh evaluator confirmation).
+F037 - Add optional VAD-gated audio handling (post-PR1 reconciliation evaluator-approved).
 
 ## Next Feature
 
