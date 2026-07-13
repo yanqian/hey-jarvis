@@ -809,6 +809,42 @@
       "last_error": "",
       "priority": "P0",
       "depends_on": ["F036", "F039"]
+    },
+    {
+      "id": "F040",
+      "title": "Drain microphone while wake acknowledgement plays",
+      "description": "Make acknowledgement playback observable and continuously consume microphone input during playback so stale speaker echo and overflowed buffers do not reach post-ACK processing.",
+      "acceptance": [
+        "The macOS player exposes a testable non-blocking or observable playback handle with deterministic running/completion/wait behavior and preserves actionable playback failures, while ordinary answer playback remains synchronously compatible.",
+        "During ACK_PLAYING the state machine starts acknowledgement playback and repeatedly reads and discards microphone chunks until playback completes, including discarding the final chunk that can overlap completion; no drained chunk can enter wake detection, ARMED, recording pre-roll, transcription, or OpenAI.",
+        "ACK playback drain logs bounded safe metrics including drained chunk count, overflow/clipped counts, maximum RMS/peak, and completion/failure state without raw audio or secrets, and it leaves no orphaned playback process or unbounded worker.",
+        "Deterministic fakes prove multiple acknowledgement/overflow chunks are consumed during playback and the next post-playback read comes from current audio; ACK-disabled, synchronous answer-playback, and fake-backend flows remain compatible.",
+        "Focused player/state-machine tests, full unittest discovery, dry-run, fake-backend, diagnose, documentation/manual checks, and final ./init.sh pass without a real microphone, speaker, afplay process, OpenAI, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F039"]
+    },
+    {
+      "id": "F041",
+      "title": "Preserve immediate speech after synchronized acknowledgement",
+      "description": "Use the synchronized ACK drain to hand live post-playback audio directly into protected ARMED pre-roll, avoiding mandatory quiet suppression of an immediate question while retaining safe fallback behavior.",
+      "acceptance": [
+        "After a verified F040 playback-time drain, the chunk overlapping playback completion is quarantined and subsequent live post-ACK chunks enter bounded ARMED pre-roll immediately instead of requiring ACK_GUARD_MIN_QUIET_SECONDS of silence before speech can be retained.",
+        "Immediate post-ACK speech such as 一加一等于几 is captured with its prefix intact and can trigger recording only through valid baseline, energy, rolling-voice, latest-chunk, and optional VAD evidence; overflowed or clipped chunks never count as voice or noise evidence.",
+        "Acknowledgement-only residue, silence, an unsafe overlap chunk, or failed drain synchronization cannot trigger recording or OpenAI; silence cancels locally and unsafe synchronization falls back to the existing bounded conservative quiet-boundary path.",
+        "ACK-disabled, guard-disabled, VAD-disabled, optional-VAD, F039 clipped-pre-roll, post-cancellation, post-playback, and fake-backend compatibility paths remain deterministic with useful synchronized-handoff diagnostics.",
+        "Focused synthetic tests, five-cycle fake stability, full unittest discovery, dry-run, fake-backend, diagnose, documentation/manual checks, final ./init.sh, and real-device immediate-question retesting pass without ACK-boundary timeout or prefix loss."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F040"]
     }
   ]
 }

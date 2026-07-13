@@ -894,6 +894,48 @@ Verification surface: absence of `ACK_GUARD_SECONDS` across tracked runtime/docs
 
 Decomposition decision: this is one focused PR1 correction because the unused setting removal and pre-roll behavior change directly resolve one observed `1+1` prefix-loss path. It uses F039 because F037 is reserved for stacked PR2 and F038 is already evaluator-approved.
 
+### Synchronize Microphone Consumption During Wake Acknowledgement Playback
+
+Goal: prevent acknowledgement playback from leaving stale speaker-echo audio and overflowed microphone buffers for the post-ACK guard by continuously consuming and discarding microphone chunks while the acknowledgement is actually playing.
+
+Included scope: a non-blocking or observable playback handle for macOS `afplay`; a state-machine ACK playback path that starts playback, drains microphone chunks until playback completion, waits for and propagates playback errors, records safe drain metrics, and then begins post-playback processing from current audio; backward-compatible synchronous answer playback; fake playback handles and microphone sources; documentation, manual testing, and deterministic unit/smoke coverage.
+
+Excluded scope: changing the post-ACK quiet-boundary policy itself, preserving speech spoken over the acknowledgement, acoustic echo cancellation, DSP, microphone gain control, system-volume automation, wake-word changes, VAD/recording endpoint fixes, or changing the acknowledgement wording/audio asset.
+
+Core flows: after confirmed wake, the assistant starts the acknowledgement without blocking microphone consumption. While playback is running, every available microphone chunk is read and deliberately discarded as acknowledgement-contaminated audio; overflow/clipping/RMS/peak metrics are accumulated without entering ARMED or wake detection. The final chunk that overlaps playback completion is discarded. Playback completion or failure is joined deterministically. Only then does post-ACK processing read the next current microphone chunk. Normal answer playback remains synchronous and retains existing post-playback suppression.
+
+Constraints: no raw audio or secrets are logged; no unbounded worker thread or orphaned `afplay` process is allowed; playback failures retain actionable `PlaybackError` behavior; a blocking microphone read may extend at most one configured audio chunk beyond playback completion; ACK-disabled behavior and fake-backend behavior remain compatible; automated tests require no real microphone, speaker, process, OpenAI, or network.
+
+Ambiguities or assumptions: sounddevice's blocking `RawInputStream.read()` is the observed source of backlog when it is not called during synchronous playback. Reading one chunk at a time while polling an `afplay` handle is sufficient to keep the stream near real time. Speech that overlaps the audible acknowledgement is intentionally discarded in this feature because it cannot be separated from speaker echo without AEC; preserving speech that begins after playback belongs to the dependent handoff feature.
+
+Required capabilities: a testable playback process/handle boundary with poll/wait/error semantics, fake handles with deterministic completion, fake microphone chunks and overflow metadata, PCM RMS/peak helpers, state-transition logging capture, macOS `afplay`, and root recovery verification.
+
+Implementation paths: `src/player.py`, `src/state_machine.py`, `src/main.py` if protocol wiring changes, `tests/test_player.py`, `tests/test_state_machine.py`, fake-backend fixtures, `README.md`, `MANUAL_TESTING.md`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: player handle success/failure tests; ACK playback that drains multiple echo/overflow chunks without entering ARMED; proof that the first post-playback read is not a queued ACK chunk; synchronous answer-playback regression; ACK-disabled regression; fake-backend state sequence; focused unit tests; full unittest discovery; dry-run, fake-backend, diagnose, and final `./init.sh`.
+
+### Preserve Immediate Post-ACK Speech After A Synchronized Drain
+
+Goal: allow a user to begin a question immediately after the acknowledgement ends without requiring a preceding quiet interval that suppresses the utterance, while still preventing acknowledgement tail audio, overflow, or clipping from directly triggering ARMED.
+
+Included scope: a synchronized post-ACK handoff contract that is used only after successful playback-time microphone draining; quarantine of the single chunk that can overlap playback completion; routing subsequent live chunks into ARMED pre-roll immediately; safe quiet chunks as optional noise seeds rather than a prerequisite for retaining speech; baseline/energy/VAD gating that prevents quarantined or invalid chunks from triggering; bounded fallback cancellation when drain synchronization or useful post-ACK evidence is unavailable; diagnostics, documentation, manual tests, and deterministic regressions.
+
+Excluded scope: speech spoken during the audible acknowledgement, full acoustic echo cancellation, speaker identification, audio repair, automatic volume control, VAD dependency/diagnostic repair, Recording VAD endpointing, wake-model changes, streaming transcription, or removing local no-speech/transcript safety gates.
+
+Core flows: after F040 confirms that microphone consumption stayed synchronized through playback and discards the overlap chunk, the next non-overflow post-playback chunks enter ARMED pre-roll instead of being blindly suppressed until quiet. Quiet chunks may seed the noise floor; non-quiet or clipped live chunks are retained according to existing F039 rules but remain subject to ARMED baseline, energy, rolling-voice, last-chunk, and optional VAD gates. Immediate `一加一等于几` can therefore trigger and record with its prefix intact. Silence still times out locally. If playback-time synchronization failed or overflow indicates stale state, the assistant falls back to the conservative bounded quiet boundary and cannot trigger from unsafe residue.
+
+Constraints: no path may treat the quarantined overlap chunk, overflowed audio, or clipped audio as voice/noise evidence; clipped live PCM may be retained only as recording pre-roll under F039 semantics; ACK residue alone must not reach recording or OpenAI; ACK-disabled and guard-disabled compatibility remain explicit; the safe fallback remains bounded; tests use synthetic audio and fake handles without hardware or network.
+
+Ambiguities or assumptions: once F040 has continuously consumed the microphone and discarded the chunk overlapping playback completion, subsequent chunks are considered live post-playback input rather than stale queued acknowledgement audio. A small amount of physical speaker tail may remain, so it is preserved only as bounded pre-roll and cannot trigger without later valid rolling speech evidence. VAD remains optional; correctness cannot depend solely on WebRTC classification. The current mandatory `ACK_GUARD_MIN_QUIET_SECONDS` behavior remains available as a fallback rather than the normal synchronized path.
+
+Required capabilities: F040 playback/drain result metadata, current `_PostAckBoundaryResult` and `_ArmedChunk` boundaries, overflow/clipping metadata, bounded pre-roll, optional VAD fakes, captureable recorder input, deterministic timing/chunk fixtures, and root recovery verification.
+
+Implementation paths: `src/state_machine.py`, `src/player.py` result types if needed, `src/config.py` only if a compatibility/fallback switch is required, `.env.example`, `README.md`, `MANUAL_TESTING.md`, `tests/test_state_machine.py`, `tests/test_config.py` and `tests/test_documentation.py` when configuration changes, fake-backend fixtures, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: immediate speech after playback is fully present in captured pre-roll/WAV and transcript fixture; no required 0.20-second quiet pause on the synchronized path; ACK-only echo/tail cannot trigger recording; overlap/overflow/clipped chunks cannot drive voice/noise decisions; silence cancels before OpenAI; failed synchronization uses conservative fallback; ACK-disabled and VAD-disabled regressions; optional-VAD compatibility; five-cycle fake stability; focused tests, full discovery, dry-run, fake-backend, diagnose, and final `./init.sh`; final real-device acceptance repeats immediate `一加一等于几` and five wake-to-answer loops without ACK-boundary timeout or prefix loss.
+
+Decomposition decision: the work is split into F040 and F041 because eliminating playback-time microphone backlog is an independently verifiable player/audio-lifecycle capability, while preserving immediate live speech changes the higher-risk post-ACK safety contract. F041 depends on F040 so it can relax mandatory quiet suppression only when the stream is proven synchronized; combining both would make it difficult to distinguish stale-buffer defects from boundary-policy regressions during evaluation.
+
 ## 5. Verification Plan
 
 ### Optional VAD Gating And Recording Endpointing

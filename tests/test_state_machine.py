@@ -246,6 +246,36 @@ class FakePlayer:
         self.played.append(played_path)
 
 
+class FakePlaybackHandle:
+    def __init__(self, running_polls, *, wait_error=None):
+        self.running_polls = running_polls
+        self.poll_calls = 0
+        self.wait_calls = 0
+        self.wait_error = wait_error
+
+    def poll(self):
+        self.poll_calls += 1
+        if self.poll_calls <= self.running_polls:
+            return None
+        return 0
+
+    def wait(self):
+        self.wait_calls += 1
+        if self.wait_error is not None:
+            raise self.wait_error
+
+
+class FakeAsyncPlayer(FakePlayer):
+    def __init__(self, running_polls, *, wait_error=None):
+        super().__init__()
+        self.handle = FakePlaybackHandle(running_polls, wait_error=wait_error)
+        self.started = []
+
+    def start(self, path):
+        self.started.append(Path(path))
+        return self.handle
+
+
 def fake_record_audio(source, *, sample_rate, output_path, **kwargs):
     path = Path(output_path)
     with wave.open(str(path), "wb") as wav_file:
@@ -267,6 +297,317 @@ def fake_silent_record_audio(source, *, sample_rate, output_path, **kwargs):
 
 
 class StateMachineTests(unittest.TestCase):
+    def test_synchronized_ack_handoff_preserves_immediate_question_prefix(self):
+        logger = logging.getLogger("tests.state_machine.synchronized_ack_immediate_speech")
+        audio_source = FakeAudioSource(
+            [
+                WAKE_CHUNK,
+                WAKE_CHUNK,
+                CLIPPED_CHUNK,
+                LOUD_CHUNK,
+                LOUD_CHUNK,
+                LOUD_CHUNK,
+                LOUD_CHUNK,
+                LOUD_CHUNK,
+            ],
+            fallback_chunk=QUIET_CHUNK,
+        )
+        player = FakeAsyncPlayer(running_polls=2)
+        recorded_prefix = []
+
+        def capture_recording(source, *, sample_rate, output_path, **kwargs):
+            for _ in range(4):
+                recorded_prefix.append(source.read_chunk())
+            return fake_record_audio(source, sample_rate=sample_rate, output_path=output_path, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=str(ack_path),
+                    ack_guard_enabled=True,
+                    armed_baseline_seconds=0.30,
+                    armed_baseline_min_chunks=3,
+                    armed_voice_window_seconds=0.30,
+                    armed_voice_required_ratio=0.75,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(transcription="一加一等于几"),
+                player=player,
+                record_audio=capture_recording,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.transcription, "一加一等于几")
+        self.assertEqual(recorded_prefix, [LOUD_CHUNK] * 4)
+        self.assertNotIn(CLIPPED_CHUNK, recorded_prefix)
+        log_output = "\n".join(logs.output)
+        self.assertIn("synchronized live handoff", log_output)
+        self.assertIn("post_ack_synchronized=true", log_output)
+        self.assertIn("post_ack_quiet_observed=false", log_output)
+        self.assertIn("post_ack_boundary_ready=true", log_output)
+        self.assertIn("post_ack_suppressed_chunks=0", log_output)
+        self.assertIn("result=recording_started", log_output)
+
+    def test_synchronized_ack_tail_without_sustained_speech_cancels_locally(self):
+        logger = logging.getLogger("tests.state_machine.synchronized_ack_tail")
+        audio_source = FakeAudioSource(
+            [WAKE_CHUNK, WAKE_CHUNK, CLIPPED_CHUNK, LOUD_CHUNK],
+            fallback_chunk=QUIET_CHUNK,
+        )
+        player = FakeAsyncPlayer(running_polls=1)
+        openai_client = FakeOpenAIClient()
+
+        def fail_record(*args, **kwargs):
+            raise AssertionError("one live tail chunk must not trigger recording")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=str(ack_path),
+                    ack_guard_enabled=True,
+                    armed_no_speech_timeout_seconds=0.40,
+                    armed_baseline_seconds=0.30,
+                    armed_baseline_min_chunks=3,
+                    armed_voice_window_seconds=0.30,
+                    armed_voice_required_ratio=0.75,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=openai_client,
+                player=player,
+                record_audio=fail_record,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertTrue(result.cancelled)
+        self.assertEqual(result.cancellation_reason, "no_speech_after_wake")
+        self.assertIsNone(openai_client.transcribed_path)
+        log_output = "\n".join(logs.output)
+        self.assertIn("post_ack_synchronized=true", log_output)
+        self.assertIn("result=no_speech_timeout", log_output)
+
+    def test_synchronized_ack_handoff_supports_optional_vad_gate(self):
+        logger = logging.getLogger("tests.state_machine.synchronized_ack_vad")
+        boundary = _PostAckBoundaryResult(
+            False, 0, (), (), 0.0, 0, 0, 0, False, synchronized=True
+        )
+        machine = self._machine_for_armed_test(
+            FakeAudioSource([LOUD_CHUNK] * 8, fallback_chunk=QUIET_CHUNK),
+            logger=logger,
+            ack_guard_enabled=True,
+            armed_baseline_seconds=0.16,
+            armed_baseline_min_chunks=2,
+            armed_voice_window_seconds=0.16,
+            armed_voice_required_ratio=0.50,
+            armed_vad_required_ratio=0.75,
+            armed_vad_min_frames=2,
+            vad_detector=FakeVadDetector(1.0),
+        )
+
+        with self.assertLogs(logger, level="INFO") as logs:
+            chunks = machine._wait_for_armed_speech(post_ack_boundary=boundary)
+
+        self.assertIsNotNone(chunks)
+        log_output = "\n".join(logs.output)
+        self.assertIn("vad_ok=true", log_output)
+        self.assertIn("post_ack_synchronized=true", log_output)
+        self.assertIn("post_ack_boundary_ready=true", log_output)
+
+    def test_synchronized_ack_handoff_is_stable_for_five_fake_loops(self):
+        for loop_number in range(5):
+            with self.subTest(loop_number=loop_number), tempfile.TemporaryDirectory() as tmp_dir:
+                ack_path = Path(tmp_dir) / "ack.mp3"
+                ack_path.write_bytes(b"ack")
+                machine = VoiceAssistantStateMachine(
+                    settings=make_settings(
+                        wake_acknowledgement_enabled=True,
+                        wake_acknowledgement_audio_path=str(ack_path),
+                        ack_guard_enabled=True,
+                        armed_baseline_seconds=0.30,
+                        armed_baseline_min_chunks=3,
+                        armed_voice_window_seconds=0.30,
+                        armed_voice_required_ratio=0.75,
+                        post_playback_wake_cooldown_seconds=0,
+                        post_playback_quiet_seconds=0,
+                    ),
+                    audio_source=FakeAudioSource(
+                        [WAKE_CHUNK, WAKE_CHUNK, CLIPPED_CHUNK, *SPEECH_CHUNKS],
+                        fallback_chunk=QUIET_CHUNK,
+                    ),
+                    wake_detector=FakeWakeDetector(),
+                    openai_client=FakeOpenAIClient(transcription="一加一等于几"),
+                    player=FakeAsyncPlayer(running_polls=1),
+                    record_audio=fake_record_audio,
+                    input_path=Path(tmp_dir) / "input.wav",
+                    output_path=Path(tmp_dir) / "output.mp3",
+                )
+
+                result = machine.run_once()
+
+            self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+            self.assertEqual(result.transcription, "一加一等于几")
+            self.assertFalse(result.cancelled)
+
+    def test_ack_playback_drains_microphone_until_process_completion(self):
+        logger = logging.getLogger("tests.state_machine.ack_playback_drain")
+        audio_source = FakeAudioSource(
+            [LOUD_CHUNK, b"overflow", CLIPPED_CHUNK, QUIET_CHUNK],
+            fallback_chunk=QUIET_CHUNK,
+        )
+        player = FakeAsyncPlayer(running_polls=3)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=str(ack_path),
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(),
+                player=player,
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                machine._play_wake_acknowledgement()
+
+        self.assertEqual(player.started, [ack_path])
+        self.assertEqual(player.handle.wait_calls, 1)
+        self.assertEqual(len(audio_source.read_chunks), 3)
+        self.assertEqual(audio_source.read_chunk(), QUIET_CHUNK)
+        log_output = "\n".join(logs.output)
+        self.assertIn("playback microphone drain drained_chunks=3", log_output)
+        self.assertIn("overflow_chunks=1", log_output)
+        self.assertIn("clipped_chunks=1", log_output)
+        self.assertIn("max_peak=32767", log_output)
+        self.assertIn("completed=true", log_output)
+        self.assertIn("failure_stage=none", log_output)
+        self.assertIn("synchronized=false", log_output)
+
+    def test_ack_playback_read_failure_joins_process_and_logs_failure_metrics(self):
+        logger = logging.getLogger("tests.state_machine.ack_playback_read_failure")
+
+        class FailingAudioSource(FakeAudioSource):
+            def read_chunk(self):
+                if self.read_chunks:
+                    raise RuntimeError("microphone read failed")
+                return super().read_chunk()
+
+        audio_source = FailingAudioSource([LOUD_CHUNK])
+        player = FakeAsyncPlayer(running_polls=2)
+        machine = VoiceAssistantStateMachine(
+            settings=make_settings(wake_acknowledgement_enabled=True),
+            audio_source=audio_source,
+            wake_detector=FakeWakeDetector(),
+            openai_client=FakeOpenAIClient(),
+            player=player,
+            logger=logger,
+        )
+
+        with self.assertLogs(logger, level="INFO") as logs:
+            with self.assertRaisesRegex(RuntimeError, "microphone read failed"):
+                machine._play_wake_acknowledgement()
+
+        self.assertEqual(player.handle.wait_calls, 1)
+        log_output = "\n".join(logs.output)
+        self.assertIn("drained_chunks=1", log_output)
+        self.assertIn("completed=false", log_output)
+        self.assertIn("failure_stage=drain", log_output)
+        self.assertIn("synchronized=false", log_output)
+
+    def test_ack_playback_wait_failure_logs_failure_state(self):
+        logger = logging.getLogger("tests.state_machine.ack_playback_wait_failure")
+        player = FakeAsyncPlayer(running_polls=1, wait_error=RuntimeError("afplay failed"))
+        machine = VoiceAssistantStateMachine(
+            settings=make_settings(wake_acknowledgement_enabled=True),
+            audio_source=FakeAudioSource([LOUD_CHUNK]),
+            wake_detector=FakeWakeDetector(),
+            openai_client=FakeOpenAIClient(),
+            player=player,
+            logger=logger,
+        )
+
+        with self.assertLogs(logger, level="INFO") as logs:
+            with self.assertRaisesRegex(RuntimeError, "afplay failed"):
+                machine._play_wake_acknowledgement()
+
+        self.assertEqual(player.handle.wait_calls, 1)
+        log_output = "\n".join(logs.output)
+        self.assertIn("completed=false", log_output)
+        self.assertIn("failure_stage=wait", log_output)
+        self.assertIn("synchronized=false", log_output)
+
+    def test_ack_drain_overflow_uses_conservative_post_ack_fallback(self):
+        logger = logging.getLogger("tests.state_machine.ack_overflow_fallback")
+        audio_source = FakeAudioSource(
+            [
+                WAKE_CHUNK,
+                WAKE_CHUNK,
+                b"overflow",
+                QUIET_CHUNK,
+                QUIET_CHUNK,
+                *SPEECH_CHUNKS,
+            ],
+            fallback_chunk=QUIET_CHUNK,
+        )
+        player = FakeAsyncPlayer(running_polls=1)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=str(ack_path),
+                    ack_guard_enabled=True,
+                    ack_guard_min_quiet_seconds=0.16,
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=audio_source,
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(),
+                player=player,
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertEqual(result.final_state, AssistantState.WAIT_WAKE)
+        log_output = "\n".join(logs.output)
+        self.assertIn("completed=true failure_stage=none synchronized=false", log_output)
+        self.assertIn("waiting for safe post-ACK boundary", log_output)
+        self.assertIn("post_ack_synchronized=false", log_output)
+        self.assertIn("post_ack_suppressed_chunks=2", log_output)
+
     def _machine_for_armed_test(self, audio_source, *, logger, **setting_overrides):
         vad_detector = setting_overrides.pop("vad_detector", None)
         return VoiceAssistantStateMachine(

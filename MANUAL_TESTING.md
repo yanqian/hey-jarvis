@@ -152,6 +152,19 @@ result=no_speech_timeout` and no `State RECORDING` line. Manual case 2: say
 reports any preserved boundary chunks, and `armed_trigger` shows
 `baseline_ready=true` before recording starts.
 
+For the F040 playback-drain check, confirm each real acknowledgement logs
+`playback microphone drain` before the post-ACK boundary summary. The drain
+should consume the speaker-contaminated chunks while `afplay` is active and
+report `completed=true`; the first post-ACK overflow should no longer be caused
+by an unread playback backlog. Drained audio must not appear in
+`tmp/input.wav`. After a successful synchronized drain, F041 hands subsequent
+live audio directly into protected ARMED pre-roll without mandatory quiet
+suppression. Confirm that `synchronized live handoff` and
+`post_ack_synchronized=true` appear, then say `一加一等于几` immediately after
+the acknowledgement and verify the full prefix is present. Legacy/fake players
+without an observable playback handle must continue using the conservative
+quiet-boundary fallback.
+
 ## Acceptance Standard
 
 ### Optional VAD checks
@@ -229,6 +242,8 @@ The MVP is acceptable when:
 | M030 | Noisy cancel phrases | Say `Hey Jarvis`, wait for acknowledgement, then say short noisy variants such as `没事了`, `没事不用了`, `没事 谢谢`, `没事 后面有声音`, `取消吧`, `算了算了`, or `stop please`. Then try `没事的话帮我查天气`, `取消我明天的闹钟`, or `cancel my alarm tomorrow`. | Short noisy cancel variants return to `WAIT_WAKE` without chat/tool routing, answer TTS, playback, or chat-history changes, and logs show `match_mode=noisy_suffix`. Command-like continuations are not locally cancelled. |
 | M031 | Post-cancel wake suppression | Say `Hey Jarvis`, wait for acknowledgement, then say `算了算了` or remain silent through the ARMED timeout. Say nothing while speaker/microphone residue settles, then later say `Hey Jarvis` again and ask a normal question. | Local cancellation logs post-cancellation suppression, discarded chunks, quiet-gate status, and `max_suppressed_score`; residual wake-positive chunks do not trigger a second acknowledgement loop, and the later intentional wake works after quiet. |
 | M032 | Spoken Chinese cancel variants | Say `Hey Jarvis`, wait for acknowledgement, then say `不用啦`, `不用不用`, `不用不用了`, `不要了`, `没事儿`, `没事没事儿`, or `没事儿没事儿`. Then try `不用了帮我查天气`, `没事的话帮我查天气`, `取消我明天的闹钟`, or `不要取消我明天的闹钟`. | Colloquial cancel variants return through local cancellation and F031 post-cancellation suppression without chat/tool routing, answer TTS, playback, or chat-history changes. Command-like continuations are not locally cancelled and short non-cancel transcripts log `match_decision=not_cancelled`. |
+| M040 | Drain microphone during acknowledgement | Start the real assistant, wake it five times, and inspect each ACK_PLAYING sequence while the local acknowledgement plays. | Each sequence logs a completed playback microphone drain before the post-ACK boundary; playback-time chunks never enter the recorded WAV, no playback process is left running, and the post-ACK boundary starts from current rather than queued acknowledgement audio. |
+| M041 | Immediate speech after synchronized acknowledgement | On the real macOS path, say `Hey Jarvis` and begin `一加一等于几` immediately when the acknowledgement ends; repeat five times, then repeat once with silence and once with only a short click/tail sound. | Successful drains log `synchronized live handoff`; the full question prefix reaches `tmp/input.wav` without mandatory quiet suppression, five normal loops complete, and silence or a single tail sound returns locally without recording or OpenAI. |
 
 ## Known Manual Failures
 
