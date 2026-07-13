@@ -62,6 +62,7 @@ def make_settings(
     post_playback_max_suppression_seconds=DEFAULT_POST_PLAYBACK_MAX_SUPPRESSION_SECONDS,
     wake_confirmation_frames=DEFAULT_WAKE_CONFIRMATION_FRAMES,
     wake_acknowledgement_enabled=False,
+    wake_acknowledgement_text=DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
     wake_acknowledgement_audio_path=DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
     wake_acknowledgement_drain_seconds=DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
     ack_guard_enabled=False,
@@ -109,7 +110,7 @@ def make_settings(
         tts_voice=DEFAULT_TTS_VOICE,
         enable_tools=enable_tools,
         wake_acknowledgement_enabled=wake_acknowledgement_enabled,
-        wake_acknowledgement_text=DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
+        wake_acknowledgement_text=wake_acknowledgement_text,
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
         wake_acknowledgement_drain_seconds=wake_acknowledgement_drain_seconds,
         ack_guard_enabled=ack_guard_enabled,
@@ -303,7 +304,8 @@ class StateMachineTests(unittest.TestCase):
             [
                 WAKE_CHUNK,
                 WAKE_CHUNK,
-                CLIPPED_CHUNK,
+                QUIET_CHUNK,
+                LOUD_CHUNK,
                 LOUD_CHUNK,
                 LOUD_CHUNK,
                 LOUD_CHUNK,
@@ -312,7 +314,7 @@ class StateMachineTests(unittest.TestCase):
             ],
             fallback_chunk=QUIET_CHUNK,
         )
-        player = FakeAsyncPlayer(running_polls=2)
+        player = FakeAsyncPlayer(running_polls=3)
         recorded_prefix = []
 
         def capture_recording(source, *, sample_rate, output_path, **kwargs):
@@ -349,14 +351,16 @@ class StateMachineTests(unittest.TestCase):
                 result = machine.run_once()
 
         self.assertEqual(result.transcription, "一加一等于几")
-        self.assertEqual(recorded_prefix, [LOUD_CHUNK] * 4)
-        self.assertNotIn(CLIPPED_CHUNK, recorded_prefix)
+        self.assertEqual(recorded_prefix, [QUIET_CHUNK, LOUD_CHUNK, LOUD_CHUNK, LOUD_CHUNK])
         log_output = "\n".join(logs.output)
         self.assertIn("synchronized live handoff", log_output)
         self.assertIn("post_ack_synchronized=true", log_output)
         self.assertIn("post_ack_quiet_observed=false", log_output)
         self.assertIn("post_ack_boundary_ready=true", log_output)
         self.assertIn("post_ack_suppressed_chunks=0", log_output)
+        self.assertIn("preserved_chunks=2", log_output)
+        self.assertIn("noise_seed_count=1", log_output)
+        self.assertIn("quarantined_overlap_chunks=1", log_output)
         self.assertIn("result=recording_started", log_output)
 
     def test_synchronized_ack_tail_without_sustained_speech_cancels_locally(self):
@@ -410,7 +414,7 @@ class StateMachineTests(unittest.TestCase):
     def test_synchronized_ack_handoff_supports_optional_vad_gate(self):
         logger = logging.getLogger("tests.state_machine.synchronized_ack_vad")
         boundary = _PostAckBoundaryResult(
-            False, 0, (), (), 0.0, 0, 0, 0, False, synchronized=True
+            False, 0, (), (QUIET_CHUNK,), 0.0, 0, 0, 0, False, synchronized=True
         )
         machine = self._machine_for_armed_test(
             FakeAudioSource([LOUD_CHUNK] * 8, fallback_chunk=QUIET_CHUNK),
@@ -426,7 +430,10 @@ class StateMachineTests(unittest.TestCase):
         )
 
         with self.assertLogs(logger, level="INFO") as logs:
-            chunks = machine._wait_for_armed_speech(post_ack_boundary=boundary)
+            chunks = machine._wait_for_armed_speech(
+                initial_noise_seed=boundary.noise_seed_chunks,
+                post_ack_boundary=boundary,
+            )
 
         self.assertIsNotNone(chunks)
         log_output = "\n".join(logs.output)
@@ -452,12 +459,12 @@ class StateMachineTests(unittest.TestCase):
                         post_playback_quiet_seconds=0,
                     ),
                     audio_source=FakeAudioSource(
-                        [WAKE_CHUNK, WAKE_CHUNK, CLIPPED_CHUNK, *SPEECH_CHUNKS],
+                        [WAKE_CHUNK, WAKE_CHUNK, QUIET_CHUNK, LOUD_CHUNK, *SPEECH_CHUNKS],
                         fallback_chunk=QUIET_CHUNK,
                     ),
                     wake_detector=FakeWakeDetector(),
                     openai_client=FakeOpenAIClient(transcription="一加一等于几"),
-                    player=FakeAsyncPlayer(running_polls=1),
+                    player=FakeAsyncPlayer(running_polls=2),
                     record_audio=fake_record_audio,
                     input_path=Path(tmp_dir) / "input.wav",
                     output_path=Path(tmp_dir) / "output.mp3",
@@ -507,6 +514,49 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("completed=true", log_output)
         self.assertIn("failure_stage=none", log_output)
         self.assertIn("synchronized=false", log_output)
+
+    def test_synchronized_ack_without_noise_seed_fails_closed(self):
+        logger = logging.getLogger("tests.state_machine.synchronized_ack_no_noise")
+        boundary = _PostAckBoundaryResult(
+            False, 0, (LOUD_CHUNK,), (), 0.0, 0, 0, 0, False, synchronized=True
+        )
+        machine = self._machine_for_armed_test(
+            FakeAudioSource([LOUD_CHUNK] * 5, fallback_chunk=QUIET_CHUNK),
+            logger=logger,
+            ack_guard_enabled=True,
+            armed_no_speech_timeout_seconds=0.40,
+            armed_baseline_seconds=0.16,
+            armed_baseline_min_chunks=2,
+            armed_voice_window_seconds=0.16,
+            armed_voice_required_ratio=0.50,
+        )
+
+        with self.assertLogs(logger, level="INFO") as logs:
+            chunks = machine._wait_for_armed_speech(post_ack_boundary=boundary)
+
+        self.assertIsNone(chunks)
+        self.assertIn("noise_floor_has_samples=false", "\n".join(logs.output))
+
+    def test_transcription_removes_exact_acknowledgement_prefix_when_question_remains(self):
+        machine = self._machine_for_armed_test(
+            FakeAudioSource(),
+            logger=logging.getLogger("tests.state_machine.ack_prefix"),
+            wake_acknowledgement_text="嗯",
+        )
+
+        cleaned, removed = machine._remove_acknowledgement_prefix("嗯，一加一等于几")
+        phonetic_cleaned, phonetic_removed = machine._remove_acknowledgement_prefix("n一加一等于几")
+        ack_only, ack_only_removed = machine._remove_acknowledgement_prefix("嗯。")
+        english, english_removed = machine._remove_acknowledgement_prefix("never mind")
+
+        self.assertEqual(cleaned, "一加一等于几")
+        self.assertTrue(removed)
+        self.assertEqual(phonetic_cleaned, "一加一等于几")
+        self.assertTrue(phonetic_removed)
+        self.assertEqual(ack_only, "嗯。")
+        self.assertFalse(ack_only_removed)
+        self.assertEqual(english, "never mind")
+        self.assertFalse(english_removed)
 
     def test_ack_playback_read_failure_joins_process_and_logs_failure_metrics(self):
         logger = logging.getLogger("tests.state_machine.ack_playback_read_failure")

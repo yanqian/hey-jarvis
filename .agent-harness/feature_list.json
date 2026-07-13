@@ -863,6 +863,25 @@
       "last_error": "",
       "priority": "P1",
       "depends_on": ["F026"]
+    },
+    {
+      "id": "F043",
+      "title": "Preserve speech overlapping wake acknowledgement",
+      "description": "Buffer a bounded safe tail while wake acknowledgement audio plays, then use post-playback speech evidence and a real noise floor to retain an overlapping question prefix without allowing acknowledgement echo to trigger recording by itself.",
+      "acceptance": [
+        "Observable ACK playback returns a structured drain handoff containing bounded safe playback-tail chunks, useful low-energy noise-seed chunks, overlap quarantine and drain metrics; overflowed chunks are omitted, clipped chunks cannot become evidence, and failure or overflow preserves the conservative quiet-boundary fallback.",
+        "Playback-time chunks alone cannot satisfy the ARMED voiced window, but when a question begins during acknowledgement and continues after playback, valid post-playback energy, rolling-voice, latest-chunk, optional-VAD, baseline, and useful-noise-floor evidence can trigger recording with the retained playback tail included as protected pre-roll.",
+        "Synchronized ARMED fails closed when useful noise-floor samples are absent and logs noise_floor_has_samples, playback-tail duration/counts, noise-seed counts, quarantined overlap, synchronization, and fallback decisions without raw audio or secrets.",
+        "Acknowledgement echo or silence alone cancels locally without recording or OpenAI, while a conservative exact configured acknowledgement-prefix cleanup removes a leading acknowledgement STT artifact only when useful question text remains; acknowledgement-only and existing cancel behavior remain local.",
+        "ACK-disabled, guard-disabled, synchronous/fake player, VAD-disabled, optional-VAD, clipped/overflow, post-cancellation, post-answer-playback, and fake-backend flows remain deterministic; documentation clearly states that speech must continue past playback completion because full AEC is out of scope.",
+        "Focused state-machine/config/documentation tests, full unittest discovery, dry-run, fake-backend, diagnose, final ./init.sh, and documented real-device retesting cover speech during acknowledgement, at playback completion, and one second afterward without requiring live hardware, OpenAI, speaker, or network in automated tests."
+      ],
+      "passes": false,
+      "status": "in_progress",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": ["F040", "F041"]
     }
   ]
 }

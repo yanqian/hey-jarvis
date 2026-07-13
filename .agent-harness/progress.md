@@ -128,9 +128,13 @@ F041's first cold-start evaluation failed because a completed ACK drain was trus
 
 F041 has been completed after separate cold-start evaluator approval. Only completed zero-overflow ACK drains now enable synchronized live handoff; overflowed drains fall back to the bounded quiet boundary. Immediate current speech enters protected ARMED pre-roll without mandatory quiet suppression, while overlap, overflow, clipping, tail-only audio, silence, baseline, rolling voice, latest-chunk, and optional VAD protections remain enforced. Approval is recorded as `EVAL_PASS: F041` in `.agent-harness/runs/F041-evaluation-pass.md`.
 
+F043 coding is complete through interactive fast-work fallback after `make -C .agent-harness work-fast` failed its configured Codex Evaluator Agent runtime check before handoff. Real logs proved F041 discarded questions that began during the roughly 18-chunk acknowledgement playback drain. The implementation now retains a bounded safe playback tail, quarantines the completion-overlap chunk, extracts low-energy noise seeds, requires a useful noise floor before synchronized ARMED triggering, and removes only an exact leading configured acknowledgement from STT when useful question text remains. Playback-time audio cannot trigger by itself; the supported no-AEC boundary requires user speech to continue after playback. Focused state-machine tests, full discovery with 209 tests, dry-run, fake-backend, and documentation checks pass. Coding evidence is recorded in `.agent-harness/runs/F043-fast-coding.md`; F043 remains in progress pending separate cold-start evaluator approval and real-device retesting.
+
+F043 real-device retesting confirmed playback-overlap prefix preservation, but OpenAI STT rendered the configured `嗯` acknowledgement residue as ASCII `n` in inputs such as `n一加一等于几`. The coding retry adds a configuration-specific narrow cleanup for a single leading `n` or `N` immediately followed by CJK text when the configured acknowledgement is `嗯`; it does not alter ordinary English text. One run still transcribed `n加一等于几`, showing a separately lost spoken `一` in that trial rather than only an ACK artifact.
+
 ## Next Feature
 
-No unfinished feature is currently planned.
+F043 - Preserve speech overlapping wake acknowledgement; coding is complete and separate evaluator approval is pending.
 
 ## Known Issues
 

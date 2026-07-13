@@ -23,6 +23,26 @@ audio from:
 python -m src.main --prepare-acknowledgement
 ```
 
+## Wake acknowledgement overlap
+
+Run `python -m src.main` and repeat each case at least three times with the same
+question, such as `一加一等于几`:
+
+1. Start near the end of the configured acknowledgement (`嗯` in the current
+   local configuration) and continue beyond playback completion. The
+   complete question prefix should be transcribed and answered.
+2. Start exactly as `嗯` completes. The complete question should be captured
+   without an ACK-boundary timeout.
+3. Wait one second after `嗯`, then speak. This stable path must remain
+   successful.
+4. Do not speak after waking. ACK echo alone must end as
+   `no_speech_after_wake` without recording or OpenAI.
+
+Inspect the log for `playback handoff`, `quarantined_overlap_chunks=1`, a useful
+`noise_seed_count`, and `noise_floor_has_samples=true` on `armed_trigger`.
+Playback-only audio must not produce `recording_started`. Speech spoken entirely
+before the acknowledgement finishes is not supported without acoustic echo cancellation.
+
 ## Recording Behavior
 
 The MVP enters `ARMED` after the wake word is detected, the acknowledgement

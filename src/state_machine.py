@@ -113,6 +113,15 @@ class _PostAckBoundaryResult:
     synchronized: bool = False
 
 
+@dataclass(frozen=True)
+class _AckPlaybackDrainResult:
+    synchronized: bool
+    preserved_chunks: tuple[bytes, ...] = ()
+    noise_seed_chunks: tuple[bytes, ...] = ()
+    drained_chunks: int = 0
+    quarantined_overlap_chunks: int = 0
+
+
 class VoiceAssistantStateMachine:
     """Run the WAIT_WAKE to PLAYING flow and return to wake listening."""
 
@@ -153,13 +162,13 @@ class VoiceAssistantStateMachine:
 
         if self.settings.wake_acknowledgement_enabled:
             self._set_state(AssistantState.ACK_PLAYING)
-            ack_playback_synchronized = self._play_wake_acknowledgement()
+            ack_playback_drain = self._play_wake_acknowledgement()
             self._logger.info(
                 "State ACK_PLAYING: played wake acknowledgement from %s",
                 self.settings.wake_acknowledgement_audio_path,
             )
             post_ack_boundary = self._wait_for_post_ack_boundary(
-                playback_synchronized=ack_playback_synchronized
+                playback_drain=ack_playback_drain
             )
             if post_ack_boundary.timed_out and not post_ack_boundary.preserved_chunks:
                 return self._cancel_to_wait_wake("no_speech_after_wake")
@@ -195,6 +204,11 @@ class VoiceAssistantStateMachine:
                 return self._cancel_to_wait_wake("empty_transcript", recording=recording)
             return self._recover_from_openai_error(recording, exc)
         self._logger.info("State TRANSCRIBE: received transcription")
+        transcription, acknowledgement_prefix_removed = self._remove_acknowledgement_prefix(transcription)
+        if acknowledgement_prefix_removed:
+            self._logger.info(
+                "State TRANSCRIBE: removed configured acknowledgement prefix from mixed recording"
+            )
         transcript_cancel_match = self._transcript_cancellation_match(transcription)
         if transcript_cancel_match is not None:
             self._logger.info(
@@ -528,7 +542,11 @@ class VoiceAssistantStateMachine:
                 elapsed_seconds >= self.settings.armed_baseline_seconds
                 and valid_chunks >= self.settings.armed_baseline_min_chunks
                 and post_ack_boundary_ready
-                and (not protected_post_ack or bool(noise_samples))
+                and (
+                    post_ack_boundary is None
+                    or not self.settings.ack_guard_enabled
+                    or bool(noise_samples)
+                )
             )
             if baseline_ready and baseline_ready_after is None:
                 baseline_ready_after = elapsed_seconds
@@ -609,7 +627,11 @@ class VoiceAssistantStateMachine:
             elapsed_seconds >= self.settings.armed_baseline_seconds
             and valid_chunks >= self.settings.armed_baseline_min_chunks
             and post_ack_boundary_ready
-            and (not protected_post_ack or bool(noise_samples))
+            and (
+                post_ack_boundary is None
+                or not self.settings.ack_guard_enabled
+                or bool(noise_samples)
+            )
         )
         self._logger.info(
             (
@@ -659,20 +681,22 @@ class VoiceAssistantStateMachine:
         )
         return None
 
-    def _play_wake_acknowledgement(self) -> bool:
+    def _play_wake_acknowledgement(self) -> _AckPlaybackDrainResult:
         start_playback = getattr(self.player, "start", None)
         if not callable(start_playback):
             self.player.play(self.settings.wake_acknowledgement_audio_path)
             self._logger.info(
                 "State ACK_PLAYING: synchronous playback fallback; microphone drain unavailable"
             )
-            return False
+            return _AckPlaybackDrainResult(synchronized=False)
 
         drained_chunks = 0
         overflow_chunks = 0
         clipped_chunks = 0
         max_rms = 0.0
         max_peak = 0
+        retained_chunks: deque[tuple[bytes, float, float, int, bool]] = deque()
+        retained_seconds = 0.0
         failure_stage = "start"
         try:
             handle = start_playback(self.settings.wake_acknowledgement_audio_path)
@@ -700,6 +724,23 @@ class VoiceAssistantStateMachine:
                 overflowed = bool(getattr(self.audio_source, "last_overflowed", False))
                 overflow_chunks += int(overflowed)
                 clipped_chunks += int(peak >= self.settings.armed_clip_reject_peak)
+                chunk_seconds = max(
+                    _chunk_duration_seconds(chunk, self.settings.sample_rate),
+                    1.0 / self.settings.sample_rate,
+                )
+                if not overflowed:
+                    retained_chunks.append(
+                        (
+                            chunk,
+                            chunk_seconds,
+                            rms,
+                            peak,
+                            peak >= self.settings.armed_clip_reject_peak,
+                        )
+                    )
+                    retained_seconds += chunk_seconds
+                    while retained_chunks and retained_seconds > self.settings.armed_pre_roll_seconds:
+                        retained_seconds -= retained_chunks.popleft()[1]
         except Exception:
             try:
                 handle.wait()
@@ -737,6 +778,17 @@ class VoiceAssistantStateMachine:
             raise
 
         synchronized = overflow_chunks == 0
+        quarantined_overlap_chunks = 0
+        if retained_chunks:
+            retained_seconds -= retained_chunks[-1][1]
+            retained_chunks.pop()
+            quarantined_overlap_chunks = 1
+        preserved_chunks = tuple(item[0] for item in retained_chunks)
+        noise_seed_chunks = tuple(
+            item[0]
+            for item in retained_chunks
+            if not item[4] and item[2] <= self.settings.ack_guard_quiet_rms
+        )
         self._log_ack_playback_drain(
             drained_chunks,
             overflow_chunks,
@@ -747,7 +799,21 @@ class VoiceAssistantStateMachine:
             failure_stage="none",
             synchronized=synchronized,
         )
-        return synchronized
+        self._logger.info(
+            "State ACK_PLAYING: playback handoff preserved_chunks=%s preserved_ms=%s "
+            "noise_seed_count=%s quarantined_overlap_chunks=%s",
+            len(preserved_chunks),
+            int(round(retained_seconds * 1000)),
+            len(noise_seed_chunks),
+            quarantined_overlap_chunks,
+        )
+        return _AckPlaybackDrainResult(
+            synchronized=synchronized,
+            preserved_chunks=preserved_chunks if synchronized else (),
+            noise_seed_chunks=noise_seed_chunks if synchronized else (),
+            drained_chunks=drained_chunks,
+            quarantined_overlap_chunks=quarantined_overlap_chunks,
+        )
 
     def _log_ack_playback_drain(
         self,
@@ -812,6 +878,24 @@ class VoiceAssistantStateMachine:
             return "silent_recording"
         return None
 
+    def _remove_acknowledgement_prefix(self, transcription: str) -> tuple[str, bool]:
+        """Remove only an exact leading configured ACK when useful text follows it."""
+
+        text = transcription.strip()
+        acknowledgement = self.settings.wake_acknowledgement_text.strip()
+        if not text or not acknowledgement:
+            return transcription, False
+        if text.startswith(acknowledgement):
+            remainder = text[len(acknowledgement) :]
+        elif acknowledgement == "嗯" and re.match(r"^[nN](?=[\u3400-\u9fff])", text):
+            remainder = text[1:]
+        else:
+            return transcription, False
+        remainder = re.sub(r"^[\s,，。.!！?？:：;；、]+", "", remainder).strip()
+        if len(_normalize_transcript(remainder).replace(" ", "")) < self.settings.min_transcript_length:
+            return transcription, False
+        return remainder, True
+
     def _transcript_cancellation_match(self, transcription: str) -> _TranscriptCancellationMatch | None:
         normalized = _normalize_transcript(transcription)
         compact = normalized.replace(" ", "")
@@ -848,21 +932,22 @@ class VoiceAssistantStateMachine:
     def _wait_for_post_ack_boundary(
         self,
         *,
-        playback_synchronized: bool = False,
+        playback_drain: _AckPlaybackDrainResult | None = None,
     ) -> _PostAckBoundaryResult:
         if not self.settings.ack_guard_enabled:
             self._drain_wake_acknowledgement_audio()
             return _PostAckBoundaryResult(True, 0, (), (), 0.0, 0, 0, 0, False)
 
-        if playback_synchronized:
+        if playback_drain is not None and playback_drain.synchronized:
             self._logger.info(
-                "State ACK_PLAYING: synchronized live handoff; post-ACK audio enters protected ARMED pre-roll without mandatory quiet suppression"
+                "State ACK_PLAYING: synchronized live handoff; buffered playback tail enters protected "
+                "ARMED pre-roll and requires post-playback voice plus useful noise-floor evidence"
             )
             return _PostAckBoundaryResult(
                 quiet_observed=False,
                 suppressed_chunks=0,
-                preserved_chunks=(),
-                noise_seed_chunks=(),
+                preserved_chunks=playback_drain.preserved_chunks,
+                noise_seed_chunks=playback_drain.noise_seed_chunks,
                 max_rms=0.0,
                 max_peak=0,
                 overflow_chunks=0,

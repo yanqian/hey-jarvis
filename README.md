@@ -244,19 +244,20 @@ ARMED with `post_ack_quiet_observed=false`. `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`
 remains the legacy fixed drain when the guard is disabled.
 
 On the real macOS path, acknowledgement playback is started asynchronously so
-the assistant can continuously read and discard microphone chunks while
-`afplay` is running. This prevents speaker echo from accumulating as stale
-input and reduces the overflow burst that previously appeared only after the
-acknowledgement finished. The drain summary reports chunk, overflow, clipping,
-RMS, peak, and completion metrics. Audio drained during playback, including the
-final chunk that may overlap playback completion, never enters ARMED or
-recording pre-roll. After a successful synchronized drain, the next live
-post-playback chunk enters bounded ARMED pre-roll immediately instead of first
-being suppressed until `ACK_GUARD_MIN_QUIET_SECONDS` is observed. The overlap
-chunk is already quarantined by the playback drain, while ARMED still requires
-its baseline, energy, rolling-voice, latest-chunk, and optional VAD gates before
-recording. If the player does not support synchronized draining, the assistant
-falls back to the existing conservative bounded quiet boundary.
+the assistant can continuously consume microphone chunks while `afplay` is
+running. This prevents speaker echo from accumulating as stale input and
+reduces overflow. The drain summary reports chunk, overflow, clipping, RMS,
+peak, and completion metrics. A bounded safe playback tail is retained as
+protected recording pre-roll, while the final chunk overlapping playback
+completion is quarantined. After a successful zero-overflow drain, new
+post-playback speech can trigger ARMED through its baseline, real noise-floor,
+energy, rolling-voice, latest-chunk, and optional VAD gates; the buffered tail
+then preserves a question that began while the configured acknowledgement was still playing.
+Playback-time audio alone cannot trigger recording. With one microphone and no
+acoustic echo cancellation, the question must continue beyond playback
+completion; a question spoken entirely during the acknowledgement is intentionally
+unsupported. Unsafe synchronization and legacy players fall back to the
+existing conservative bounded quiet boundary.
 
 `ARMED_NO_SPEECH_TIMEOUT_SECONDS` controls how long the assistant waits after
 wake acknowledgement for user speech before quietly returning to `WAIT_WAKE`.

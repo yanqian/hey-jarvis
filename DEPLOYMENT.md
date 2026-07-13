@@ -44,6 +44,12 @@ CANCEL_PHRASES=取消,没事,不用了,算了,stop,cancel,never mind
 ```
 
 Manual acceptance cases are tracked in [MANUAL_TESTING.md](MANUAL_TESTING.md).
+For acknowledgement overlap testing, begin the question near the end of the
+configured acknowledgement, currently `嗯`,
+and continue speaking after playback completes. The synchronized path retains a
+bounded playback tail but requires post-playback speech and a real noise-floor
+sample before recording starts. Speaking the whole question before the acknowledgement
+finishes requires acoustic echo cancellation and is outside the current MVP.
 
 On macOS ARM64, do not deploy with `WAKE_INFERENCE_FRAMEWORK=onnx`; the project
 intentionally uses TFLite there because local debugging found ONNX wake-word
@@ -389,11 +395,10 @@ Only start the real assistant after recovery and diagnostics pass.
   misclassified acknowledgement residue or background noise as speech before it
   had a useful noise-floor baseline. Record the `armed_trigger`, recording, and
   cancellation lines for follow-up.
-- The first syllable of a question is missing after acknowledgement, for
-  example `一加一等于几` becomes `加一等于几`: the first syllable may have
-  landed during acknowledgement playback, the acknowledgement drain window, or
-  an overflowed microphone chunk before ARMED pre-roll began. For current
-  manual testing, wait 0.3-0.5 seconds after `在呢` finishes before speaking.
+- The first syllable of a question is missing after acknowledgement: confirm
+  the question continues beyond playback completion and inspect `playback
+  handoff`, `noise_seed_count`, `quarantined_overlap_chunks`, and
+  `noise_floor_has_samples`. Overflowed drains use the conservative fallback.
 - Wake acknowledgement repeats after a local cancellation: keep
   `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` and `POST_PLAYBACK_QUIET_SECONDS`
   enabled. Cancellation should log post-cancellation suppression and should not
