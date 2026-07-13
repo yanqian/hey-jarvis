@@ -845,6 +845,24 @@
       "last_error": "",
       "priority": "P0",
       "depends_on": ["F040"]
+    },
+    {
+      "id": "F042",
+      "title": "Route personal US watchlist company names",
+      "description": "Expand deterministic stock aliases to the user's supplied US watchlist, including SpaceX/SPCX and common English and Chinese names, while preserving conservative stock intent and the existing Finnhub quote path.",
+      "acceptance": [
+        "The stock router deterministically maps English and common Simplified/Traditional Chinese names for the supplied watchlist symbols BABA, COST, BIDU, FUTU, SAP, AMD, INTC, NVDA, TSLA, BULL, HOOD, AXP, NFLX, WMT, ORCL, GRAB, IBKR, MSFT, BRK.B, KO, QQQ, SE, GOOG, AAPL, IVV, PDD, ASML, TSM, MU, and SPCX while preserving existing AMZN and META aliases.",
+        "SpaceX resolves to SPCX; Google, Alphabet, and 谷歌 resolve to GOOGL per the user's final decision; explicit uppercase GOOG and GOOGL requests retain the exact ticker and take precedence over name aliases.",
+        "Company and ETF name aliases require explicit stock intent, preserve bare-name ambiguity behavior such as 苹果怎么样, use safe Latin word boundaries, and do not introduce Singapore-market routing, live lookup, broad conversational guesses, or secret disclosure.",
+        "Table-driven router tests cover every watchlist symbol plus representative English and Chinese aliases, SpaceX and GOOG/GOOGL regressions, explicit ticker precedence, and non-stock ambiguity; mocked answer-path or text-debug tests prove the existing Finnhub provider receives the resolved symbol without live network access.",
+        "README or manual documentation describes the personal US watchlist name coverage and representative requests, and focused tests, full unittest discovery, and final ./init.sh pass without changing Finnhub quote semantics or requiring live audio, OpenAI, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": ["F026"]
     }
   ]
 }

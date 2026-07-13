@@ -956,6 +956,28 @@ Verification surface: VAD unit tests; ARMED speech/non-speech and merged post-AC
 
 Decomposition decision: this is one optional audio-classification capability with shared configuration and runtime wiring. The default-disabled boundary keeps it independently releasable while F038/F039 remain merged prerequisites.
 
+### Personal US Watchlist Stock Name Routing
+
+Goal: let the assistant resolve the English and common Simplified/Traditional Chinese names from the user's supplied US watchlist to the intended ticker before reusing the existing Finnhub quote flow.
+
+Included scope: deterministic aliases for the watchlist symbols BABA, COST, BIDU, FUTU, SAP, AMD, INTC, NVDA, TSLA, BULL, HOOD, AXP, NFLX, WMT, ORCL, GRAB, IBKR, MSFT, BRK.B, KO, QQQ, SE, GOOG, AAPL, IVV, PDD, ASML, TSM, MU, and SPCX; preservation of the existing AMZN and META aliases; `Google`, `Alphabet`, and `谷歌` resolving to GOOGL while explicit GOOG still resolves to GOOG; SpaceX resolving to SPCX; company/ETF name requests remaining conservative and requiring explicit stock intent; documentation and deterministic routing/answer-path tests.
+
+Excluded scope: Singapore/SGX symbols or providers, dynamic Top 100 membership, watchlist persistence or UI, portfolio positions, bulk quote requests, ranking, recommendations, live-network automated tests, provider replacement, and changing Finnhub freshness or subscription behavior.
+
+Core flows: a user asks `SpaceX 股价`, `阿里巴巴股票`, `Costco stock price`, `台积电股价`, or `纳斯达克100 ETF 股价`; the router selects the stock tool and emits SPCX, BABA, COST, TSM, or QQQ respectively; the existing Finnhub provider supplies the quote. `Google 股价`, `Alphabet stock price`, and `谷歌股价` resolve to GOOGL, while explicit uppercase `GOOG 股价` and `GOOGL 股价` retain their exact ticker. A bare ambiguous company word without a stock marker remains ordinary chat rather than triggering a realtime quote.
+
+Constraints: aliases are project-owned deterministic data and must not make network calls; explicit uppercase ticker extraction takes precedence over aliases; aliases must use word boundaries for Latin text, avoid overly broad Chinese nicknames, preserve existing ambiguity behavior such as bare `苹果怎么样`, and never expose the Finnhub key. Automated verification uses mocked provider results only.
+
+Ambiguities or assumptions: the screenshots are the authoritative personal US watchlist even when an issuer is foreign or an entry is an ETF. SPCX is Space Exploration Technologies Corp. for this current watchlist. GOOG remains queryable explicitly, but natural Google/Alphabet names intentionally choose GOOGL per the user's final decision. English issuer names and common unambiguous Chinese names are included; conversational descriptions such as `马斯克的公司` are excluded because they are not stable identifiers.
+
+Required capabilities: the existing stock router, ticker-first extraction, Finnhub provider boundary and mocked quote fixture, Unicode alias matching, text-debug path, documentation tests, and root recovery verification. No new credential, dependency, service, or network capability is required.
+
+Implementation paths: `src/tools/router.py`, `tests/test_tools.py`, `README.md`, `MANUAL_TESTING.md` when useful, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: table-driven alias tests for every watchlist ticker and representative English/Simplified/Traditional names; explicit GOOG/GOOGL precedence tests; SpaceX/SPCX regression; bare-name ambiguity tests; mocked stock answer-path/text-debug checks; full unittest discovery and final `./init.sh`.
+
+Decomposition decision: this is one focused feature because every alias shares the same deterministic routing boundary and mocked verification surface, while the existing Finnhub provider and quote response behavior remain unchanged. SGX support is intentionally excluded after live verification showed the configured Finnhub account returns HTTP 403 for those symbols.
+
 Run:
 
 ```bash

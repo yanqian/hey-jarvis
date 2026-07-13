@@ -199,6 +199,44 @@ class ToolRoutingTests(unittest.TestCase):
                 self.assertEqual(route.category, "stock")
                 self.assertEqual(route.params["symbol"], expected_symbol)
 
+    def test_routes_personal_us_watchlist_names(self):
+        cases = {
+            "阿里巴巴股价": "BABA", "Costco stock price": "COST", "百度股票": "BIDU",
+            "富途控股股价": "FUTU", "思愛普股價": "SAP", "Advanced Micro Devices stock price": "AMD",
+            "英特爾股票": "INTC", "NVIDIA stock price": "NVDA", "特斯拉股价": "TSLA",
+            "微牛股价": "BULL", "Robinhood stock price": "HOOD", "美國運通股價": "AXP",
+            "奈飛股票": "NFLX", "沃尔玛股价": "WMT", "甲骨文股票": "ORCL",
+            "Grab Holdings stock price": "GRAB", "盈透證券股價": "IBKR", "Microsoft stock price": "MSFT",
+            "伯克希爾股價": "BRK.B", "可口可樂股票": "KO", "納斯達克100 ETF股價": "QQQ",
+            "冬海集團股價": "SE", "Google stock price": "GOOGL", "Apple stock price": "AAPL",
+            "iShares Core S&P 500 股价": "IVV", "標普500 ETF股價": "IVV",
+            "拼多多控股股价": "PDD", "阿斯麥股票": "ASML",
+            "台積電股價": "TSM", "美光科技股票": "MU", "SpaceX 股价": "SPCX",
+        }
+
+        for text, expected_symbol in cases.items():
+            with self.subTest(text=text):
+                route = route_text(text)
+                self.assertEqual(route.category, "stock")
+                self.assertEqual(route.params["symbol"], expected_symbol)
+
+    def test_google_names_choose_googl_but_explicit_tickers_take_precedence(self):
+        cases = {
+            "Google 股价": "GOOGL", "Alphabet stock price": "GOOGL", "谷歌股价": "GOOGL",
+            "GOOG 股价": "GOOG", "GOOGL 股价": "GOOGL", "GOOG Google stock price": "GOOG",
+        }
+
+        for text, expected_symbol in cases.items():
+            with self.subTest(text=text):
+                route = route_text(text)
+                self.assertEqual(route.category, "stock")
+                self.assertEqual(route.params["symbol"], expected_symbol)
+
+    def test_watchlist_names_without_stock_intent_remain_ordinary_chat(self):
+        for text in ("苹果怎么样", "SpaceX怎么样", "Costco membership", "我喜欢拼多多"):
+            with self.subTest(text=text):
+                self.assertEqual(route_text(text).category, "none")
+
     def test_stock_marker_without_symbol_returns_structured_unknown_symbol_error(self):
         route = route_text("stock market today")
         result = execute_route(route, provider_config=ProviderConfig(finnhub_api_key="fh-secret"))
@@ -655,6 +693,20 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertNotIn("fh-secret", debug)
         self.assertIn("result_status=success", debug)
         self.assertIn("AAPL last traded at 193.12", debug)
+
+    def test_text_debug_passes_resolved_watchlist_symbol_to_finnhub(self):
+        client = FakeJsonClient([stock_quote_response()])
+
+        debug = format_text_debug(
+            "SpaceX 股价",
+            provider_config=ProviderConfig(finnhub_api_key="fh-secret"),
+            http_client=client,
+        )
+
+        self.assertIn("route=stock", debug)
+        self.assertIn("symbol:SPCX", debug)
+        self.assertIn("result_status=success", debug)
+        self.assertIn("SPCX last traded at 193.12", debug)
 
 
 if __name__ == "__main__":

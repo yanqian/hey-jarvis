@@ -408,7 +408,12 @@ scores, product prices, or arbitrary live web facts. F023 adds the shared
 provider configuration and mocked JSON HTTP boundary. F024 enables Open-Meteo
 weather. F025 enables Frankfurter FX reference-rate conversion. F026 enables
 Finnhub stock quotes for uppercase ticker symbols and a small conservative
-company-name alias map. Non-Finnhub stock providers still return
+company-name alias map. The personal US watchlist additionally recognizes
+names such as SpaceX/SPCX, Alibaba/BABA, Costco/COST, TSMC/TSM, and
+Netflix/NFLX. `Google`, `Alphabet`, and `谷歌` map to `GOOGL`; explicit `GOOG`
+remains `GOOG`. Name-based requests still require a stock marker such as
+`stock`, `股票`, or `股价`, so `苹果怎么样` does not trigger a quote.
+Non-Finnhub stock providers still return
 provider-not-configured answers.
 
 The automated recovery check uses fakes and dry-run paths, so it does not make
