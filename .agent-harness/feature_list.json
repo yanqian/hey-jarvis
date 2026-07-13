@@ -916,6 +916,28 @@
         "F034",
         "F043"
       ]
+    },
+    {
+      "id": "F045",
+      "title": "Curate current Known Issues",
+      "description": "Reduce progress.md Known Issues to unresolved product/runtime defects, separate operational constraints, and remove completed-feature and obsolete workaround history while preserving durable evidence elsewhere.",
+      "acceptance": [
+        "Known Issues contains only currently unresolved defects with concise impact, current safe workaround, and durable evidence references; Recording VAD and WebRTC dependency/diagnostic gaps remain explicit.",
+        "Resolved acknowledgement overlap, wake-model, post-playback, empty-transcription, provider, local-routing, fallback, and orchestration history is removed from Known Issues without deleting feature summaries, run evidence, or git history.",
+        "Python version support, macOS microphone permission, and the limits of automated live-hardware/OpenAI verification are clearly separated as operational or verification constraints rather than labeled defects.",
+        "The resulting recovery state has no stale claim that users must wait after the acknowledgement, does not claim unresolved VAD behavior is fixed, and identifies Recording VAD as disabled by default/current workaround.",
+        "Feature JSON validation, focused text inspection, and final ./init.sh recovery verification pass without product-code or runtime configuration changes."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F037",
+        "F043",
+        "F044"
+      ]
     }
   ]
 }

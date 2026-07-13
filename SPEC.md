@@ -251,3 +251,17 @@ Decomposition: This is intentionally one feature because playback-tail preservat
 - Verification surface: Table-driven router/execution tests for Simplified/Traditional spoken arithmetic and positional integers; regressions for digit/symbolic/English arithmetic and unsafe input; text-debug assertions; answer-path proof that chat/history are skipped; full unittest discovery and final `./init.sh`.
 
 Decomposition: This is intentionally one feature because it is one narrow deterministic local-router capability with one implementation and verification boundary.
+
+## F045 - Curate current Known Issues
+
+- Goal: Make `progress.md` a reliable recovery surface by listing only unresolved product/runtime problems under Known Issues and removing completed-feature history and obsolete mitigations from that section.
+- Scope included: audit every existing Known Issues bullet against current feature state, evaluator evidence, implementation, and documented real-test results; retain unresolved Recording VAD and WebRTC dependency/diagnostic gaps; move stable runtime prerequisites and verification limits into a separate operational-constraints section; remove resolved ACK, wake, provider, fallback, and orchestration history from Known Issues; add concise evidence and workaround references.
+- Scope excluded: fixing the retained issues, deleting run evidence or git history, rewriting completed-feature summaries, changing product code/configuration, changing existing feature IDs/status, or committing local debug logs.
+- Core flows: A future agent reads `progress.md`, immediately sees the small set of active defects, their impact and current safe workaround, then separately sees supported Python/macOS/hardware constraints; it does not mistake completed F001-F044 history for open defects or attempt to re-fix F043 acknowledgement overlap.
+- Constraints: Preserve durable evidence references, do not claim unresolved real-device/VAD behavior is fixed, keep repository recovery state semantically valid, and leave historical details discoverable through completed feature summaries, runs, and git history.
+- Ambiguities or assumptions: macOS microphone permission and Python 3.11/3.12 are operational constraints rather than defects. The general limitation that automated tests cannot prove live hardware/OpenAI integration is a verification constraint. The pre-F043 acknowledgement swallowing note is resolved and should not remain active.
+- Required capabilities: Existing feature/evaluator state, run records, git history, and `./init.sh`; no new dependency, service, credential, permission, or runtime capability is required.
+- Implementation paths: `.agent-harness/progress.md`, `.agent-harness/feature_list.json`, `SPEC.md`, and `.agent-harness/runs/`.
+- Verification surface: Manual audit that Known Issues contains only unresolved items, text checks that obsolete resolved bullets are absent, feature JSON validation, and final `./init.sh`.
+
+Decomposition: This is intentionally one documentation-governance feature because it has one durable recovery-state outcome and no product-code boundary.
