@@ -406,6 +406,7 @@ def _extract_calculator_expression(text: str) -> str | None:
         .replace("×", "*")
         .replace("÷", "/")
     )
+    compact = _replace_chinese_integer_tokens(compact)
     compact = (
         compact.replace("加", "+")
         .replace("减", "-")
@@ -421,6 +422,64 @@ def _extract_calculator_expression(text: str) -> str | None:
     if not re.search(r"\d", expression) or not re.search(r"[-+*/%]", expression):
         return None
     return expression
+
+
+_CHINESE_DIGITS = {
+    "零": 0,
+    "〇": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "兩": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+}
+_CHINESE_SMALL_UNITS = {"十": 10, "百": 100, "千": 1000}
+_CHINESE_INTEGER_TOKEN_RE = re.compile(r"[零〇一二两兩三四五六七八九十百千]+")
+
+
+def _replace_chinese_integer_tokens(text: str) -> str:
+    """Replace conservative positional Chinese integer tokens with digits."""
+
+    def replace(match: re.Match[str]) -> str:
+        value = _parse_chinese_integer(match.group(0))
+        return match.group(0) if value is None else str(value)
+
+    return _CHINESE_INTEGER_TOKEN_RE.sub(replace, text)
+
+
+def _parse_chinese_integer(token: str) -> int | None:
+    """Parse a zero-to-9999 Chinese integer using 十/百/千 positions."""
+
+    if not token:
+        return None
+    if all(char in _CHINESE_DIGITS for char in token):
+        if len(token) == 1:
+            return _CHINESE_DIGITS[token]
+        return None
+
+    total = 0
+    pending_digit: int | None = None
+    last_unit = 10_000
+    for char in token:
+        if char in _CHINESE_DIGITS:
+            if pending_digit is not None and pending_digit != 0:
+                return None
+            pending_digit = _CHINESE_DIGITS[char]
+            continue
+        unit = _CHINESE_SMALL_UNITS.get(char)
+        if unit is None or unit >= last_unit:
+            return None
+        total += (1 if pending_digit is None else pending_digit) * unit
+        pending_digit = None
+        last_unit = unit
+    total += 0 if pending_digit is None else pending_digit
+    return total if 0 <= total <= 9999 else None
 
 
 def _english_arithmetic_to_expression(text: str) -> str | None:

@@ -112,6 +112,31 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(result.status, "success")
         self.assertEqual(result.answer, "The answer is 80.")
 
+    def test_routes_spoken_chinese_integer_arithmetic(self):
+        cases = (
+            ("一加一等于几", "1+1", "The answer is 2."),
+            ("一加一等於幾", "1+1", "The answer is 2."),
+            ("十二加三是多少", "12+3", "The answer is 15."),
+            ("一百二十三減二十", "123-20", "The answer is 103."),
+            ("一百零二加八", "102+8", "The answer is 110."),
+            ("兩千除以十", "2000/10", "The answer is 200."),
+        )
+        for text, expression, answer in cases:
+            with self.subTest(text=text):
+                route = route_text(text)
+                result = execute_route(route)
+
+                self.assertEqual(route.category, "calculator")
+                self.assertEqual(route.tool_name, "safe_calculator")
+                self.assertEqual(route.params["expression"], expression)
+                self.assertEqual(result.status, "success")
+                self.assertEqual(result.answer, answer)
+
+    def test_ambiguous_chinese_digit_sequence_does_not_guess(self):
+        route = route_text("一二加三是多少")
+
+        self.assertEqual(route.category, "none")
+
     def test_rejects_unsafe_calculator_expression(self):
         route = route_text("__import__('os').system('date')")
 

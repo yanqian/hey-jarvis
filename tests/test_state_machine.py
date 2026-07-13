@@ -1581,6 +1581,8 @@ class StateMachineTests(unittest.TestCase):
         cases = (
             ("現在幾點了", "The local time is", "tool route=time status=success"),
             ("100減20是多少", "The answer is 80.", "tool route=calculator status=success"),
+            ("一加一等于几", "The answer is 2.", "tool route=calculator status=success"),
+            ("一加一等於幾", "The answer is 2.", "tool route=calculator status=success"),
         )
 
         for transcription, expected_answer, expected_log in cases:

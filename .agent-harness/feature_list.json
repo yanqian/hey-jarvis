@@ -808,7 +808,10 @@
       "attempts": 2,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F036", "F039"]
+      "depends_on": [
+        "F036",
+        "F039"
+      ]
     },
     {
       "id": "F040",
@@ -826,7 +829,9 @@
       "attempts": 2,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F039"]
+      "depends_on": [
+        "F039"
+      ]
     },
     {
       "id": "F041",
@@ -844,7 +849,9 @@
       "attempts": 2,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F040"]
+      "depends_on": [
+        "F040"
+      ]
     },
     {
       "id": "F042",
@@ -862,7 +869,9 @@
       "attempts": 1,
       "last_error": "",
       "priority": "P1",
-      "depends_on": ["F026"]
+      "depends_on": [
+        "F026"
+      ]
     },
     {
       "id": "F043",
@@ -876,12 +885,37 @@
         "ACK-disabled, guard-disabled, synchronous/fake player, VAD-disabled, optional-VAD, clipped/overflow, post-cancellation, post-answer-playback, and fake-backend flows remain deterministic; documentation clearly states that speech must continue past playback completion because full AEC is out of scope.",
         "Focused state-machine/config/documentation tests, full unittest discovery, dry-run, fake-backend, diagnose, final ./init.sh, and documented real-device retesting cover speech during acknowledgement, at playback completion, and one second afterward without requiring live hardware, OpenAI, speaker, or network in automated tests."
       ],
-      "passes": false,
-      "status": "in_progress",
+      "passes": true,
+      "status": "done",
       "attempts": 1,
       "last_error": "",
       "priority": "P0",
-      "depends_on": ["F040", "F041"]
+      "depends_on": [
+        "F040",
+        "F041"
+      ]
+    },
+    {
+      "id": "F044",
+      "title": "Route spoken Chinese arithmetic locally",
+      "description": "Parse common Simplified and Traditional Chinese integer arithmetic into the existing safe calculator so voice transcripts such as 一加一等于几 do not fall through to chat.",
+      "acceptance": [
+        "Router parsing converts common Chinese integer operands using 零/〇, 一 through 九, 两/兩, 十, 百, and 千 plus existing 加/减/減/乘/除 operators into safe numeric expressions, while unsupported or ambiguous natural-language math falls through without guessing.",
+        "Simplified and Traditional requests including 一加一等于几 and 一加一等於幾 route to calculator/safe_calculator and return The answer is 2 through text debug without OpenAI or network access.",
+        "The normal post-transcription answer path uses the local calculator, does not call ask_chatgpt, and does not mutate chat history for the affected spoken requests.",
+        "Existing digit-based Chinese, symbolic, English, Traditional operator, calculator safety, wake/ACK/audio, provider, and tool-answer behavior remain unchanged.",
+        "Focused router, execution, text-debug, answer-path, documentation tests, full unittest discovery, and final ./init.sh pass without live microphone, OpenAI chat, speaker, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F022",
+        "F034",
+        "F043"
+      ]
     }
   ]
 }

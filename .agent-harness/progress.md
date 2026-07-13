@@ -112,9 +112,9 @@ F037 was reconciled onto the merged PR1 implementation. The optional WebRTC VAD 
 
 ## Last Completed Feature
 
-F042 - Route personal US watchlist company names.
+F044 - Route spoken Chinese arithmetic locally.
 
-F042 has been completed through interactive fast-work fallback and separate cold-start evaluator approval. The deterministic stock router now recognizes the user's supplied US watchlist through English and common Simplified/Traditional Chinese names, maps SpaceX to SPCX, maps Google/Alphabet/谷歌 to GOOGL while preserving explicit GOOG/GOOGL ticker precedence, retains conservative stock-intent gating, and reuses the existing Finnhub quote boundary. The first evaluation exposed an IVV edge case where `S&P` was mistaken for ticker `S`; the retry fixed ampersand-adjacent ticker extraction and added the exact regression. Focused tests, full discovery with 207 project tests, and final recovery verification pass. Coding evidence is recorded in `.agent-harness/runs/F042-fast-coding.md`, and approval is recorded as `EVAL_PASS: F042` in `.agent-harness/runs/F042-evaluation-pass.md`.
+F044 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. The deterministic calculator router now parses common Simplified and Traditional Chinese positional integers through thousands, including 零/〇, 两/兩, 十, 百, and 千, while rejecting ambiguous consecutive digit readings. Voice transcripts such as `一加一等于几` and `一加一等於幾` now produce `route=calculator`, `tool=safe_calculator`, expression `1+1`, and local answer 2 without ChatGPT or chat-history mutation. Focused router, state-machine, and text-debug checks pass; full unittest discovery still passes with 211 tests; and final `./init.sh` recovery verification passes. Coding evidence is recorded in `.agent-harness/runs/F044-fast-coding.md`, and approval is recorded as `EVAL_PASS: F044` in `.agent-harness/runs/F044-evaluation-pass.md`.
 
 F040 coding is complete through interactive fast-work fallback after `make -C .agent-harness work-fast` failed its configured Codex Evaluator Agent runtime check before handoff. The implementation adds observable non-blocking acknowledgement playback on macOS, drains/discards microphone chunks while `afplay` runs with safe metrics, and preserves synchronous answer playback plus fake/legacy fallback behavior. Focused tests and final recovery verification pass with 196 project tests. Coding evidence is recorded in `.agent-harness/runs/F040-fast-coding.md`; F040 remains in progress pending separate evaluator approval.
 
@@ -134,7 +134,11 @@ F043 real-device retesting confirmed playback-overlap prefix preservation, but O
 
 ## Next Feature
 
-F043 - Preserve speech overlapping wake acknowledgement; coding is complete and separate evaluator approval is pending.
+No next feature is currently selected. Plan or append the next feature before additional implementation work.
+
+F043 has been accepted by a separate cold-start Evaluator after its provider runtime was corrected to use an available model and explicit stdin mode. Durable approval is recorded in `.agent-harness/runs/F043-evaluation-pass.md`.
+
+F044 has been accepted by a separate cold-start Evaluator. Durable approval is recorded in `.agent-harness/runs/F044-evaluation-pass.md`.
 
 ## Known Issues
 

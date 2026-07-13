@@ -80,6 +80,7 @@ wake-word detection, OpenAI, TTS, playback, or network access, run:
 
 ```bash
 python -m src.main --text "现在几点"
+python -m src.main --text "一加一等于几"
 ```
 
 Weather text-debug requests such as `python -m src.main --text "明天天气怎么样"`
