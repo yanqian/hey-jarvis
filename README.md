@@ -279,7 +279,8 @@ voiced-window, threshold, baseline readiness/chunks/seconds, and pre-roll
 context. A default recording start must show `baseline_ready=true`.
 
 VAD is optional and disabled by default. To enable local WebRTC classification,
-install the extra with `python -m pip install webrtcvad`, set
+install the compatible optional dependency set with
+`python -m pip install -r requirements-vad.txt`, set
 `VAD_BACKEND=webrtc`, and choose `VAD_MODE` from 0 through 3. ARMED then
 requires both its RMS gate and `ARMED_VAD_REQUIRED_RATIO` with at least
 `ARMED_VAD_MIN_FRAMES` voiced 20ms frames. Its trigger/summary logs include
@@ -290,6 +291,13 @@ speech, hangover, and end-silence settings; existing `SILENCE_SECONDS`,
 and safety controls. `WAKE_VAD_THRESHOLD` is independently optional: when set,
 it is forwarded to openWakeWord, and an older incompatible openWakeWord version
 fails with guidance to upgrade or unset the setting.
+When WebRTC VAD is configured, `python -m src.main --diagnose` imports and
+constructs the configured detector and classifies a valid 20ms silence frame.
+It reports an error instead of an importability false positive if the optional
+wrapper, its `pkg_resources` compatibility dependency, detector construction,
+or native frame classification cannot run. This installation check does not
+establish real-world speech/noise accuracy; keep `RECORDING_VAD_ENABLED=0` for
+the supported recording endpoint.
 Guarded ACK flows also require `noise_floor_has_samples=true` and log
 `post_ack_quiet_observed`, suppressed/clipped/overflow chunk counts, and the
 post-ACK maximum RMS and peak. If speaker echo still reaches `max_peak=32768`,
@@ -502,6 +510,9 @@ Common outcomes:
   `python -m src.main --diagnose` again.
 - `LiteRT/TFLite runtime is not importable`: activate `.venv` and run `pip
   install -r requirements.txt`; the MVP wake-word path uses TFLite models.
+- `dependency:webrtcvad` reports an error: only when using
+  `VAD_BACKEND=webrtc`, run `python -m pip install -r requirements-vad.txt`
+  and repeat `python -m src.main --diagnose`.
 - `WAKE_INFERENCE_FRAMEWORK=onnx` on macOS ARM64: use
   `WAKE_INFERENCE_FRAMEWORK=tflite`. Local debugging and upstream issue evidence
   showed near-zero openWakeWord scores with ONNX on Apple Silicon while

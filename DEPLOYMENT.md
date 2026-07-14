@@ -360,6 +360,9 @@ Only start the real assistant after recovery and diagnostics pass.
 - `LiteRT/TFLite runtime is not importable`: activate `.venv`, run
   `pip install -r requirements.txt`, then confirm `python -m pip show
   ai-edge-litert`.
+- `dependency:webrtcvad` reports an error: only when using
+  `VAD_BACKEND=webrtc`, run `python -m pip install -r requirements-vad.txt`
+  and repeat `python -m src.main --diagnose`.
 - `wake_word_models` reports missing files: run `python -m src.main
   --prepare-wake-word`, then run `python -m src.main --diagnose` again.
 - `wake_acknowledgement_audio` reports a missing file: set `OPENAI_API_KEY`,

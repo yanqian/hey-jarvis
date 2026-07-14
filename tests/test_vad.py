@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from src.vad import DisabledVad, VadError, WebRtcVadDetector, build_vad_detector
 
@@ -41,6 +42,12 @@ class VadTests(unittest.TestCase):
 
     def test_build_disabled_vad_has_no_optional_import(self):
         self.assertIsInstance(build_vad_detector("disabled"), DisabledVad)
+
+    def test_import_failure_preserves_root_cause_and_install_guidance(self):
+        with patch.dict("sys.modules", {"webrtcvad": None}):
+            with self.assertRaisesRegex(VadError, "requirements-vad.txt") as raised:
+                WebRtcVadDetector()
+        self.assertIn("webrtcvad", str(raised.exception))
 
 
 if __name__ == "__main__":

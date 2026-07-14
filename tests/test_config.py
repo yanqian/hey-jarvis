@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from src.config import (
     DEFAULT_ARMED_CLIP_REJECT_PEAK,
@@ -92,11 +92,11 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "requires VAD_BACKEND=webrtc"):
             load_settings(env={"RECORDING_VAD_ENABLED": "1"}, env_file=None)
 
-    def test_diagnostics_report_missing_configured_webrtc_extra(self):
-        def find_spec(name):
-            return None if name == "webrtcvad" else object()
-
-        with patch("src.config.importlib.util.find_spec", side_effect=find_spec):
+    def test_diagnostics_report_configured_webrtc_runtime_failure(self):
+        with patch(
+            "src.vad.build_vad_detector",
+            side_effect=RuntimeError("No module named 'pkg_resources'"),
+        ):
             report = collect_diagnostics(
                 env={"VAD_BACKEND": "webrtc"},
                 env_file=None,
@@ -106,7 +106,53 @@ class ConfigTests(unittest.TestCase):
             )
         check = next(item for item in report.checks if item.name == "dependency:webrtcvad")
         self.assertEqual(check.status, "error")
-        self.assertIn("python -m pip install webrtcvad", check.message)
+        self.assertIn("pkg_resources", check.message)
+        self.assertIn("python -m pip install -r requirements-vad.txt", check.message)
+
+    def test_diagnostics_probe_configured_webrtc_mode_and_frame(self):
+        detector = Mock()
+        detector.analyze.return_value = Mock(total_frames=1)
+        with patch("src.vad.build_vad_detector", return_value=detector) as build:
+            report = collect_diagnostics(
+                env={"VAD_BACKEND": "webrtc", "VAD_MODE": "3", "SAMPLE_RATE": "16000"},
+                env_file=None,
+                python_version=(3, 12),
+                afplay_path="/usr/bin/afplay",
+                wake_word_model_paths={},
+            )
+        build.assert_called_once_with("webrtc", mode=3)
+        detector.analyze.assert_called_once_with(b"\x00\x00" * 320, 16000)
+        check = next(item for item in report.checks if item.name == "dependency:webrtcvad")
+        self.assertEqual(check.status, "ok")
+
+    def test_diagnostics_report_webrtc_classification_failure(self):
+        detector = Mock()
+        detector.analyze.side_effect = RuntimeError("native classifier unavailable")
+        with patch("src.vad.build_vad_detector", return_value=detector):
+            report = collect_diagnostics(
+                env={"VAD_BACKEND": "webrtc"},
+                env_file=None,
+                python_version=(3, 12),
+                afplay_path="/usr/bin/afplay",
+                wake_word_model_paths={},
+            )
+        check = next(item for item in report.checks if item.name == "dependency:webrtcvad")
+        self.assertEqual(check.status, "error")
+        self.assertIn("native classifier unavailable", check.message)
+
+    def test_disabled_vad_diagnostics_do_not_build_optional_backend(self):
+        with patch(
+            "src.vad.build_vad_detector",
+            side_effect=AssertionError("optional VAD must stay lazy"),
+        ) as build:
+            collect_diagnostics(
+                env={"VAD_BACKEND": "disabled"},
+                env_file=None,
+                python_version=(3, 12),
+                afplay_path="/usr/bin/afplay",
+                wake_word_model_paths={},
+            )
+        build.assert_not_called()
 
     def test_enabled_ack_guard_requires_positive_quiet_duration(self):
         with self.assertRaisesRegex(ConfigError, "ACK_GUARD_MIN_QUIET_SECONDS must be greater than 0"):

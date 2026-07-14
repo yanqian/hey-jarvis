@@ -13,6 +13,7 @@ for path in \
   README.md \
   .env.example \
   requirements.txt \
+  requirements-vad.txt \
   src/__init__.py \
   src/audio_input.py \
   src/config.py \

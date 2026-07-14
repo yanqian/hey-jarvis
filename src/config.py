@@ -643,7 +643,7 @@ def collect_diagnostics(
     dependency_modules: Mapping[str, str] | None = None,
     wake_word_model_paths: Mapping[str, str | Path] | None = None,
 ) -> DiagnosticReport:
-    """Collect runtime diagnostics without requiring optional imports."""
+    """Collect diagnostics, probing an optional runtime only when configured."""
 
     checks: list[DiagnosticCheck] = []
     version = python_version or sys.version_info[:2]
@@ -707,18 +707,33 @@ def collect_diagnostics(
     if settings is not None and dependency_modules is None:
         checks.extend(_wake_runtime_dependency_checks(settings))
         if settings.vad_backend == "webrtc":
-            if importlib.util.find_spec("webrtcvad") is None:
+            try:
+                from .vad import build_vad_detector
+
+                detector = build_vad_detector("webrtc", mode=settings.vad_mode)
+                frame_samples = settings.sample_rate * 20 // 1000
+                detector.analyze(b"\x00\x00" * frame_samples, settings.sample_rate)
+            except Exception as exc:
+                failure = f"WebRTC VAD runtime probe failed: {type(exc).__name__}: {exc}"
+                if "requirements-vad.txt" not in failure:
+                    failure += (
+                        ". Install compatible optional dependencies with "
+                        "`python -m pip install -r requirements-vad.txt`"
+                    )
                 checks.append(
                     DiagnosticCheck(
                         "dependency:webrtcvad",
                         "error",
-                        "VAD_BACKEND=webrtc requires the optional webrtcvad package; "
-                        "install it with `python -m pip install webrtcvad`",
+                        failure,
                     )
                 )
             else:
                 checks.append(
-                    DiagnosticCheck("dependency:webrtcvad", "ok", "webrtcvad is importable")
+                    DiagnosticCheck(
+                        "dependency:webrtcvad",
+                        "ok",
+                        "WebRTC VAD imported, constructed, and classified a 20ms frame",
+                    )
                 )
 
     checks.extend(_wake_word_model_checks(wake_word_model_paths, modules_to_check, settings))

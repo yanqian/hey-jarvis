@@ -938,6 +938,27 @@
         "F043",
         "F044"
       ]
+    },
+    {
+      "id": "F046",
+      "title": "Make WebRTC VAD installation and diagnostics reliable",
+      "description": "Declare a reproducible optional WebRTC VAD dependency set and make diagnostics exercise the configured detector's real import, construction, and frame-classification path instead of module discovery alone.",
+      "acceptance": [
+        "A project-owned optional requirements file pins webrtcvad 2.0.10 and the verified compatible setuptools range, and setup/troubleshooting documentation uses that file instead of installing webrtcvad alone while ordinary VAD-disabled installs remain unchanged.",
+        "When VAD_BACKEND=webrtc, diagnostics use the configured VAD_MODE and the production build_vad_detector boundary, then classify one valid 20ms mono int16 silence frame before reporting dependency:webrtcvad OK.",
+        "Module discovery without a working import, missing pkg_resources, detector construction errors, and frame-classification errors all produce dependency:webrtcvad ERROR with safe root-cause context and the reproducible optional-install command; they never produce the former false-positive OK.",
+        "VAD_BACKEND=disabled remains the default, does not import or require webrtcvad/pkg_resources, and Recording VAD remains disabled/safely documented without changing ARMED, recorder endpointing, wake, ACK, or OpenAI behavior.",
+        "Focused config/VAD/documentation tests, full unittest discovery, default disabled diagnose, and final ./init.sh pass without live microphone, speaker, OpenAI, or network access."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F037",
+        "F045"
+      ]
     }
   ]
 }

@@ -55,10 +55,14 @@ class WebRtcVadDetector:
                 import webrtcvad
             except ImportError as exc:
                 raise VadError(
-                    "VAD_BACKEND=webrtc requires the optional webrtcvad package; "
-                    "install it with `python -m pip install webrtcvad`"
+                    "VAD_BACKEND=webrtc could not import its optional runtime "
+                    f"({exc}); install it with "
+                    "`python -m pip install -r requirements-vad.txt`"
                 ) from exc
-            vad = webrtcvad.Vad(mode)
+            try:
+                vad = webrtcvad.Vad(mode)
+            except Exception as exc:
+                raise VadError(f"WebRTC VAD detector construction failed: {exc}") from exc
         self._vad = vad
 
     @property

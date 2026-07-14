@@ -112,9 +112,9 @@ F037 was reconciled onto the merged PR1 implementation. The optional WebRTC VAD 
 
 ## Last Completed Feature
 
-F044 - Route spoken Chinese arithmetic locally.
+F046 - Make WebRTC VAD installation and diagnostics reliable.
 
-F044 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. The deterministic calculator router now parses common Simplified and Traditional Chinese positional integers through thousands, including 零/〇, 两/兩, 十, 百, and 千, while rejecting ambiguous consecutive digit readings. Voice transcripts such as `一加一等于几` and `一加一等於幾` now produce `route=calculator`, `tool=safe_calculator`, expression `1+1`, and local answer 2 without ChatGPT or chat-history mutation. Focused router, state-machine, and text-debug checks pass; full unittest discovery still passes with 211 tests; and final `./init.sh` recovery verification passes. Coding evidence is recorded in `.agent-harness/runs/F044-fast-coding.md`, and approval is recorded as `EVAL_PASS: F044` in `.agent-harness/runs/F044-evaluation-pass.md`.
+F046 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. The optional WebRTC VAD dependency set is now reproducible through `requirements-vad.txt`, and configured diagnostics use the production detector factory plus a real 20ms classification instead of module discovery. Lazy VAD-disabled behavior, focused failure probes, 215 project tests, final recovery verification, system-Python fail-closed diagnostics, and a real Python 3.12/setuptools 80.10.2/WebRTC runtime diagnostic pass are recorded in `.agent-harness/runs/F046-fast-coding.md`, and approval is recorded as `EVAL_PASS: F046` in `.agent-harness/runs/20260713T154700Z-F046-evaluation-pass.md`.
 
 F040 coding is complete through interactive fast-work fallback after `make -C .agent-harness work-fast` failed its configured Codex Evaluator Agent runtime check before handoff. The implementation adds observable non-blocking acknowledgement playback on macOS, drains/discards microphone chunks while `afplay` runs with safe metrics, and preserves synchronous answer playback plus fake/legacy fallback behavior. Focused tests and final recovery verification pass with 196 project tests. Coding evidence is recorded in `.agent-harness/runs/F040-fast-coding.md`; F040 remains in progress pending separate evaluator approval.
 
@@ -134,9 +134,11 @@ F043 real-device retesting confirmed playback-overlap prefix preservation, but O
 
 F045 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. `progress.md` now limits Known Issues to the unresolved Recording VAD reliability defect and WebRTC VAD dependency/diagnostic false-positive gap. Python support, macOS permission, live-integration verification limits, and untracked real-test logs are separated as operational/verification constraints. Completed-feature, fallback, provider, wake, ACK, and orchestration history was removed from the active issue list while remaining durable in feature summaries, runs, and git history. Coding evidence is recorded in `.agent-harness/runs/F045-fast-coding.md`, and approval is recorded as `EVAL_PASS: F045` in `.agent-harness/runs/20260713T150202Z-F045-evaluation-pass.md`.
 
+F046 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. The optional WebRTC VAD dependency set is now reproducible through `requirements-vad.txt`, and configured diagnostics use the production detector factory plus a real 20ms classification instead of module discovery. Lazy VAD-disabled behavior, focused failure probes, 215 project tests, final recovery verification, system-Python fail-closed diagnostics, and a real Python 3.12/setuptools 80.10.2/WebRTC runtime diagnostic pass are recorded in `.agent-harness/runs/F046-fast-coding.md`, and approval is recorded as `EVAL_PASS: F046` in `.agent-harness/runs/20260713T154700Z-F046-evaluation-pass.md`.
+
 ## Next Feature
 
-No feature is currently planned after F045.
+No unfinished features remain in `feature_list.json`.
 
 F043 has been accepted by a separate cold-start Evaluator after its provider runtime was corrected to use an available model and explicit stdin mode. Durable approval is recorded in `.agent-harness/runs/F043-evaluation-pass.md`.
 
@@ -150,13 +152,6 @@ F044 has been accepted by a separate cold-start Evaluator. Durable approval is r
 - Current safe configuration: Keep `RECORDING_VAD_ENABLED=0` and use the existing RMS-based recording endpoint. Optional VAD may still be used experimentally for ARMED, but it is not the supported recording endpoint.
 - Evidence: `.agent-harness/runs/F037-real-vad-tuning-results.md`.
 - Follow-up: Redesign and evaluate recording endpoint hysteresis with representative real-audio fixtures before enabling it by default.
-
-### WebRTC VAD dependency and diagnostics can report a false positive
-
-- Impact: `webrtcvad 2.0.10` imports deprecated `pkg_resources`; some setuptools versions cannot construct the detector even when module discovery succeeds. The current `--diagnose` check can therefore report WebRTC VAD as importable without exercising the failing runtime path.
-- Current workaround: Keep `VAD_BACKEND=disabled` unless explicitly testing VAD. The verified local compatibility workaround used `setuptools<81` (80.10.2), but this is not yet a durable project dependency fix.
-- Evidence: `.agent-harness/runs/F037-webrtcvad-pkg-resources-gap.md`.
-- Follow-up: Make diagnostics import and construct the configured detector, then declare a reproducible dependency constraint or replace the optional VAD package.
 
 ## Operational and Verification Constraints
 

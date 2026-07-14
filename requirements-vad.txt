@@ -1,0 +1,4 @@
+# Optional WebRTC VAD backend. Install only when VAD_BACKEND=webrtc.
+webrtcvad==2.0.10
+# webrtcvad 2.0.10 imports pkg_resources at runtime; setuptools 81+ removed it.
+setuptools<81
