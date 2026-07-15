@@ -122,7 +122,19 @@ def is_realtime_sensitive(text: str) -> bool:
     """Return true when a request needs fresh data but no local route matched."""
 
     normalized = _normalize_text(text)
+    if _looks_like_stable_historical_comparison(normalized):
+        return False
     return _contains_any(normalized, _REALTIME_SENSITIVE_MARKERS)
+
+
+def _looks_like_stable_historical_comparison(normalized: str) -> bool:
+    """Keep past-versus-present knowledge comparisons out of realtime refusal."""
+
+    return (
+        _contains_any(normalized, _HISTORICAL_CONTEXT_MARKERS)
+        and _contains_any(normalized, _COMPARISON_MARKERS)
+        and not _contains_any(normalized, _FRESH_DATA_TOPIC_MARKERS)
+    )
 
 
 def execute_route(
@@ -1154,6 +1166,51 @@ _REALTIME_SENSITIVE_MARKERS = _UNSUPPORTED_REALTIME_MARKERS + (
     "實時",
     "价格",
     "價格",
+)
+_HISTORICAL_CONTEXT_MARKERS = (
+    "ancient",
+    "historical",
+    "in the past",
+    "古代",
+    "历史",
+    "歷史",
+    "过去",
+    "過去",
+)
+_COMPARISON_MARKERS = (
+    "similar",
+    "compare",
+    "compared",
+    "difference",
+    "different",
+    "类似",
+    "類似",
+    "相似",
+    "比较",
+    "比較",
+    "区别",
+    "區別",
+    "差别",
+    "差別",
+    "差异",
+    "差異",
+)
+_FRESH_DATA_TOPIC_MARKERS = _UNSUPPORTED_REALTIME_MARKERS + (
+    "price",
+    "weather",
+    "stock",
+    "rate",
+    "score",
+    "价格",
+    "價格",
+    "天气",
+    "天氣",
+    "股票",
+    "股价",
+    "股價",
+    "汇率",
+    "匯率",
+    "比分",
 )
 
 FX_SUPPORTED_CURRENCIES = ("USD", "SGD", "CNY", "EUR", "JPY", "HKD", "GBP", "AUD")

@@ -169,6 +169,28 @@ class OpenAIClientTests(unittest.TestCase):
         self.assertEqual(history[-1], {"role": "assistant", "content": "Two plus two is four."})
         self.assertEqual(len(history), 4)
 
+    def test_ask_chatgpt_sends_stable_knowledge_best_effort_policy_before_history(self):
+        fake_sdk = FakeSDKClient()
+        history = [{"role": "assistant", "content": "Earlier answer."}]
+        question = "中国古代人的语言交流跟现在中国哪个省份的方言类似？"
+
+        OpenAIClient(make_settings(), sdk_client=fake_sdk).ask_chatgpt(question, history)
+
+        messages = fake_sdk.chat.completions.calls[0]["messages"]
+        self.assertEqual(messages[0]["role"], "system")
+        prompt = messages[0]["content"]
+        self.assertIn("stable, non-high-stakes knowledge", prompt)
+        self.assertIn("best-effort answer", prompt)
+        self.assertIn("Comparison, ambiguity, scholarly disagreement", prompt)
+        self.assertIn("internet access is required", prompt)
+        self.assertIn("historical period or region", prompt)
+        self.assertIn("Calibrate genuine uncertainty", prompt)
+        self.assertIn("user's language", prompt)
+        self.assertIn("Do not claim that you browsed", prompt)
+        self.assertIn("current data cannot be verified", prompt)
+        self.assertEqual(messages[1], {"role": "assistant", "content": "Earlier answer."})
+        self.assertEqual(messages[-1], {"role": "user", "content": question})
+
     def test_ask_chatgpt_surfaces_api_failures(self):
         class FailingCompletions:
             def create(self, **kwargs):

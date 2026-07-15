@@ -959,6 +959,27 @@
         "F037",
         "F045"
       ]
+    },
+    {
+      "id": "F047",
+      "title": "Answer stable knowledge questions without false internet refusal",
+      "description": "Strengthen the general-chat answer policy so non-realtime knowledge questions receive concise qualified best-effort answers instead of being refused merely because comparison or uncertainty could benefit from browsing.",
+      "acceptance": [
+        "The general-chat system prompt requires best-effort answers for stable non-high-stakes knowledge, concise qualification of broad or disputed premises, and the user's language when clear, while forbidding claims of browsing or verification that did not occur.",
+        "The prompt says that comparison, ambiguity, scholarly uncertainty, or potentially useful verification alone are not reasons for an internet-required refusal; genuinely uncertain stable questions still receive useful known context with calibrated uncertainty.",
+        "The historical-linguistics example routes to ordinary chat with the strengthened prompt, while current news and other existing freshness-sensitive requests retain deterministic provider/refusal behavior and do not fall through to chat speculation.",
+        "Fake-SDK request-shape tests prove the policy is sent before bounded history without live OpenAI, and router/documentation regressions cover stable-versus-realtime examples without changing chat history, structured tools, configured models, or API boundaries.",
+        "README and manual testing document the stable-knowledge policy, its no-browsing/no-citation boundary, representative Chinese questions, and optional live evaluation; focused tests, full unittest discovery, dry-run, fake-backend, diagnose, and final ./init.sh pass without live audio, OpenAI, speaker, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F005",
+        "F022"
+      ]
     }
   ]
 }

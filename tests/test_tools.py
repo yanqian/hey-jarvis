@@ -604,6 +604,29 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(chat_client.calls, [])
         self.assertEqual(history, [])
 
+    def test_stable_historical_comparison_remains_on_general_chat_route(self):
+        questions = (
+            "中国古代人的语言交流跟现在中国哪个省份的方言类似？",
+            "古代汉语和当前方言有什么区别？",
+            "How is ancient Chinese different from current Chinese dialects?",
+        )
+
+        for question in questions:
+            with self.subTest(question=question):
+                route = route_text(question)
+                self.assertEqual(route.category, "none")
+                self.assertEqual(route.tool_name, "chat")
+                self.assertFalse(is_realtime_sensitive(question))
+
+    def test_historical_wording_does_not_hide_fresh_data_topics(self):
+        for question in (
+            "古代黄金跟现在价格有什么区别？",
+            "historical Apple stock compared with the current price",
+            "过去的天气和今天有什么差异？",
+        ):
+            with self.subTest(question=question):
+                self.assertTrue(is_realtime_sensitive(question))
+
     def test_latest_supported_provider_question_uses_planned_tool_not_refusal(self):
         route = route_text("latest AAPL stock price")
         result = execute_route(route)

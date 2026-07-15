@@ -989,3 +989,25 @@ make ci
 ```
 
 Run `python3 orchestrator.py --dry-run` and `scripts/validate-feature.sh F001` outside `./init.sh`; both commands call `./init.sh` and should not be nested inside tests run by `./init.sh`.
+
+### Best-Effort Answers For Stable Knowledge Questions
+
+Goal: make Hey Jarvis answer non-realtime, non-high-stakes knowledge questions from the chat model's available knowledge instead of incorrectly claiming that comparison, ambiguity, or scholarly uncertainty requires internet access.
+
+Included scope: a stronger general-chat system prompt that distinguishes stable knowledge from freshness-dependent facts; best-effort answers with concise qualifications for broad, comparative, or disputed questions; language matching; explicit guidance that lack of browsing is not by itself a reason to refuse stable questions; deterministic request-shape and prompt-contract tests; documentation and manual examples covering historical linguistics and realtime contrasts.
+
+Excluded scope: adding web search or browsing, source retrieval or citations, changing the configured OpenAI model or API surface, guaranteeing factual correctness from prompt text alone, changing structured provider tools, weakening realtime refusals for news/live data, medical/legal/financial decision support, or making automated tests call OpenAI or the network.
+
+Core flows: a user asks a stable question such as `中国古代人的语言交流跟现在中国哪个省份的方言类似`; the deterministic router leaves it on the ordinary chat route; the OpenAI request includes policy to identify the question's broad time/place premise, give the most useful qualified answer from available knowledge, and avoid a bare internet-required refusal. A user asks for current news, live prices, scores, weather, or another freshness-dependent fact; the existing structured route/provider or unsupported-realtime refusal remains authoritative. If a stable answer is genuinely uncertain, the assistant states the uncertainty briefly and still provides useful known context unless the request is high stakes or impossible to interpret safely.
+
+Constraints: spoken replies remain concise, normally one or two short sentences; the assistant answers in the user's language when clear; prompt wording must not imply that the model has browsed or verified sources; existing chat history behavior and structured tool routing remain unchanged; automated verification inspects exact request shape and uses fake SDK responses with no live OpenAI or network access.
+
+Ambiguities or assumptions: stable-versus-realtime enforcement remains split between deterministic routing and the general-chat prompt. Prompt tests can prove the policy is sent to the model but cannot prove every future model response follows it, so a documented manual live evaluation set is required. Historical comparison questions may have no single exact answer; the desired behavior is to explain the missing period/region qualifier and give a defensible best-effort comparison, not to guess one province as certain.
+
+Required capabilities: the existing F005 OpenAI chat boundary and fake SDK request capture, F022 realtime-sensitive router/refusal behavior, documentation tests, a manual live-test path with an optional configured `OPENAI_API_KEY`, and final recovery verification. No new dependency, provider, credential, or network capability is required for implementation or automated evaluation.
+
+Implementation paths: `src/openai_client.py`, `tests/test_openai_client.py`, `tests/test_tools.py` only if realtime regression coverage is missing, `README.md`, `MANUAL_TESTING.md`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: prompt/request-shape tests proving stable-knowledge best effort, ambiguity qualification, language matching, no false browsing claim, and realtime boundary language are present; router regressions proving the example historical-linguistics question remains ordinary chat while current news remains refused; documentation/manual examples for stable versus realtime questions; focused unit tests; full `python3 -m unittest discover -s tests`; dry-run, fake-backend, diagnose, and final `./init.sh`; optional real OpenAI voice/text evaluation recorded as manual evidence but not required for deterministic completion.
+
+Decomposition decision: this is one focused feature because prompt policy, chat request shape, realtime-boundary regressions, and user documentation jointly define one general-chat answer contract. Adding an actual browsing capability is independently valuable and has different dependencies, security/freshness risks, and verification surfaces, so it is explicitly deferred rather than bundled here.

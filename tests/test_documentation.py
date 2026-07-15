@@ -13,6 +13,19 @@ MANUAL_TESTING = ROOT / "MANUAL_TESTING.md"
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_stable_knowledge_policy_and_manual_boundary_are_documented(self):
+        readme = README.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+
+        self.assertIn("Stable Knowledge Answers", readme)
+        self.assertIn("中国古代人的语言交流跟现在中国哪个省份的方言类似", readme)
+        self.assertIn("does not browse the web", readme)
+        self.assertIn("must not claim that sources or current facts were checked", readme)
+        self.assertIn("今天有什么新闻", readme)
+        self.assertIn("M047", manual_testing)
+        self.assertIn("Stable knowledge versus realtime boundary", manual_testing)
+        self.assertIn("does not claim it browsed or checked sources", manual_testing)
+
     def test_readme_documents_cli_modes_from_parser(self):
         readme = README.read_text(encoding="utf-8")
         deployment = DEPLOYMENT.read_text(encoding="utf-8")

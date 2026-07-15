@@ -342,6 +342,25 @@ uses a recent-window rule so steady background below that threshold and
 occasional moderate noisy chunks do not force recording to wait for
 `MAX_RECORD_SECONDS`, while speech-like chunks still extend the recording.
 
+## Stable Knowledge Answers
+
+Ordinary historical, linguistic, scientific, and other non-realtime questions
+use the chat model's available knowledge. Hey Jarvis is instructed to give a
+concise best-effort answer instead of claiming that internet access is required
+merely because a question asks for a comparison, has a broad premise, involves
+scholarly disagreement, or could benefit from verification. For example,
+`中国古代人的语言交流跟现在中国哪个省份的方言类似？` should receive a
+qualified answer that distinguishes historical periods and regions before
+offering useful comparisons.
+
+This path does not browse the web, retrieve citations, or prove that a model
+answer is correct. It must not claim that sources or current facts were checked.
+When knowledge is genuinely uncertain, the expected behavior is to state that
+uncertainty briefly and still provide known context. Current or live questions
+such as `今天有什么新闻` continue to require a configured structured provider
+and are refused rather than answered from model memory. See `M047` in
+`MANUAL_TESTING.md` for the optional live OpenAI behavior check.
+
 ## Structured Tool Routing
 
 `ENABLE_TOOLS=1` enables a deterministic routing boundary after transcription
