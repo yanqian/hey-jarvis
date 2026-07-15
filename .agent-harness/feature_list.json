@@ -980,6 +980,28 @@
         "F005",
         "F022"
       ]
+    },
+    {
+      "id": "F048",
+      "title": "Make Recording VAD stop reliably after normal speech",
+      "description": "Use asymmetric RMS/VAD endpoint hysteresis so false-high WebRTC voice ratios on low-energy post-speech audio cannot keep question recording alive until max duration.",
+      "acceptance": [
+        "With Recording VAD enabled, only chunks that have both speech-level RMS and a VAD ratio at or above RECORDING_VAD_SPEECH_RATIO reset the end-silence window and refresh hangover; VAD alone cannot extend low-energy audio.",
+        "After normal speech, sustained RMS at or below RECORDING_SILENCE_RMS advances the tolerant end-silence window even when WebRTC remains falsely at vad_ratio=1.0, and recording stops with stopped_by=silence after configured hangover plus end silence instead of max duration.",
+        "Continuous speech-level RMS with matching VAD evidence still records to source exhaustion or MAX_RECORD_SECONDS, high-RMS/VAD-low noise is not treated as quiet, occasional noisy chunks remain tolerated by the existing recent window, and maximum-duration safety is preserved.",
+        "VAD-disabled RMS endpointing, existing configuration keys/defaults, recorder/state-machine call shapes, ARMED/pre-roll, wake/ACK, transcription, and routing remain unchanged; RECORDING_VAD_ENABLED stays disabled by default pending real-device acceptance.",
+        "Focused synthetic disagreement/hangover/window/config/wiring/documentation tests, full unittest discovery, dry-run, fake backend, and final ./init.sh pass; manual guidance defines a Python 3.12 real trial requiring normal continuous questions to log stopped_by=silence before any future default enablement."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F033",
+        "F037",
+        "F046"
+      ]
     }
   ]
 }

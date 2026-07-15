@@ -99,6 +99,7 @@ class Recorder:
         silence_window = _SilenceWindow(self.end_silence_seconds)
         speech_like_threshold = self.silence_threshold * SPEECH_LIKE_RMS_MULTIPLIER
         hangover_remaining = 0.0
+        low_energy_high_vad_chunks = 0
         stopped_by = "source_exhausted"
 
         while duration_seconds < self.max_record_seconds:
@@ -125,9 +126,18 @@ class Recorder:
             if self.vad_enabled:
                 vad_result = self.vad_detector.analyze(chunk, self.sample_rate)
                 vad_ratio = None if vad_result is None else vad_result.voiced_ratio
-            speech_like = (
-                vad_ratio is not None and vad_ratio >= self.vad_speech_ratio
-            ) or (vad_ratio is None and rms > speech_like_threshold)
+            energy_speech = rms > speech_like_threshold
+            vad_speech = vad_ratio is not None and vad_ratio >= self.vad_speech_ratio
+            # WebRTC can remain falsely voiced on post-speech room tone. VAD may
+            # confirm energetic speech, but it cannot extend low-energy audio by
+            # itself or the end-silence window may never complete.
+            speech_like = energy_speech and (vad_ratio is None or vad_speech)
+            if (
+                vad_ratio is not None
+                and vad_ratio > self.vad_end_ratio
+                and rms <= self.silence_threshold
+            ):
+                low_energy_high_vad_chunks += 1
             if speech_like:
                 silence_window.clear()
                 hangover_remaining = self.hangover_seconds if self.vad_enabled else 0.0
@@ -136,11 +146,10 @@ class Recorder:
                     hangover_remaining = max(0.0, hangover_remaining - chunk_seconds)
                     silence_window.clear()
                 else:
-                    quiet = (
-                        rms <= self.silence_threshold
-                        if vad_ratio is None
-                        else rms <= self.silence_threshold and vad_ratio <= self.vad_end_ratio
-                    )
+                    # Low energy is authoritative for endpointing. A low VAD
+                    # ratio cannot make high-energy noise quiet, while a false
+                    # high VAD ratio cannot veto sustained RMS silence.
+                    quiet = rms <= self.silence_threshold
                     silence_window.add(chunk_seconds, quiet=quiet)
 
             if duration_seconds >= self.max_record_seconds:
@@ -150,6 +159,15 @@ class Recorder:
                 stopped_by = "silence"
                 break
 
+        if self.vad_enabled:
+            self._logger.info(
+                "recording_endpoint stopped_by=%s duration=%.2fs chunks=%s "
+                "low_energy_high_vad_chunks=%s",
+                stopped_by,
+                duration_seconds,
+                len(chunks),
+                low_energy_high_vad_chunks,
+            )
         self._write_wav(chunks)
         return RecordingResult(
             path=self.output_path,

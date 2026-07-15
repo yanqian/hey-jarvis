@@ -2,6 +2,7 @@ import struct
 import tempfile
 import unittest
 import wave
+import logging
 from pathlib import Path
 
 from src.recorder import record_to_wav
@@ -169,6 +170,51 @@ class RecorderTests(unittest.TestCase):
             )
         self.assertEqual(result.stopped_by, "silence")
         self.assertEqual(result.chunks_recorded, 3)
+
+    def test_recorder_vad_low_energy_wins_over_false_high_vad_after_speech(self):
+        speech = repeated_sample(1400, 1600)
+        quiet = repeated_sample(100, 1600)
+        chunks = [speech, speech] + [quiet] * 10
+        ratios = [1.0, 1.0] + [1.0] * 10
+        logger = logging.getLogger("tests.recorder.false_high_vad")
+        with tempfile.TemporaryDirectory() as tmp_dir, self.assertLogs(logger, level="INFO") as logs:
+            result = record_to_wav(
+                chunks,
+                sample_rate=16000,
+                silence_seconds=0.3,
+                end_silence_seconds=0.3,
+                max_record_seconds=2.0,
+                silence_threshold=750,
+                vad_detector=SequenceVad(ratios),
+                vad_enabled=True,
+                hangover_seconds=0.2,
+                logger=logger,
+                output_path=Path(tmp_dir) / "input.wav",
+            )
+        self.assertEqual(result.stopped_by, "silence")
+        self.assertEqual(result.chunks_recorded, 7)
+        self.assertIn("low_energy_high_vad_chunks=5", "\n".join(logs.output))
+
+    def test_recorder_vad_requires_energy_and_vad_to_extend_recording(self):
+        speech = repeated_sample(1400, 1600)
+        quiet = repeated_sample(100, 1600)
+        chunks = [speech, speech, quiet, quiet, quiet, quiet]
+        ratios = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = record_to_wav(
+                chunks,
+                sample_rate=16000,
+                silence_seconds=0.2,
+                end_silence_seconds=0.2,
+                max_record_seconds=2.0,
+                silence_threshold=750,
+                vad_detector=SequenceVad(ratios),
+                vad_enabled=True,
+                hangover_seconds=0,
+                output_path=Path(tmp_dir) / "input.wav",
+            )
+        self.assertEqual(result.stopped_by, "silence")
+        self.assertEqual(result.chunks_recorded, 4)
 
     def test_recorder_vad_does_not_call_high_rms_noise_silence(self):
         noise = repeated_sample(1800, 1600)

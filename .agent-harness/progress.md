@@ -114,9 +114,9 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F047 - Answer stable knowledge questions without false internet refusal.
+F048 - Make Recording VAD stop reliably after normal speech.
 
-F047 fixes the false realtime refusal caused by `现在` inside historical comparisons and strengthens the chat answer policy for stable knowledge without adding browsing. Coding and evaluation evidence are recorded in `.agent-harness/runs/20260715T123826Z-F047-fast-coding.md` and `.agent-harness/runs/20260715T124324Z-F047-evaluation-pass.md`.
+F048 fixes the false-high WebRTC post-speech endpoint failure by requiring both speech-level RMS and configured VAD evidence to extend recording, while letting sustained low RMS complete end silence even when WebRTC remains falsely voiced. Coding and evaluation evidence are recorded in `.agent-harness/runs/F048-fast-coding.md` and `.agent-harness/runs/20260715T155043Z-F048-evaluation-pass.md`. Real-device acceptance passed 5/5 normal continuous questions with `stopped_by=silence` and no `max_duration`; durable results are in `.agent-harness/runs/F048-real-device-acceptance.md`.
 
 F040 coding is complete through interactive fast-work fallback after `make -C .agent-harness work-fast` failed its configured Codex Evaluator Agent runtime check before handoff. The implementation adds observable non-blocking acknowledgement playback on macOS, drains/discards microphone chunks while `afplay` runs with safe metrics, and preserves synchronous answer playback plus fake/legacy fallback behavior. Focused tests and final recovery verification pass with 196 project tests. Coding evidence is recorded in `.agent-harness/runs/F040-fast-coding.md`; F040 remains in progress pending separate evaluator approval.
 
@@ -138,6 +138,8 @@ F045 has been completed through evaluator-gated fast work and separate cold-star
 
 F046 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. The optional WebRTC VAD dependency set is now reproducible through `requirements-vad.txt`, and configured diagnostics use the production detector factory plus a real 20ms classification instead of module discovery. Lazy VAD-disabled behavior, focused failure probes, 215 project tests, final recovery verification, system-Python fail-closed diagnostics, and a real Python 3.12/setuptools 80.10.2/WebRTC runtime diagnostic pass are recorded in `.agent-harness/runs/F046-fast-coding.md`, and approval is recorded as `EVAL_PASS: F046` in `.agent-harness/runs/20260713T154700Z-F046-evaluation-pass.md`.
 
+F048 has been completed through evaluator-gated fast work, separate cold-start evaluator approval, and real-device acceptance. Recording VAD endpointing now requires RMS plus VAD to extend speech, lets sustained low RMS advance end silence despite false-high WebRTC ratios, preserves high-energy noise and max-duration safety, and emits a bounded disagreement summary. Focused tests, 221 full project tests, and final recovery verification pass; coding evidence is recorded in `.agent-harness/runs/F048-fast-coding.md`, approval is recorded as `EVAL_PASS: F048` in `.agent-harness/runs/20260715T155043Z-F048-evaluation-pass.md`, and five normal Python 3.12 trials all stopped by silence with no max-duration failures as recorded in `.agent-harness/runs/F048-real-device-acceptance.md`. Default enablement remains a separate product decision.
+
 ## Next Feature
 
 No unfinished features remain in `feature_list.json`.
@@ -148,12 +150,12 @@ F044 has been accepted by a separate cold-start Evaluator. Durable approval is r
 
 ## Known Issues
 
-### Recording VAD is not reliable for real use
+### Deferred Recording VAD limitations
 
-- Impact: With `RECORDING_VAD_ENABLED=1`, real runs can continue to `max_duration` or lose the question prefix because ARMED may trigger only on a later suffix. WebRTC VAD also classified clap-like noise as voice in real tuning.
-- Current safe configuration: Keep `RECORDING_VAD_ENABLED=0` and use the existing RMS-based recording endpoint. Optional VAD may still be used experimentally for ARMED, but it is not the supported recording endpoint.
-- Evidence: `.agent-harness/runs/F037-real-vad-tuning-results.md`.
-- Follow-up: Redesign and evaluate recording endpoint hysteresis with representative real-audio fixtures before enabling it by default.
+- Impact: F048 resolved the normal post-speech `max_duration` failure and passed 5/5 real trials. Lower-priority behavior remains: a deliberately paused short question can lose its prefix if ARMED triggers only on the suffix, and clap-like transients can produce false-positive WebRTC voice evidence.
+- Current safe configuration: The default remains `RECORDING_VAD_ENABLED=0`; the tested Python 3.12/WebRTC environment may enable it for normal continuous questions. ARMED sustained-window and pre-roll safeguards remain in effect.
+- Evidence: `.agent-harness/runs/F037-real-vad-tuning-results.md` and `.agent-harness/runs/F048-real-device-acceptance.md`.
+- Follow-up: Treat paused-prefix preservation and clap/transient rejection as separate lower-priority features if their real impact becomes material. Default enablement is a separate product decision.
 
 ## Operational and Verification Constraints
 

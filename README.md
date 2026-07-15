@@ -288,7 +288,14 @@ requires both its RMS gate and `ARMED_VAD_REQUIRED_RATIO` with at least
 `RECORDING_VAD_ENABLED=1` adds VAD-aware endpointing using the documented end,
 speech, hangover, and end-silence settings; existing `SILENCE_SECONDS`,
 `RECORDING_SILENCE_RMS`, and `MAX_RECORD_SECONDS` remain active compatibility
-and safety controls. `WAKE_VAD_THRESHOLD` is independently optional: when set,
+and safety controls. Recording endpointing is asymmetric: only speech-level RMS
+plus configured VAD speech evidence extends recording, while sustained RMS at
+or below `RECORDING_SILENCE_RMS` advances end silence even if WebRTC remains
+falsely voiced. High-RMS/VAD-low noise is not considered quiet. The endpoint
+logs `low_energy_high_vad_chunks` once per recording for real-test diagnosis.
+`RECORDING_VAD_END_RATIO` is the agreement boundary for that diagnostic; a VAD
+ratio above it cannot veto sustained below-threshold RMS silence.
+`WAKE_VAD_THRESHOLD` is independently optional: when set,
 it is forwarded to openWakeWord, and an older incompatible openWakeWord version
 fails with guidance to upgrade or unset the setting.
 When WebRTC VAD is configured, `python -m src.main --diagnose` imports and
@@ -296,8 +303,9 @@ constructs the configured detector and classifies a valid 20ms silence frame.
 It reports an error instead of an importability false positive if the optional
 wrapper, its `pkg_resources` compatibility dependency, detector construction,
 or native frame classification cannot run. This installation check does not
-establish real-world speech/noise accuracy; keep `RECORDING_VAD_ENABLED=0` for
-the supported recording endpoint.
+establish real-world speech/noise accuracy; keep `RECORDING_VAD_ENABLED=0` by
+default until the manual normal-question endpoint trial consistently reports
+`stopped_by=silence` on the target microphone.
 Guarded ACK flows also require `noise_floor_has_samples=true` and log
 `post_ack_quiet_observed`, suppressed/clipped/overflow chunk counts, and the
 post-ACK maximum RMS and peak. If speaker echo still reaches `max_peak=32768`,
