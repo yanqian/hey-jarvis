@@ -1002,6 +1002,28 @@
         "F037",
         "F046"
       ]
+    },
+    {
+      "id": "F049",
+      "title": "Parse spoken Chinese multiplication operands completely",
+      "description": "Fix 乘以 normalization and add conservative 万/萬 integer sections so spoken multiplication does not truncate to an incomplete expression such as 100*.",
+      "acceptance": [
+        "The calculator normalizer replaces 乘以 as one operator before handling bare 乘, so 一百乘以一千等于多少 and Traditional variants extract complete expressions rather than leaving 以 and truncating to 100*.",
+        "Conservative Chinese integer parsing supports one valid 万/萬 section with under-10000 components, including 一万/一萬 and common values through 99,999,999, while malformed repeated units, ambiguous consecutive digit readings, 亿/億, and unsafe text are rejected without guessing.",
+        "Simplified and Traditional requests for 100 times 1000 and 100 times 10000 route to calculator/safe_calculator and return 100000 and 1000000 through execution and text debug without OpenAI or network access.",
+        "The normal answer path skips ask_chatgpt and chat-history mutation for the affected requests; existing bare 乘, 加/减/減/除以, thousands, digit/symbolic/English arithmetic, and calculator safety remain unchanged.",
+        "Focused parser/router/execution/text-debug/answer-path/documentation tests, full unittest discovery, and final ./init.sh pass without live microphone, speaker, OpenAI, or network."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F022",
+        "F034",
+        "F044"
+      ]
     }
   ]
 }

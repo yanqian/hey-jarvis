@@ -1583,6 +1583,8 @@ class StateMachineTests(unittest.TestCase):
             ("100減20是多少", "The answer is 80.", "tool route=calculator status=success"),
             ("一加一等于几", "The answer is 2.", "tool route=calculator status=success"),
             ("一加一等於幾", "The answer is 2.", "tool route=calculator status=success"),
+            ("一百乘以一千等于多少", "The answer is 100000.", "tool route=calculator status=success"),
+            ("一百乘以一萬等於多少", "The answer is 1000000.", "tool route=calculator status=success"),
         )
 
         for transcription, expected_answer, expected_log in cases:

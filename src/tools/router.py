@@ -420,7 +420,8 @@ def _extract_calculator_expression(text: str) -> str | None:
     )
     compact = _replace_chinese_integer_tokens(compact)
     compact = (
-        compact.replace("加", "+")
+        compact.replace("乘以", "*")
+        .replace("加", "+")
         .replace("减", "-")
         .replace("減", "-")
         .replace("乘", "*")
@@ -432,6 +433,8 @@ def _extract_calculator_expression(text: str) -> str | None:
         return None
     expression = match.group(0).strip()
     if not re.search(r"\d", expression) or not re.search(r"[-+*/%]", expression):
+        return None
+    if re.search(r"[-+*/%]\s*$", expression):
         return None
     return expression
 
@@ -452,7 +455,7 @@ _CHINESE_DIGITS = {
     "九": 9,
 }
 _CHINESE_SMALL_UNITS = {"十": 10, "百": 100, "千": 1000}
-_CHINESE_INTEGER_TOKEN_RE = re.compile(r"[零〇一二两兩三四五六七八九十百千]+")
+_CHINESE_INTEGER_TOKEN_RE = re.compile(r"[零〇一二两兩三四五六七八九十百千万萬亿億]+")
 
 
 def _replace_chinese_integer_tokens(text: str) -> str:
@@ -466,7 +469,28 @@ def _replace_chinese_integer_tokens(text: str) -> str:
 
 
 def _parse_chinese_integer(token: str) -> int | None:
-    """Parse a zero-to-9999 Chinese integer using 十/百/千 positions."""
+    """Parse a conservative Chinese integer with at most one 万 section."""
+
+    if not token:
+        return None
+    normalized = token.replace("萬", "万")
+    if normalized.count("万") > 1:
+        return None
+    if "万" in normalized:
+        high_token, low_token = normalized.split("万", 1)
+        if not high_token:
+            return None
+        high = _parse_chinese_under_10000(high_token)
+        low = 0 if not low_token else _parse_chinese_under_10000(low_token)
+        if high is None or high <= 0 or low is None:
+            return None
+        total = high * 10_000 + low
+        return total if total <= 99_999_999 else None
+    return _parse_chinese_under_10000(normalized)
+
+
+def _parse_chinese_under_10000(token: str) -> int | None:
+    """Parse one positional Chinese integer section below 10,000."""
 
     if not token:
         return None
@@ -491,7 +515,7 @@ def _parse_chinese_integer(token: str) -> int | None:
         pending_digit = None
         last_unit = unit
     total += 0 if pending_digit is None else pending_digit
-    return total if 0 <= total <= 9999 else None
+    return total if 0 <= total <= 9_999 else None
 
 
 def _english_arithmetic_to_expression(text: str) -> str | None:

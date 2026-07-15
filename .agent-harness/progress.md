@@ -140,9 +140,11 @@ F046 has been completed through evaluator-gated fast work and separate cold-star
 
 F048 has been completed through evaluator-gated fast work, separate cold-start evaluator approval, and real-device acceptance. Recording VAD endpointing now requires RMS plus VAD to extend speech, lets sustained low RMS advance end silence despite false-high WebRTC ratios, preserves high-energy noise and max-duration safety, and emits a bounded disagreement summary. Focused tests, 221 full project tests, and final recovery verification pass; coding evidence is recorded in `.agent-harness/runs/F048-fast-coding.md`, approval is recorded as `EVAL_PASS: F048` in `.agent-harness/runs/20260715T155043Z-F048-evaluation-pass.md`, and five normal Python 3.12 trials all stopped by silence with no max-duration failures as recorded in `.agent-harness/runs/F048-real-device-acceptance.md`. Default enablement remains a separate product decision.
 
+F049 coding is complete through evaluator-gated fast work. Chinese calculator normalization now consumes `乘以` as one operator, supports one conservative `万/萬` section, and rejects incomplete or malformed expressions instead of routing `100*`. Text debug returns 100000 for `一百乘以一千等于多少` and 1000000 for `一百乘以一萬等於多少`; focused checks, 223 project tests, and final recovery verification pass. Coding evidence is recorded in `.agent-harness/runs/F049-fast-coding.md`; F049 remains in progress pending separate evaluator approval.
+
 ## Next Feature
 
-No unfinished features remain in `feature_list.json`.
+F049 - Parse spoken Chinese multiplication operands completely.
 
 F043 has been accepted by a separate cold-start Evaluator after its provider runtime was corrected to use an available model and explicit stdin mode. Durable approval is recorded in `.agent-harness/runs/F043-evaluation-pass.md`.
 

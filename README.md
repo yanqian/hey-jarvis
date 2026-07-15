@@ -129,7 +129,9 @@ python -m src.main
 ```
 
 Say `Hey Jarvis`, wait for the short acknowledgement such as `在呢`, then ask
-`what is two plus two?`. The app drains acknowledgement speaker residue before
+`what is two plus two?` or `一百乘以一千等于多少`. Spoken Chinese calculator
+operands support conservative positional integers through one `万/萬` section.
+The app drains acknowledgement speaker residue before
 recording the question, transcribes it, answers through the local calculator
 tool, writes `tmp/output.mp3`, plays it through `afplay`, and returns to
 `WAIT_WAKE` for the next wake phrase.

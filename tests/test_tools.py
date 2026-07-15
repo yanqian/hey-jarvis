@@ -120,6 +120,9 @@ class ToolRoutingTests(unittest.TestCase):
             ("一百二十三減二十", "123-20", "The answer is 103."),
             ("一百零二加八", "102+8", "The answer is 110."),
             ("兩千除以十", "2000/10", "The answer is 200."),
+            ("一百乘以一千等于多少", "100*1000", "The answer is 100000."),
+            ("一百乘以一萬等於多少", "100*10000", "The answer is 1000000."),
+            ("十二万三千四百五十六加一", "123456+1", "The answer is 123457."),
         )
         for text, expression, answer in cases:
             with self.subTest(text=text):
@@ -136,6 +139,11 @@ class ToolRoutingTests(unittest.TestCase):
         route = route_text("一二加三是多少")
 
         self.assertEqual(route.category, "none")
+
+    def test_malformed_or_unsupported_chinese_large_units_do_not_guess(self):
+        for text in ("一百乘以一二万", "一百乘以一万万", "一百乘以一亿"):
+            with self.subTest(text=text):
+                self.assertEqual(route_text(text).category, "none")
 
     def test_rejects_unsafe_calculator_expression(self):
         route = route_text("__import__('os').system('date')")
@@ -460,6 +468,28 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertEqual(chat_client.calls, [])
         self.assertEqual(history, [])
 
+    def test_spoken_chinese_multiplication_does_not_call_chat(self):
+        chat_client = FakeChatClient()
+        history = []
+
+        for text, expected in (
+            ("一百乘以一千等于多少", "The answer is 100000."),
+            ("一百乘以一萬等於多少", "The answer is 1000000."),
+        ):
+            with self.subTest(text=text):
+                answer, route, result = answer_with_tools(
+                    text,
+                    chat_client=chat_client,
+                    history=history,
+                    tools_enabled=True,
+                )
+                self.assertEqual(route.category, "calculator")
+                self.assertEqual(result.status, "success")
+                self.assertEqual(answer, expected)
+
+        self.assertEqual(chat_client.calls, [])
+        self.assertEqual(history, [])
+
     def test_weather_provider_failure_does_not_fall_back_to_chat(self):
         chat_client = FakeChatClient()
         client = FakeJsonClient([{"results": []}])
@@ -696,6 +726,11 @@ class ToolRoutingTests(unittest.TestCase):
         self.assertIn("route=calculator", calculator_debug)
         self.assertIn("tool=safe_calculator", calculator_debug)
         self.assertIn("raw_answer=The answer is 80.", calculator_debug)
+
+        multiplication_debug = format_text_debug("一百乘以一萬等於多少")
+        self.assertIn("route=calculator", multiplication_debug)
+        self.assertIn("expression:100*10000", multiplication_debug)
+        self.assertIn("raw_answer=The answer is 1000000.", multiplication_debug)
 
     def test_text_debug_can_show_mocked_weather_result(self):
         client = FakeJsonClient([weather_geocoding_response(), weather_daily_response()])
