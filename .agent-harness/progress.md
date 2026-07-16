@@ -114,9 +114,9 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F050 - Reconcile Recording VAD documentation and recovery state.
+F051 - Validate speakerphone Realtime WebRTC full duplex.
 
-F050 has been accepted by a separate cold-start Evaluator. Recovery state now reflects F049's approval, README and manual guidance reflect F048's 5/5 real-device endpoint acceptance without implying default enablement, manual testing distinguishes post-RECORDING hangover from unresolved pre-trigger ARMED prefix loss, and the duplicate M012 test ID is removed. Coding evidence is recorded in `.agent-harness/runs/F050-fast-coding.md`, and durable approval is recorded in `.agent-harness/runs/20260716T071443Z-F050-evaluation-pass.md`.
+F051 has been accepted by a separate cold-start Evaluator and subsequently passed a deliberate real-device speakerphone interruption trial. Chrome reported active echo cancellation, noise suppression, automatic gain control, 48 kHz mono capture, a connected peer, and a remote audio track with no Realtime errors. During the fixed long answer, user speech detection was followed by output completion and `response.done status=cancelled` in about 27-28 ms, then the user turn received a response. The report's `speechDuringAssistant=0` is a known probe-observability limitation because WebRTC playout used the remote media track without continuous output-audio delta events on the data channel. A second rapid cancellation cannot be classified from sanitized events alone, so universal absence of speaker self-echo remains unclaimed. Coding evidence is in `.agent-harness/runs/F051-fast-coding.md`, approval is in `.agent-harness/runs/20260716T151618Z-F051-evaluation-pass.md`, and post-evaluation real-device evidence is in `.agent-harness/runs/F051-real-device-acceptance.md`.
 
 F040 coding is complete through interactive fast-work fallback after `make -C .agent-harness work-fast` failed its configured Codex Evaluator Agent runtime check before handoff. The implementation adds observable non-blocking acknowledgement playback on macOS, drains/discards microphone chunks while `afplay` runs with safe metrics, and preserves synchronous answer playback plus fake/legacy fallback behavior. Focused tests and final recovery verification pass with 196 project tests. Coding evidence is recorded in `.agent-harness/runs/F040-fast-coding.md`; F040 remains in progress pending separate evaluator approval.
 
@@ -146,7 +146,7 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Next Feature
 
-No feature is currently planned. The deferred paused-prefix and clap/transient limitations remain in Known Issues for future prioritization.
+No production Realtime migration feature has been planned yet. F051 establishes that direct WebRTC speakerphone transport and protocol-level interruption are viable; the next step is an explicit architecture decision and normalized implementation scope covering wake/session gating, native WebRTC integration, conversation/tool ownership, fallback behavior, and repeated self-echo acceptance.
 
 ## Known Issues
 

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hey Jarvis · Realtime WebRTC Probe</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">Architecture spike · no wake-word integration</p>
+        <h1>Speakerphone Realtime WebRTC Probe</h1>
+        <p>Test full duplex with this Mac’s built-in microphone and speakers. Use no headphones.</p>
+      </header>
+
+      <section class="controls panel">
+        <div>
+          <span class="label">Session</span>
+          <strong id="status" data-state="idle">Idle</strong>
+        </div>
+        <div class="buttons">
+          <button id="start">Start Realtime session</button>
+          <button id="longAnswer" class="secondary" disabled>Play long test answer</button>
+          <button id="stop" class="secondary" disabled>Stop</button>
+          <button id="copy" class="secondary">Copy report</button>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2>Microphone processing</h2>
+          <p class="hint">Requested values are not proof. The actual track settings below are the useful evidence.</p>
+          <dl id="settings">
+            <div><dt>echoCancellation</dt><dd>not started</dd></div>
+            <div><dt>noiseSuppression</dt><dd>not started</dd></div>
+            <div><dt>autoGainControl</dt><dd>not started</dd></div>
+            <div><dt>sampleRate</dt><dd>not started</dd></div>
+            <div><dt>channelCount</dt><dd>not started</dd></div>
+            <div><dt>device</dt><dd>not started</dd></div>
+          </dl>
+        </article>
+
+        <article class="panel">
+          <h2>Manual test</h2>
+          <ol>
+            <li>Start the session and allow microphone access.</li>
+            <li>Press “Play long test answer” to make the model count slowly.</li>
+            <li>While the model speaks, say: “Stop. What is two plus two?”</li>
+            <li>Judge whether it heard itself, stopped promptly, and answered the interruption.</li>
+          </ol>
+          <div class="observations">
+            <label>Self-echo caused a false interruption
+              <select id="selfEcho"><option>not tested</option><option>no</option><option>yes</option><option>unclear</option></select>
+            </label>
+            <label>User barge-in was detected
+              <select id="bargeIn"><option>not tested</option><option>yes</option><option>no</option><option>unclear</option></select>
+            </label>
+            <label>Old response stopped promptly
+              <select id="oldStopped"><option>not tested</option><option>yes</option><option>no</option><option>unclear</option></select>
+            </label>
+            <label>Notes<textarea id="notes" maxlength="1000" placeholder="Distance, speaker volume, behavior…"></textarea></label>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="log-heading"><h2>Sanitized event evidence</h2><span id="eventCount">0 events</span></div>
+        <pre id="events" aria-live="polite">No events yet.</pre>
+      </section>
+
+      <audio id="remoteAudio" autoplay></audio>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

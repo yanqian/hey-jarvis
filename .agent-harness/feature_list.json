@@ -1045,6 +1045,24 @@
         "F048",
         "F049"
       ]
+    },
+    {
+      "id": "F051",
+      "title": "Validate speakerphone Realtime WebRTC full duplex",
+      "description": "Build a bounded local WebRTC probe and collect real Mac built-in microphone/speaker evidence for echo suppression and barge-in before selecting the production Realtime architecture.",
+      "acceptance": [
+        "A project-owned loopback-only validation server serves the probe and mints OpenAI Realtime ephemeral client secrets from the configured standard API key without exposing, logging, embedding, or reporting that key; missing credentials and upstream failures are clear and safely redacted.",
+        "The browser probe creates a Realtime WebRTC peer connection, requests echoCancellation, noiseSuppression, and autoGainControl, attaches the microphone and remote audio tracks, displays actual microphone track settings, and offers deterministic Start/Stop cleanup without adding local PCM forwarding or changing the existing assistant pipeline.",
+        "The probe records bounded sanitized lifecycle, VAD, response, cancellation/interruption, and error evidence plus a copyable validation report that excludes raw/base64 audio and credentials and captures enough timing/device context to judge self-echo and barge-in behavior.",
+        "Offline tests verify loopback defaults, token request shape and redaction, static routing, browser capture constraints, event/report bounds, cleanup code, and missing-key behavior; the local page smoke-loads without a live API call and existing project tests remain unchanged.",
+        "Usage guidance defines a built-in-speaker/microphone no-headphones trial for self-echo, user barge-in, old-response stopping, and cleanup; official external-contract evidence, automated results, any available real-device observations, and final ./init.sh are recorded durably without modifying tracked pipeline runtime defaults or user log artifacts."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": []
     }
   ]
 }
