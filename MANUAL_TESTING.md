@@ -203,9 +203,14 @@ request cases behave unchanged. Then install `webrtcvad`, set
 3. Say `Hey Jarvis` and ask a normal question shortly after `在呢`. The first
    syllable should remain in `tmp/input.wav`; `armed_trigger` should show
    `baseline_ready=true`, `vad_ok=true`, and its VAD ratio.
-4. With `RECORDING_VAD_ENABLED=1`, speak a question with a short natural pause.
-   Recording should continue after the pause, then finish on sustained
-   non-voice silence rather than `MAX_RECORD_SECONDS`.
+4. With `RECORDING_VAD_ENABLED=1`, first speak continuously until the
+   `WAIT_WAKE -> RECORDING` transition is logged, then include a short natural
+   pause before finishing the question. This checks recorder hangover after
+   RECORDING has started: recording should continue after the pause, then finish
+   on sustained non-voice silence rather than `MAX_RECORD_SECONDS`. It does not
+   cover the unresolved ARMED case where a short prefix, a deliberate pause,
+   and a later suffix may trigger only on the suffix after the prefix has left
+   pre-roll.
 
 The relevant controls are `VAD_BACKEND`, `VAD_MODE`,
 `ARMED_VAD_REQUIRED_RATIO`, `ARMED_VAD_MIN_FRAMES`, optional
@@ -242,7 +247,7 @@ The MVP is acceptable when:
 | M009 | Wake success rate | Try 10 clear `Hey Jarvis` wake attempts. | At least 8 attempts trigger. |
 | M010 | Natural stop | Ask a normal question, then stay quiet. | Recording stops after a short silence and logs `stopped_by=silence`. |
 | M011 | Max duration | Speak continuously longer than `MAX_RECORD_SECONDS`. | Recording stops with `stopped_by=max_duration`; process keeps running. |
-| M012 | Recording VAD false-high endpoint | On Python 3.12 install `requirements-vad.txt`, set `VAD_BACKEND=webrtc` and `RECORDING_VAD_ENABLED=1`, ask five normal continuous questions, then stay quiet. | Every question logs `stopped_by=silence` after hangover plus roughly `RECORDING_END_SILENCE_SECONDS`, not `max_duration`; `recording_endpoint` may report nonzero `low_energy_high_vad_chunks`. Keep the default disabled if any normal trial reaches max duration. |
+| M048 | Recording VAD false-high endpoint | On Python 3.12 install `requirements-vad.txt`, set `VAD_BACKEND=webrtc` and `RECORDING_VAD_ENABLED=1`, ask five normal continuous questions, then stay quiet. | Every question logs `stopped_by=silence` after hangover plus roughly `RECORDING_END_SILENCE_SECONDS`, not `max_duration`; `recording_endpoint` may report nonzero `low_energy_high_vad_chunks`. F048 passed this check 5/5 on the tested microphone; repository-wide default enablement remains a separate product decision. |
 | M012 | Wake then silence | Say only `Hey Jarvis`, wait for acknowledgement, then remain silent. | Assistant enters `ARMED`, logs local cancellation such as `no_speech_after_wake`, and returns to `WAIT_WAKE` without recording, transcription, answer generation, TTS, or playback. |
 | M013 | Input WAV quality | After any question, inspect or play `tmp/input.wav`. | File contains the current question, in mono 16 kHz 16-bit WAV format, with usable volume. |
 | M014 | Temporary network failure | Disconnect network after wake and ask a question. | OpenAI failure is logged as recoverable and assistant returns to `WAIT_WAKE`. |

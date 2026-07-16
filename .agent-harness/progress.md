@@ -114,9 +114,9 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F048 - Make Recording VAD stop reliably after normal speech.
+F050 - Reconcile Recording VAD documentation and recovery state.
 
-F048 fixes the false-high WebRTC post-speech endpoint failure by requiring both speech-level RMS and configured VAD evidence to extend recording, while letting sustained low RMS complete end silence even when WebRTC remains falsely voiced. Coding and evaluation evidence are recorded in `.agent-harness/runs/F048-fast-coding.md` and `.agent-harness/runs/20260715T155043Z-F048-evaluation-pass.md`. Real-device acceptance passed 5/5 normal continuous questions with `stopped_by=silence` and no `max_duration`; durable results are in `.agent-harness/runs/F048-real-device-acceptance.md`.
+F050 has been accepted by a separate cold-start Evaluator. Recovery state now reflects F049's approval, README and manual guidance reflect F048's 5/5 real-device endpoint acceptance without implying default enablement, manual testing distinguishes post-RECORDING hangover from unresolved pre-trigger ARMED prefix loss, and the duplicate M012 test ID is removed. Coding evidence is recorded in `.agent-harness/runs/F050-fast-coding.md`, and durable approval is recorded in `.agent-harness/runs/20260716T071443Z-F050-evaluation-pass.md`.
 
 F040 coding is complete through interactive fast-work fallback after `make -C .agent-harness work-fast` failed its configured Codex Evaluator Agent runtime check before handoff. The implementation adds observable non-blocking acknowledgement playback on macOS, drains/discards microphone chunks while `afplay` runs with safe metrics, and preserves synchronous answer playback plus fake/legacy fallback behavior. Focused tests and final recovery verification pass with 196 project tests. Coding evidence is recorded in `.agent-harness/runs/F040-fast-coding.md`; F040 remains in progress pending separate evaluator approval.
 
@@ -140,21 +140,19 @@ F046 has been completed through evaluator-gated fast work and separate cold-star
 
 F048 has been completed through evaluator-gated fast work, separate cold-start evaluator approval, and real-device acceptance. Recording VAD endpointing now requires RMS plus VAD to extend speech, lets sustained low RMS advance end silence despite false-high WebRTC ratios, preserves high-energy noise and max-duration safety, and emits a bounded disagreement summary. Focused tests, 221 full project tests, and final recovery verification pass; coding evidence is recorded in `.agent-harness/runs/F048-fast-coding.md`, approval is recorded as `EVAL_PASS: F048` in `.agent-harness/runs/20260715T155043Z-F048-evaluation-pass.md`, and five normal Python 3.12 trials all stopped by silence with no max-duration failures as recorded in `.agent-harness/runs/F048-real-device-acceptance.md`. Default enablement remains a separate product decision.
 
-F049 coding is complete through evaluator-gated fast work. Chinese calculator normalization now consumes `乘以` as one operator, supports one conservative `万/萬` section, and rejects incomplete or malformed expressions instead of routing `100*`. Text debug returns 100000 for `一百乘以一千等于多少` and 1000000 for `一百乘以一萬等於多少`; focused checks, 223 project tests, and final recovery verification pass. Coding evidence is recorded in `.agent-harness/runs/F049-fast-coding.md`; F049 remains in progress pending separate evaluator approval.
+F049 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. Chinese calculator normalization now consumes `乘以` as one operator, supports one conservative `万/萬` section, and rejects incomplete or malformed expressions instead of routing `100*`. Text debug returns 100000 for `一百乘以一千等于多少` and 1000000 for `一百乘以一萬等於多少`; focused checks, 223 project tests, and final recovery verification pass. Coding evidence is recorded in `.agent-harness/runs/F049-fast-coding.md`, and approval is recorded as `EVAL_PASS: F049` in `.agent-harness/runs/20260715T160231Z-F049-evaluation-pass.md`.
+
+F050 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. Recovery state now reflects F049's approval, README and manual guidance reflect F048's 5/5 real-device endpoint acceptance without implying default enablement, manual testing distinguishes post-RECORDING hangover from unresolved pre-trigger ARMED prefix loss, and the duplicate M012 test ID is removed. Focused documentation assertions guard these boundaries. Coding evidence is recorded in `.agent-harness/runs/F050-fast-coding.md`, and approval is recorded as `EVAL_PASS: F050` in `.agent-harness/runs/20260716T071443Z-F050-evaluation-pass.md`.
 
 ## Next Feature
 
-F049 - Parse spoken Chinese multiplication operands completely.
-
-F043 has been accepted by a separate cold-start Evaluator after its provider runtime was corrected to use an available model and explicit stdin mode. Durable approval is recorded in `.agent-harness/runs/F043-evaluation-pass.md`.
-
-F044 has been accepted by a separate cold-start Evaluator. Durable approval is recorded in `.agent-harness/runs/F044-evaluation-pass.md`.
+No feature is currently planned. The deferred paused-prefix and clap/transient limitations remain in Known Issues for future prioritization.
 
 ## Known Issues
 
 ### Deferred Recording VAD limitations
 
-- Impact: F048 resolved the normal post-speech `max_duration` failure and passed 5/5 real trials. Lower-priority behavior remains: a deliberately paused short question can lose its prefix if ARMED triggers only on the suffix, and clap-like transients can produce false-positive WebRTC voice evidence.
+- Impact: F048 resolved the normal post-speech `max_duration` failure and passed 5/5 real trials. Two lower-priority behaviors remain. Before RECORDING starts, a deliberately paused short question can lose its prefix if ARMED triggers only on the suffix after the prefix has left pre-roll. Separately, clap-like transients can produce false-positive WebRTC voice evidence and unnecessarily enter RECORDING/transcription.
 - Current safe configuration: The default remains `RECORDING_VAD_ENABLED=0`; the tested Python 3.12/WebRTC environment may enable it for normal continuous questions. ARMED sustained-window and pre-roll safeguards remain in effect.
 - Evidence: `.agent-harness/runs/F037-real-vad-tuning-results.md` and `.agent-harness/runs/F048-real-device-acceptance.md`.
 - Follow-up: Treat paused-prefix preservation and clap/transient rejection as separate lower-priority features if their real impact becomes material. Default enablement is a separate product decision.

@@ -1024,6 +1024,27 @@
         "F034",
         "F044"
       ]
+    },
+    {
+      "id": "F050",
+      "title": "Reconcile Recording VAD documentation and recovery state",
+      "description": "Align recovery and operator documentation with F048 real-device acceptance, preserve deferred paused-prefix and clap limitations, and reflect completed F049 state without changing runtime behavior.",
+      "acceptance": [
+        "progress.md identifies F049 as evaluator-approved and last completed before F050, no longer lists completed F049 as the next feature, and retains paused-prefix loss plus clap/transient false positives as concise Known Issues with durable evidence.",
+        "README and manual guidance state that F048 passed 5/5 normal continuous real-device trials while default Recording VAD enablement remains a separate product decision, without stale pending-acceptance wording.",
+        "Manual testing explicitly distinguishes a natural pause after RECORDING has started from the unresolved case where ARMED triggers only on a suffix and loses an earlier short prefix.",
+        "Manual-test table identifiers are unique around the former duplicate M012 rows, and focused documentation tests guard the resolved/deferred distinction and identifiers.",
+        "Feature JSON validation, focused documentation tests, full unittest discovery, and final ./init.sh pass without product-code, runtime configuration, live hardware, OpenAI, network, or tracked tmp-log changes."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P2",
+      "depends_on": [
+        "F048",
+        "F049"
+      ]
     }
   ]
 }

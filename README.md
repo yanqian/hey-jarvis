@@ -305,9 +305,12 @@ constructs the configured detector and classifies a valid 20ms silence frame.
 It reports an error instead of an importability false positive if the optional
 wrapper, its `pkg_resources` compatibility dependency, detector construction,
 or native frame classification cannot run. This installation check does not
-establish real-world speech/noise accuracy; keep `RECORDING_VAD_ENABLED=0` by
-default until the manual normal-question endpoint trial consistently reports
-`stopped_by=silence` on the target microphone.
+establish real-world speech/noise accuracy. F048 passed 5/5 normal continuous
+question trials with `stopped_by=silence` on the tested Python 3.12 microphone
+environment. `RECORDING_VAD_ENABLED=0` remains the repository default because
+default enablement is a separate product decision, not because F048 endpoint
+acceptance is still pending. Deliberate pauses before ARMED triggers and
+clap-like transients remain separate limitations.
 Guarded ACK flows also require `noise_floor_has_samples=true` and log
 `post_ack_quiet_observed`, suppressed/clipped/overflow chunk counts, and the
 post-ACK maximum RMS and peak. If speaker echo still reaches `max_peak=32768`,
