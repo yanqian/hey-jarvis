@@ -13,7 +13,7 @@ Assistant: "The answer is 4."
 
 This project now includes the MVP voice-assistant loop behind testable boundaries. The recovery entrypoint proves the Python package, tests, and a fake-backend state-machine path work without requiring a microphone, speakers, or OpenAI credentials. Real audio capture, wake-word detection, OpenAI transcription/chat/TTS, and macOS playback are wired through `python -m src.main`.
 
-The existing pipeline remains the default backend. `BACKEND=realtime` or `--backend realtime` opts into the Realtime WebRTC path; F053 provides validated configuration, diagnostics, and a loopback-only fakeable bridge without activating live WebRTC. Until the F054 controller is present, selecting Realtime fails closed before microphone or network access. Realtime defaults use `gpt-realtime-2.1`, voice `marin`, 15-second idle and 600-second maximum duration, server VAD, input transcription, a local acknowledgement, bounded debug events, conservative bilingual end phrases, and `127.0.0.1:8770`. Run `python -m src.main --backend realtime --diagnose` to inspect host assets, model/voice, credential, loopback, and exclusive audio-handoff readiness. The standard API key stays in Python and is never transported through the bridge.
+The existing pipeline remains the default backend. `BACKEND=realtime` or `--backend realtime` opts into the Realtime WebRTC path. Run `python -m src.main --backend realtime`, click **Arm hands-free audio** once in the launched Chrome app, then say the configured wake phrase. Confirmed local wake closes Python capture, plays the local acknowledgement, and hands exclusive microphone/playback ownership to a continuous WebRTC session; follow-up turns and server-managed interruption do not require another wake. Idle, maximum-duration, explicit-stop, transport-error, and Ctrl+C cleanup stop browser media before returning to fresh local wake listening. Realtime defaults use `gpt-realtime-2.1`, voice `marin`, 15-second idle and 600-second maximum duration, server VAD, input transcription, a local acknowledgement, bounded debug events, conservative bilingual end phrases, and `127.0.0.1:8770`. Run `python -m src.main --backend realtime --diagnose` to inspect host assets, model/voice, credential, loopback, and exclusive audio-handoff readiness. The standard API key stays in Python and is never transported through the bridge.
 
 ```text
 BACKEND=pipeline
@@ -91,6 +91,28 @@ For the dependency-free full-loop smoke path, run:
 ```bash
 python -m src.main --fake-backend
 ```
+
+The opt-in Realtime controller has a separate dependency-free two-turn lifecycle smoke. It transports no PCM and opens no microphone, browser, speaker, network, or OpenAI connection:
+
+```bash
+python -m src.realtime.fake_smoke
+```
+
+For repeatable local acceptance, record private voice fixtures with
+`python -m src.realtime.fixtures record wake --seconds 4` (and the names
+`turn-1`, `turn-2`, or `barge-in`). Files and a transcript-free integrity
+manifest persist under `tmp/realtime-fixtures/`, which is excluded from Git.
+`python -m src.realtime.fixtures list` reports only duration and capture health.
+Use `python -m src.realtime.fixtures trim NAME --start SECONDS --end SECONDS`
+to preserve the original while creating a shorter private `replay/` derivative;
+the event-driven runner prefers that derivative when present.
+Same-Mac speaker replay is useful for orchestration but may correctly be removed
+by browser echo cancellation, so final no-headphones barge-in acceptance still
+uses one real near-end spoken interruption.
+After launching and arming the Realtime host, run
+`python -m src.realtime.fixture_runner` for event-driven acoustic replay. The
+runner advances only on sanitized lifecycle events and requests a safe stop on
+failure; it never reads transcripts or sends PCM through the Python bridge.
 
 To inspect local structured tool routing for typed text without microphone,
 wake-word detection, OpenAI, TTS, playback, or network access, run:

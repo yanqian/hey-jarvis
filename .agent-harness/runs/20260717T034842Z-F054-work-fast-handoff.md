@@ -1,0 +1,28 @@
+# Run Record: F054 - work-fast coding handoff
+
+## Summary
+
+- Date: 20260717T034842Z
+- Agent role: Orchestrator fast handoff
+- Feature: F054
+- Result: in_progress
+
+## Repository State
+
+- Starting commit: cff3fb4
+- Ending commit: cff3fb4
+- Working tree status: M feature_list.json
+?? ../tmp/debug.log
+?? ../tmp/pr1-real.log
+
+## Commands Run
+
+```bash
+python3 orchestrator.py --work-fast
+```
+
+## Evidence
+
+- Fast handoff: FAST_CODING_HANDOFF: F054
+- Coding evidence required: write a separate run record containing the fast coding evidence marker and matching coding pass verdict after implementation.
+- Evaluator pass prohibited in coding evidence: do not write evaluator pass evidence during the fast coding phase.

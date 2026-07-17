@@ -114,6 +114,10 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
+F054 - Run wake-triggered continuous WebRTC voice sessions.
+
+F054 has been completed through evaluator-gated fast work, separate cold-start evaluator approval, and a repeatable real-device acceptance run. The opt-in Realtime runtime now performs confirmed local wake, exclusive pre-capture acknowledgement handoff, connected/session-created readiness, continuous follow-up turns, server-VAD interruption, bounded idle/maximum/error/explicit/Ctrl+C closure, browser-media teardown, and fresh wake recovery without changing the pipeline default. Private local voice fixtures plus event-driven replay remain Git-ignored and transcript-free. A clean no-headphones run completed two turns in one session, cancelled a long answer 32 ms after replay speech detection, and returned microphone ownership. Final recovery passes with 255 project tests plus pipeline and Realtime fake smoke paths. Coding evidence is in `.agent-harness/runs/F054-fast-coding.md`, real-device evidence is in `.agent-harness/runs/F054-real-device-acceptance.md`, and approval is recorded as `EVAL_PASS: F054` in `.agent-harness/runs/20260717T050500Z-F054-evaluation-pass.md`.
+
 F052 - Validate hands-free WebRTC hosting and microphone handoff.
 
 F052 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. The selected Chrome app-mode host now requires one Arm gesture per launch, then accepts programmatic Python wake commands without another click. Its coordinator enforces exclusive Python-wake/browser-WebRTC microphone ownership, uses server-minted ephemeral client secrets, reports bounded sanitized ordering and actual browser capture settings, and fails closed without a WebSocket fallback. Offline handoff tests pass. Five real start/stop cycles returned ownership cleanly, and a final launch without an autoplay-policy bypass passed a built-in-speaker/microphone interruption trial: real user speech cancelled the old response 154 ms after speech detection and the Python wake stream reopened after browser teardown. Coding evidence is in `.agent-harness/runs/F052-fast-coding.md`, real-device evidence is in `.agent-harness/runs/F052-real-device-acceptance.md`, and approval is recorded as `EVAL_PASS: F052` in `.agent-harness/runs/20260717T033400Z-F052-evaluation-pass.md`.
@@ -150,9 +154,9 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Next Feature
 
-F053 - Add opt-in Realtime backend contracts and configuration.
+F055 - End Realtime sessions with deterministic phrases.
 
-F053 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. Pipeline remains the default, inactive invalid Realtime values are ignored, and explicit Realtime selection validates model, voice, local lifecycle, timeout, VAD, transcription, acknowledgement, debug, end phrases, and loopback settings. The typed bridge requires host readiness, enforces one session identity and ordered lifecycle events, rejects raw PCM, secrets, stale/malformed/oversized payloads, and exposes deterministic fake host/clock boundaries. Backend-specific diagnostics pass without opening live media or network connections. Focused tests and final recovery verification pass with 243 project tests; coding evidence is in `.agent-harness/runs/F053-fast-coding.md`, and approval is recorded as `EVAL_PASS: F053` in `.agent-harness/runs/20260717T034642Z-F053-evaluation-pass.md`.
+F055 is the next planned Realtime MVP slice. It will use completed input-transcription events only as a conservative bilingual session-end control signal, reuse F054's idempotent closing path, and keep idle, maximum-duration, explicit stop, and transport failures independent.
 
 ## Known Issues
 

@@ -67,6 +67,14 @@ class SoundDeviceWakeLease:
             if close is not None:
                 close()
 
+    def read_chunk(self) -> bytes:
+        if self._stream is None:
+            raise HandoffError("Wake microphone is not open")
+        read_chunk = getattr(self._stream, "read_chunk", None)
+        if read_chunk is None:
+            raise HandoffError("Wake microphone stream cannot provide chunks")
+        return bytes(read_chunk())
+
 
 class HandoffCoordinator:
     """Serialize wake-stream and WebRTC-host microphone ownership."""
@@ -77,6 +85,7 @@ class HandoffCoordinator:
         *,
         clock: Callable[[], float] = time.monotonic,
         session_ids: Callable[[], str] = lambda: uuid.uuid4().hex,
+        open_wake_on_init: bool = True,
     ) -> None:
         self._wake_lease = wake_lease
         self._clock = clock
@@ -85,12 +94,20 @@ class HandoffCoordinator:
         self._armed = False
         self._state = HandoffState.WAKE_OWNED
         self._session_id: str | None = None
+        self._transport_connected = False
+        self._session_created = False
+        self._session_configured = False
+        self._connected_at: float | None = None
+        self._last_activity_at: float | None = None
         self._next_command_id = 1
         self._commands: list[HostCommand] = []
         self._evidence: list[dict[str, object]] = []
-        if not self._wake_lease.is_open:
-            self._wake_lease.open()
-        self._record("wake_microphone_opened")
+        if open_wake_on_init:
+            if not self._wake_lease.is_open:
+                self._wake_lease.open()
+            self._record("wake_microphone_opened")
+        else:
+            self._record("wake_microphone_deferred_until_arm")
 
     @property
     def state(self) -> HandoffState:
@@ -100,8 +117,42 @@ class HandoffCoordinator:
     def session_id(self) -> str | None:
         return self._session_id
 
+    @property
+    def armed(self) -> bool:
+        return self._armed
+
+    @property
+    def wake_microphone_open(self) -> bool:
+        return self._wake_lease.is_open
+
+    def read_wake_chunk(self) -> bytes:
+        with self._lock:
+            if self._state != HandoffState.WAKE_OWNED:
+                raise HandoffError("Wake microphone cannot be read during a host session")
+            read_chunk = getattr(self._wake_lease, "read_chunk", None)
+            if read_chunk is None:
+                raise HandoffError("Wake microphone lease cannot provide chunks")
+            return bytes(read_chunk())
+
+    def release_wake_for_acknowledgement(self) -> None:
+        with self._lock:
+            if self._state != HandoffState.WAKE_OWNED:
+                raise HandoffError("Wake microphone can only be released from WAIT_WAKE")
+            if self._wake_lease.is_open:
+                self._wake_lease.close()
+                self._record("wake_microphone_closed", reason="pre_capture_acknowledgement")
+
+    def restore_wake_microphone(self, reason: str) -> None:
+        with self._lock:
+            if self._state == HandoffState.WAKE_OWNED and self._session_id is None and not self._wake_lease.is_open:
+                self._wake_lease.open()
+                self._record("wake_microphone_reopened", result=reason)
+
     def arm_host(self) -> None:
         with self._lock:
+            if self._state == HandoffState.WAKE_OWNED and not self._wake_lease.is_open:
+                self._wake_lease.open()
+                self._record("wake_microphone_opened", reason="host_armed")
             self._armed = True
             self._record("host_armed")
 
@@ -114,20 +165,37 @@ class HandoffCoordinator:
             session_id = self._session_ids()
             if not _SAFE_VALUE.fullmatch(session_id):
                 raise HandoffError("Session identity was invalid")
-            self._wake_lease.close()
-            self._record("wake_microphone_closed")
+            if self._wake_lease.is_open:
+                self._wake_lease.close()
+                self._record("wake_microphone_closed", reason="handoff")
             self._session_id = session_id
+            self._transport_connected = False
+            self._session_created = False
+            self._session_configured = False
+            self._connected_at = None
+            self._last_activity_at = self._clock()
             self._state = HandoffState.HOST_STARTING
             self._enqueue("start", session_id)
             return session_id
 
-    def request_stop(self) -> None:
+    def request_stop(self, reason: str = "requested") -> None:
         with self._lock:
             if self._session_id is None or self._state == HandoffState.WAKE_OWNED:
                 return
             if self._state != HandoffState.HOST_STOPPING:
                 self._state = HandoffState.HOST_STOPPING
-                self._enqueue("stop", self._session_id)
+                self._enqueue("stop", self._session_id, reason=reason)
+
+    def timeout_reason(self, *, idle_seconds: float, max_duration_seconds: float) -> str | None:
+        with self._lock:
+            if self._state != HandoffState.HOST_ACTIVE or self._connected_at is None:
+                return None
+            now = self._clock()
+            if now - self._connected_at >= max_duration_seconds:
+                return "max_duration"
+            if self._last_activity_at is not None and now - self._last_activity_at >= idle_seconds:
+                return "idle_timeout"
+            return None
 
     def request_long_answer(self) -> None:
         with self._lock:
@@ -154,8 +222,27 @@ class HandoffCoordinator:
             }
             self._record(f"host_{event_type}", session_id=session_id, **safe_detail)
             if event_type == "connected":
+                self._transport_connected = True
+                self._session_created = True
+                self._session_configured = True
+            elif event_type == "transport_connected":
+                self._transport_connected = True
+            elif event_type == "session_created":
+                self._session_created = True
+            if (
+                self._transport_connected
+                and self._session_created
+                and self._session_configured
+                and event_type == "connected"
+            ):
                 self._state = HandoffState.HOST_ACTIVE
-            elif event_type in {"stopped", "error"}:
+                self._connected_at = self._clock()
+                self._last_activity_at = self._connected_at
+            if event_type in {"speech_started", "speech_stopped", "response_created", "response_done", "transcription"}:
+                self._last_activity_at = self._clock()
+            if event_type == "error":
+                self.request_stop(str(safe_detail.get("reason", "host_error")))
+            elif event_type == "stopped":
                 self._finish_handoff(event_type)
 
     def command_after(self, command_id: int) -> dict[str, object] | None:
@@ -182,16 +269,22 @@ class HandoffCoordinator:
     def _finish_handoff(self, result: str) -> None:
         session_id = self._session_id
         self._session_id = None
-        self._wake_lease.open()
+        self._transport_connected = False
+        self._session_created = False
+        self._session_configured = False
+        self._connected_at = None
+        self._last_activity_at = None
+        if not self._wake_lease.is_open:
+            self._wake_lease.open()
         self._state = HandoffState.WAKE_OWNED
         self._record("wake_microphone_reopened", session_id=session_id, result=result)
 
-    def _enqueue(self, command_type: str, session_id: str) -> None:
+    def _enqueue(self, command_type: str, session_id: str, **detail: object) -> None:
         command = HostCommand(self._next_command_id, command_type, session_id)
         self._next_command_id += 1
         self._commands.append(command)
         self._commands = self._commands[-32:]
-        self._record("host_command", command=command_type, session_id=session_id)
+        self._record("host_command", command=command_type, session_id=session_id, **detail)
 
     def _record(self, event_type: str, **detail: object) -> None:
         entry = {"at_ms": round(self._clock() * 1000), "type": event_type, **detail}

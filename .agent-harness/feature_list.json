@@ -1115,9 +1115,9 @@
         "Idle timeout, local maximum duration, explicit stop, peer/data-channel close, Realtime error, host failure, microphone failure, and Ctrl+C all enter one idempotent CLOSING path that stops host media before reopening and resetting a fresh local wake stream; a single session failure does not kill the long-running process.",
         "Fake-host/state/clock/error cleanup tests, pipeline regressions, a Realtime fake smoke, a no-headphones real wake/multi-turn/barge-in/close cycle, bounded redacted logs, and final ./init.sh pass on Python 3.11/3.12 without changing pipeline defaults."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

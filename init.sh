@@ -52,4 +52,7 @@ python3 -m src.main --dry-run
 echo "== Project fake-backend smoke =="
 python3 -m src.main --fake-backend
 
+echo "== Project Realtime fake smoke =="
+python3 -m src.realtime.fake_smoke
+
 echo "project recovery verification passed"

@@ -73,13 +73,26 @@ class RealtimeHostTests(unittest.TestCase):
         types = [event["type"] for event in coordinator.report()["events"]]
         self.assertLess(types.index("wake_microphone_closed"), types.index("host_microphone_requested"))
 
-    def test_stale_events_fail_and_error_reopens_wake_microphone(self):
+    def test_real_wake_lease_can_wait_until_browser_arm_warmup_finishes(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(lease, open_wake_on_init=False)
+        self.assertFalse(lease.is_open)
+        coordinator.host_event("armed")
+        self.assertTrue(lease.is_open)
+        self.assertEqual(lease.calls, ["open"])
+        types = [event["type"] for event in coordinator.report()["events"]]
+        self.assertEqual(types[:3], ["wake_microphone_deferred_until_arm", "wake_microphone_opened", "host_armed"])
+
+    def test_stale_events_fail_and_error_waits_for_media_stop_before_reopening(self):
         coordinator, lease = self.build_coordinator()
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
         with self.assertRaisesRegex(HandoffError, "active session"):
             coordinator.host_event("connected", "stale")
         coordinator.host_event("error", session_id, reason="permission_denied")
+        self.assertFalse(lease.is_open)
+        self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
+        coordinator.host_event("stopped", session_id, reason="error_cleanup")
         self.assertTrue(lease.is_open)
         self.assertEqual(coordinator.state, HandoffState.WAKE_OWNED)
 
@@ -97,8 +110,12 @@ class RealtimeHostTests(unittest.TestCase):
         javascript = server.resolve_static("/app.js")[0].decode()
         guidance = (server.STATIC_ROOT.parent / "README.md").read_text()
         self.assertIn("Arm hands-free audio", html)
-        for text in ("getUserMedia", "/api/command?after=", "echoCancellation:true", "track.stop()", "pc.close()"):
+        for text in ("getUserMedia", "/api/command?after=", "echoCancellation:true", "track.stop()", "peer.close()"):
             self.assertIn(text, javascript)
+        for text in ('type:"server_vad"', "create_response:true", "interrupt_response:true", 'event.type==="session.updated"'):
+            self.assertIn(text, javascript)
+        for forbidden in ("response.cancel", "conversation.item.truncate", "output_audio_buffer.clear"):
+            self.assertNotIn(forbidden, javascript)
         self.assertNotIn("OPENAI_API_KEY", javascript)
         self.assertIn("without another browser click", guidance)
         self.assertIn("five start/stop cycles", guidance)

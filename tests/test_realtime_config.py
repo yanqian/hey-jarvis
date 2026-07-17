@@ -71,14 +71,15 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertIn("loopback", message)
         self.assertIn("ACKNOWLEDGEMENT_MODE", message)
 
-    def test_cli_override_and_fail_closed_placeholder_do_not_open_runtime(self):
+    def test_cli_override_dispatches_to_realtime_runtime(self):
         args = build_parser().parse_args(["--backend", "realtime", "--dry-run"])
         self.assertEqual(args.backend, "realtime")
         settings = replace(load_settings(env={}, env_file=None), backend="realtime", openai_api_key="configured")
         with patch("src.main.load_settings", return_value=settings), patch(
-            "src.main.open_microphone_stream", side_effect=AssertionError("microphone must stay closed")
-        ):
-            self.assertEqual(main(["--backend", "realtime"]), 1)
+            "src.main.run_realtime_forever", return_value=0
+        ) as realtime:
+            self.assertEqual(main(["--backend", "realtime"]), 0)
+        realtime.assert_called_once_with(settings)
 
     def test_diagnostics_separate_pipeline_and_realtime_readiness_without_secrets(self):
         pipeline = collect_diagnostics(

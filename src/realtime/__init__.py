@@ -1,6 +1,7 @@
 """Contracts for the opt-in Realtime backend."""
 
 from .bridge import BridgeError, FakeClock, FakeRealtimeHost, LoopbackBridge
+from .controller import RealtimeSessionController, RealtimeSessionResult
 from .contracts import HostCommand, HostCommandType, HostEvent, HostEventType, RealtimeLifecycle
 
 __all__ = [
@@ -13,4 +14,6 @@ __all__ = [
     "HostEventType",
     "LoopbackBridge",
     "RealtimeLifecycle",
+    "RealtimeSessionController",
+    "RealtimeSessionResult",
 ]

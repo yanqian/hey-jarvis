@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from src.audio_input import open_microphone_stream
+from src.config import ConfigError, load_settings
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffError, SoundDeviceWakeLease
 
 
@@ -86,12 +87,18 @@ class HostHTTPServer(ThreadingHTTPServer):
     coordinator: HandoffCoordinator
 
 
-def build_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, real_microphone: bool = False) -> HostHTTPServer:
+def build_server(
+    host: str = DEFAULT_HOST,
+    port: int = DEFAULT_PORT,
+    *,
+    real_microphone: bool = False,
+    wake_after_arm: bool = False,
+) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
     lease = SoundDeviceWakeLease(open_microphone_stream) if real_microphone else MemoryWakeLease()
     server = HostHTTPServer((host, port), HostRequestHandler)
-    server.coordinator = HandoffCoordinator(lease)
+    server.coordinator = HandoffCoordinator(lease, open_wake_on_init=not wake_after_arm)
     return server
 
 
@@ -140,8 +147,21 @@ class HostRequestHandler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         try:
             if path == "/token":
-                key, model, voice = load_host_config()
-                self._json(HTTPStatus.OK, mint_client_secret(api_key=key, model=model, voice=voice))
+                settings = load_settings(require_openai_api_key=True, backend="realtime")
+                assert settings.openai_api_key is not None
+                token = mint_client_secret(
+                    api_key=settings.openai_api_key,
+                    model=settings.realtime_model,
+                    voice=settings.realtime_voice,
+                )
+                token["session"] = {
+                    "model": settings.realtime_model,
+                    "voice": settings.realtime_voice,
+                    "server_vad": settings.realtime_server_vad_enabled,
+                    "input_transcription": settings.realtime_input_transcription_enabled,
+                    "transcription_model": settings.transcribe_model,
+                }
+                self._json(HTTPStatus.OK, token)
                 return
             if path == "/api/simulate-wake":
                 self._json(HTTPStatus.OK, {"session_id": self.server.coordinator.begin_handoff()})
@@ -163,7 +183,7 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 self.server.coordinator.host_event(event_type, session_id, **payload)
                 self._json(HTTPStatus.OK, {"status": "accepted"})
                 return
-        except (HandoffError, HostServerError) as exc:
+        except (ConfigError, HandoffError, HostServerError) as exc:
             self._json(HTTPStatus.CONFLICT, {"error": "host_control_failed", "message": str(exc)})
             return
         self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
