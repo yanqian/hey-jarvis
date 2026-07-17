@@ -1155,9 +1155,9 @@
         "Malformed arguments, unsupported expressions, duplicate/stale calls, local execution failure, host disconnect, and session closure produce bounded safe outputs or cancellation without executing twice, leaking secrets, or crashing the wake loop.",
         "Fake data-channel/function-call tests, existing Chinese/symbolic calculator regressions, one live spoken calculator trial, unchanged pipeline tools, and final ./init.sh pass with the one-tool MVP boundary documented."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [

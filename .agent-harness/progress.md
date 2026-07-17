@@ -114,6 +114,10 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
+F056 - Bridge the safe calculator into Realtime.
+
+F056 has been completed through evaluator-gated fast work, separate cold-start evaluator approval, and real-device Chrome-hosted acceptance. The Realtime session advertises exactly one strict calculator function; Python bounds, correlates, and de-duplicates calls, executes the existing `safe_calculator`, and returns one correlated function output for a same-conversation spoken continuation. Malformed, unsafe, unknown, duplicate, and stale calls remain bounded and do not execute twice or expose other tools. A real Chinese 100-times-1000 request produced one successful execution, the answer 100000, and clean wake-microphone recovery. Final recovery passes with 262 project tests. Coding evidence is in `.agent-harness/runs/F056-fast-coding.md`, live evidence is in `.agent-harness/runs/F056-real-device-acceptance.md`, and approval is recorded as `EVAL_PASS: F056` in `.agent-harness/runs/20260717T000000Z-F056-evaluation-pass.md`.
+
 F055 - End Realtime sessions with deterministic phrases.
 
 F055 has been completed through evaluator-gated fast work, separate cold-start evaluator approval, and real-device Chrome-hosted acceptance. Completed input transcription is treated only as asynchronous item-correlated rough-guide metadata; exact short bilingual end phrases are normalized across Unicode form, case, outer punctuation, and ASR whitespace, while substrings, partial/missing/oversized events, ordinary cancellation language, duplicates, failures, and stale events remain safe. A host-instance lease prevents stale Chrome app windows from consuming commands. A real spoken English end phrase produced `host_end_phrase_matched`, stopped WebRTC media through the shared close path, and returned to `wake_owned` with the microphone open and no transcript text in the report. Final recovery passes with 259 project tests plus pipeline and Realtime fake smoke paths. Coding evidence is in `.agent-harness/runs/F055-fast-coding.md`, real-device evidence is in `.agent-harness/runs/F055-real-device-acceptance.md`, and approval is recorded as `EVAL_PASS: F055` in `.agent-harness/runs/20260717T075325Z-F055-evaluation-pass.md`.
@@ -158,9 +162,9 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Next Feature
 
-F056 - Bridge the safe calculator into Realtime.
+F057 - Accept and document the Realtime WebRTC MVP.
 
-F056 is the next planned Realtime MVP slice. It will advertise only the existing safe calculator as a strict Realtime function, correlate and execute bounded calls through the existing local implementation, return one function result to the same conversation, and keep every other tool out of scope.
+F057 is the final planned Realtime MVP acceptance slice. It will reconcile operator documentation and diagnostics, add the complete deterministic fake smoke, collect repeated real-device cycles across wake/multi-turn/barge-in/calculator/end/cleanup behavior, and preserve `BACKEND=pipeline` as the default.
 
 ## Known Issues
 

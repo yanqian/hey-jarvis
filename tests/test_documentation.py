@@ -13,6 +13,15 @@ MANUAL_TESTING = ROOT / "MANUAL_TESTING.md"
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_realtime_calculator_only_boundary_is_documented(self):
+        readme = README.read_text(encoding="utf-8")
+        self.assertIn("exactly one local function: `calculator`", readme)
+        self.assertIn("same existing `safe_calculator`", readme)
+        self.assertIn("`function_call_output`", readme)
+        self.assertIn("official Realtime function-calling flow", readme)
+        self.assertIn("Weather, FX, stocks", readme)
+        self.assertIn("never executed with `eval`", readme)
+
     def test_stable_knowledge_policy_and_manual_boundary_are_documented(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")

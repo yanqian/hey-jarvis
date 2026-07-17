@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
@@ -11,11 +12,15 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Protocol
 
+from src.tools import ToolRoute, execute_route
+
 
 MAX_EVIDENCE_EVENTS = 200
 _SAFE_VALUE = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
 MAX_TRANSCRIPT_CONTROL_CHARS = 200
 MAX_NORMALIZED_END_PHRASE_CHARS = 64
+MAX_TOOL_ARGUMENT_CHARS = 512
+MAX_CALCULATOR_EXPRESSION_CHARS = 200
 
 
 class HandoffError(RuntimeError):
@@ -43,9 +48,13 @@ class HostCommand:
     command_id: int
     type: str
     session_id: str
+    detail: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
-        return {"command_id": self.command_id, "type": self.type, "session_id": self.session_id}
+        value = {"command_id": self.command_id, "type": self.type, "session_id": self.session_id}
+        if self.detail:
+            value.update(self.detail)
+        return value
 
 
 class SoundDeviceWakeLease:
@@ -113,6 +122,7 @@ class HandoffCoordinator:
             if normalized and len(normalized) <= MAX_NORMALIZED_END_PHRASE_CHARS
         )
         self._seen_transcription_items: set[str] = set()
+        self._handled_tool_calls: set[str] = set()
         if open_wake_on_init:
             if not self._wake_lease.is_open:
                 self._wake_lease.open()
@@ -191,6 +201,7 @@ class HandoffCoordinator:
             self._connected_at = None
             self._last_activity_at = self._clock()
             self._seen_transcription_items.clear()
+            self._handled_tool_calls.clear()
             self._state = HandoffState.HOST_STARTING
             self._enqueue("start", session_id)
             return session_id
@@ -246,6 +257,8 @@ class HandoffCoordinator:
                 self._record("host_transcription_failed", session_id=session_id, reason="provider_failure")
                 self._last_activity_at = self._clock()
                 return "accepted"
+            if event_type == "tool_call":
+                return self._handle_tool_call(session_id, detail)
             safe_detail = {
                 key: value
                 for key, value in detail.items()
@@ -309,6 +322,22 @@ class HandoffCoordinator:
             return "stopping"
         return "accepted"
 
+    def _handle_tool_call(self, session_id: str, detail: dict[str, object]) -> str:
+        call_id = detail.get("call_id")
+        name = detail.get("name")
+        arguments = detail.get("arguments")
+        if not isinstance(call_id, str) or not _SAFE_VALUE.fullmatch(call_id):
+            raise HandoffError("Realtime tool call identity was invalid")
+        if call_id in self._handled_tool_calls:
+            self._record("host_tool_call_duplicate", session_id=session_id)
+            return "accepted"
+        self._handled_tool_calls.add(call_id)
+        output = _calculator_output(name, arguments)
+        self._enqueue("tool_result", session_id, call_id=call_id, output=output)
+        self._record("host_tool_call", session_id=session_id, result="completed")
+        self._last_activity_at = self._clock()
+        return "accepted"
+
     def command_after(self, command_id: int, *, host_id: str | None = None) -> dict[str, object] | None:
         with self._lock:
             if host_id != self._host_id:
@@ -341,13 +370,14 @@ class HandoffCoordinator:
         self._connected_at = None
         self._last_activity_at = None
         self._seen_transcription_items.clear()
+        self._handled_tool_calls.clear()
         if not self._wake_lease.is_open:
             self._wake_lease.open()
         self._state = HandoffState.WAKE_OWNED
         self._record("wake_microphone_reopened", session_id=session_id, result=result)
 
     def _enqueue(self, command_type: str, session_id: str, **detail: object) -> None:
-        command = HostCommand(self._next_command_id, command_type, session_id)
+        command = HostCommand(self._next_command_id, command_type, session_id, dict(detail) or None)
         self._next_command_id += 1
         self._commands.append(command)
         self._commands = self._commands[-32:]
@@ -373,3 +403,23 @@ def _normalize_end_phrase(value: str) -> str:
     # exact, whole-utterance controls; removing it does not enable substring
     # matching because the complete normalized value is still compared.
     return "".join(text.split())
+
+
+def _calculator_output(name: object, arguments: object) -> str:
+    """Execute only the existing safe calculator and return bounded JSON output."""
+
+    if name != "calculator":
+        return json.dumps({"status": "error", "answer": "Unsupported Realtime tool."})
+    if not isinstance(arguments, str) or len(arguments) > MAX_TOOL_ARGUMENT_CHARS:
+        return json.dumps({"status": "error", "answer": "Calculator arguments were invalid."})
+    try:
+        payload = json.loads(arguments)
+    except json.JSONDecodeError:
+        payload = None
+    if not isinstance(payload, dict) or set(payload) != {"expression"}:
+        return json.dumps({"status": "error", "answer": "Calculator arguments were invalid."})
+    expression = payload.get("expression")
+    if not isinstance(expression, str) or not expression.strip() or len(expression) > MAX_CALCULATOR_EXPRESSION_CHARS:
+        return json.dumps({"status": "error", "answer": "Calculator expression was invalid."})
+    result = execute_route(ToolRoute("calculator", "safe_calculator", {"expression": expression.strip()}))
+    return json.dumps({"status": result.status, "answer": result.answer}, ensure_ascii=False)

@@ -187,6 +187,53 @@ class RealtimeHostTests(unittest.TestCase):
             self.assertEqual(coordinator.host_event("transcription", session_id, **detail), "accepted")
         self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
 
+    def test_realtime_calculator_uses_safe_existing_tool_and_enqueues_one_output(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event("connected", session_id)
+        coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="call-1",
+            name="calculator",
+            arguments=json.dumps({"expression": "(2 + 3) * 4"}),
+        )
+        command = coordinator.command_after(1)
+        self.assertEqual(command["type"], "tool_result")
+        self.assertEqual(command["call_id"], "call-1")
+        self.assertEqual(json.loads(command["output"]), {"status": "success", "answer": "The answer is 20."})
+        coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="call-1",
+            name="calculator",
+            arguments=json.dumps({"expression": "999"}),
+        )
+        self.assertIsNone(coordinator.command_after(command["command_id"]))
+
+    def test_realtime_calculator_malformed_unsafe_and_unknown_calls_return_safe_errors(self):
+        cases = (
+            ("calculator", "not-json", "Calculator arguments were invalid."),
+            ("calculator", json.dumps({"expression": "__import__('os')"}), "I could not safely calculate"),
+            ("weather", json.dumps({"expression": "2+2"}), "Unsupported Realtime tool."),
+        )
+        for index, (name, arguments, expected) in enumerate(cases):
+            with self.subTest(name=name, arguments=arguments):
+                lease = FakeLease()
+                coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
+                coordinator.host_event("armed")
+                session_id = coordinator.begin_handoff()
+                coordinator.host_event("connected", session_id)
+                coordinator.host_event(
+                    "tool_call", session_id, call_id=f"call-{index}", name=name, arguments=arguments
+                )
+                output = json.loads(coordinator.command_after(1)["output"])
+                self.assertEqual(output["status"], "error")
+                self.assertIn(expected, output["answer"])
+                self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
     def test_invalid_generated_session_does_not_release_wake_microphone(self):
         lease = FakeLease()
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "invalid session id")
@@ -205,6 +252,15 @@ class RealtimeHostTests(unittest.TestCase):
             self.assertIn(text, javascript)
         for text in ('type:"server_vad"', "create_response:true", "interrupt_response:true", 'event.type==="session.updated"'):
             self.assertIn(text, javascript)
+        for text in (
+            'name:"calculator"',
+            'response.function_call_arguments.done',
+            'item.type==="function_call"',
+            'type:"function_call_output"',
+        ):
+            self.assertIn(text, javascript)
+        for forbidden_tool in ('name:"weather"', 'name:"stock"', 'name:"fx"'):
+            self.assertNotIn(forbidden_tool, javascript)
         for forbidden in ("response.cancel", "conversation.item.truncate", "output_audio_buffer.clear"):
             self.assertNotIn(forbidden, javascript)
         self.assertNotIn("OPENAI_API_KEY", javascript)
