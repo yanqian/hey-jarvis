@@ -146,7 +146,9 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Next Feature
 
-No production Realtime migration feature has been planned yet. F051 establishes that direct WebRTC speakerphone transport and protocol-level interruption are viable; the next step is an explicit architecture decision and normalized implementation scope covering wake/session gating, native WebRTC integration, conversation/tool ownership, fallback behavior, and repeated self-echo acceptance.
+F052 - Validate hands-free WebRTC hosting and microphone handoff.
+
+The Realtime WebRTC MVP has been normalized and decomposed into F052-F057 without beginning production implementation. F052 is the required capability gate: it must select a macOS WebRTC host that, after a documented initial permission/arming step, can start from a Python wake command without another click, exclusively take the microphone from the existing wake stream, autoplay remote audio with actual capture processing enabled, and return microphone ownership across repeated cycles. Failure blocks the WebRTC MVP rather than triggering a WebSocket/local-playback rewrite. F053 then adds opt-in configuration and bridge contracts; F054 delivers wake-triggered continuous voice sessions and server-managed barge-in; F055 adds conservative bilingual end phrases; F056 bridges only the existing safe calculator; and F057 performs final diagnostics, documentation, fake smoke, and repeated real-device acceptance. The pipeline remains the default throughout, and distributable `.app` packaging is explicitly deferred.
 
 ## Known Issues
 

@@ -1063,6 +1063,132 @@
       "last_error": "",
       "priority": "P0",
       "depends_on": []
+    },
+    {
+      "id": "F052",
+      "title": "Validate hands-free WebRTC hosting and microphone handoff",
+      "description": "Select and prove the smallest macOS WebRTC host that can start after a Python wake event, own processed audio exclusively during the session, and return microphone ownership without requiring a new click each wake.",
+      "acceptance": [
+        "A production-path host candidate and loopback control prototype, separate from the F051 spike, documents its one-time permission/arming requirement and then starts a live WebRTC session from a simulated Python wake command without an additional user gesture for every supported subsequent wake.",
+        "The Python wake input is closed before the host requests its microphone track; host tracks, peer connection, data channel, and remote audio are closed before a fresh Python wake stream opens, with ordering evidence and no concurrent microphone ownership across at least five handoff cycles.",
+        "The selected host autoplays the remote media track, reports actual echoCancellation/noiseSuppression/autoGainControl settings, and passes a built-in-speaker/microphone long-answer interruption trial without headphones; protocol cancellation and audible stopping are recorded without claiming universal echo immunity.",
+        "Permission denial, autoplay or user-gesture blocking, host launch/close failure, microphone reacquisition failure, and network/API failure are bounded and leave no stuck microphone or leaked standard API key; if hands-free hosting fails, the feature fails closed and records the capability gap instead of introducing a WebSocket fallback.",
+        "Offline control/handoff tests, a sanitized real-device capability record, unchanged pipeline tests, and final ./init.sh pass while the chosen host, dependency rationale, operational lifetime of initial arming, and packaging deferral are recorded durably."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F051"
+      ]
+    },
+    {
+      "id": "F053",
+      "title": "Add opt-in Realtime backend contracts and configuration",
+      "description": "Introduce pipeline/realtime backend selection, validated Realtime settings, diagnostics, lifecycle states, and a fakeable Python-to-host bridge contract without changing default pipeline behavior.",
+      "acceptance": [
+        "Settings and CLI accept pipeline or realtime backend selection with pipeline remaining the default; validated Realtime model, voice, idle timeout, maximum duration, server-VAD, input-transcription, acknowledgement mode, debug, and end-phrase settings have documented safe defaults and never expose the API key.",
+        "A cohesive Realtime lifecycle contract defines WAIT_WAKE, CONNECTING, ACTIVE_SESSION, and CLOSING plus typed/bounded host commands and events for ready, start, connected, VAD, response, transcription, tool call, error, closed, and shutdown without transporting raw PCM through the bridge.",
+        "The bridge is loopback-only, associates commands and events with one active session identity, rejects malformed, stale, oversized, or secret-bearing payloads, and has deterministic fake-host/fake-clock boundaries for later controller tests.",
+        "Diagnostics distinguish pipeline readiness from Realtime host/assets, model/voice, credential, loopback, and audio-handoff readiness; invalid Realtime-only settings do not break ordinary pipeline startup when Realtime is not selected.",
+        "Focused config/CLI/bridge/diagnostic tests, existing pipeline and fake-backend tests, and final ./init.sh pass without opening a live microphone, WebRTC peer, browser host, speaker, or OpenAI connection."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F052"
+      ]
+    },
+    {
+      "id": "F054",
+      "title": "Run wake-triggered continuous WebRTC voice sessions",
+      "description": "Connect the existing local wake loop to exclusive WebRTC sessions that support direct processed audio, multi-turn follow-up, server-VAD interruption, bounded closure, and reliable return to wake listening.",
+      "acceptance": [
+        "With the realtime backend selected, confirmed local wake closes the Python microphone stream, completes a short pre-capture acknowledgement, commands the host to connect with a server-minted short-lived credential, and enters ACTIVE_SESSION only after connected/session-created readiness; no pre-wake room audio is uploaded.",
+        "During ACTIVE_SESSION the host owns microphone and remote playback through WebRTC media tracks, configures supported Realtime server VAD with response creation and interruption, and permits at least two follow-up turns without another wake while response.done ends only the current response.",
+        "Deliberate user speech during a long answer produces server-managed cancellation/automatic truncation and prompt audible stopping without Python PCM forwarding, local streaming playback, client playback-duration accounting, response.cancel, or conversation.item.truncate logic.",
+        "Idle timeout, local maximum duration, explicit stop, peer/data-channel close, Realtime error, host failure, microphone failure, and Ctrl+C all enter one idempotent CLOSING path that stops host media before reopening and resetting a fresh local wake stream; a single session failure does not kill the long-running process.",
+        "Fake-host/state/clock/error cleanup tests, pipeline regressions, a Realtime fake smoke, a no-headphones real wake/multi-turn/barge-in/close cycle, bounded redacted logs, and final ./init.sh pass on Python 3.11/3.12 without changing pipeline defaults."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F053"
+      ]
+    },
+    {
+      "id": "F055",
+      "title": "End Realtime sessions with deterministic phrases",
+      "description": "Use completed Realtime input-transcription turns as a conservative control signal for bilingual session-end phrases without confusing substrings, partial transcripts, or ordinary cancellation language.",
+      "acceptance": [
+        "Realtime session configuration enables a supported input transcription model and handles conversation.item.input_audio_transcription.completed as asynchronous rough-guide metadata tied to a completed user item rather than as the model's authoritative understanding.",
+        "Configured Chinese and English session-end phrases are normalized and matched only as complete short utterances with conservative punctuation/whitespace handling; partial events, substrings inside longer requests, empty text, and unrelated CANCEL_PHRASES do not close a session.",
+        "A matched end phrase suppresses any new response when still possible, enters the same idempotent CLOSING path, stops WebRTC media, and returns to fresh WAIT_WAKE; a late transcript arriving during or after close is harmless.",
+        "Transcription failure, missing transcription, event reordering, and duplicate completion events are logged safely and do not crash the session or expose transcript content in default logs; idle/max/explicit stop remain valid independent exits.",
+        "Focused bilingual normalization, false-positive, ordering, duplicate, and cleanup tests plus live end-phrase acceptance, pipeline regressions, and final ./init.sh pass with transcription pricing/rough-guide limitations documented."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F054"
+      ]
+    },
+    {
+      "id": "F056",
+      "title": "Bridge the safe calculator into Realtime",
+      "description": "Expose one deterministic calculator function to the Realtime session, execute it through the existing safe local implementation, and return its result to the same conversation for spoken continuation.",
+      "acceptance": [
+        "The Realtime session advertises one narrowly described calculator function with a strict argument schema and automatic tool choice; weather, FX, stock, provider credentials, arbitrary routing, shell access, and all other tools remain out of scope.",
+        "Completed function-call arguments are correlated to the correct call and active session, parsed with bounds, executed through the existing safe calculator rather than eval or a rewritten parser, and never mutate pipeline chat history.",
+        "Success sends one function_call_output item associated with the original call followed by the supported continuation response event, allowing the same Realtime conversation to speak the answer without reconnecting.",
+        "Malformed arguments, unsupported expressions, duplicate/stale calls, local execution failure, host disconnect, and session closure produce bounded safe outputs or cancellation without executing twice, leaking secrets, or crashing the wake loop.",
+        "Fake data-channel/function-call tests, existing Chinese/symbolic calculator regressions, one live spoken calculator trial, unchanged pipeline tools, and final ./init.sh pass with the one-tool MVP boundary documented."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F022",
+        "F049",
+        "F054"
+      ]
+    },
+    {
+      "id": "F057",
+      "title": "Accept and document the Realtime WebRTC MVP",
+      "description": "Reconcile recovery, operator guidance, diagnostics, and repeated real-device evidence for the opt-in Realtime MVP after its host, lifecycle, end-phrase, and calculator features are independently approved.",
+      "acceptance": [
+        "README, DEPLOYMENT, MANUAL_TESTING, .env.example, CLI help, and diagnostics describe the selected host's initial arming/permission lifetime, pipeline-default versus realtime opt-in operation, supported model/voice, costs, no-prewake-upload boundary, session exits, calculator-only tool scope, troubleshooting, and packaging deferral without stale WebSocket/manual-truncation guidance.",
+        "A deterministic Realtime fake smoke exercises wake, exclusive handoff, connect, two user turns, assistant completion, barge-in event handling, calculator output, end phrase, close, and return to WAIT_WAKE without real hardware, network, credentials, or wall-clock sleeps.",
+        "At least five built-in-speaker/microphone cycles start from a real wake without a new click, complete multi-turn speech, include deliberate interruption trials, close through idle/end/explicit or bounded failure paths, and restore the microphone indicator plus functional wake detection; self-echo false interruptions, latency, errors, and actual capture settings are recorded per run.",
+        "Default logs and reports are bounded and redact keys, ephemeral credentials, raw/base64 audio, audio deltas, tool secrets, and transcript text unless an explicit debug mode is enabled; debug mode remains bounded and documented for local troubleshooting.",
+        "All focused tests, full unittest discovery, pipeline dry-run/fake-backend, Realtime fake smoke, selected-backend diagnostics, final ./init.sh, and separate cold-start evaluator approval pass while BACKEND=pipeline remains the default and existing untracked user logs remain untouched."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F052",
+        "F053",
+        "F054",
+        "F055",
+        "F056"
+      ]
     }
   ]
 }
