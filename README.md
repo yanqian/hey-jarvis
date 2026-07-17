@@ -13,7 +13,25 @@ Assistant: "The answer is 4."
 
 This project now includes the MVP voice-assistant loop behind testable boundaries. The recovery entrypoint proves the Python package, tests, and a fake-backend state-machine path work without requiring a microphone, speakers, or OpenAI credentials. Real audio capture, wake-word detection, OpenAI transcription/chat/TTS, and macOS playback are wired through `python -m src.main`.
 
-The existing pipeline remains the default backend. `BACKEND=realtime` or `--backend realtime` opts into the Realtime WebRTC path. Run `python -m src.main --backend realtime`, click **Arm hands-free audio** once in the launched Chrome app, then say the configured wake phrase. Confirmed local wake closes Python capture, plays the local acknowledgement, and hands exclusive microphone/playback ownership to a continuous WebRTC session; follow-up turns and server-managed interruption do not require another wake. Idle, maximum-duration, explicit-stop, transport-error, and Ctrl+C cleanup stop browser media before returning to fresh local wake listening. Realtime defaults use `gpt-realtime-2.1`, voice `marin`, 15-second idle and 600-second maximum duration, server VAD, input transcription, a local acknowledgement, bounded debug events, conservative bilingual end phrases, and `127.0.0.1:8770`. Run `python -m src.main --backend realtime --diagnose` to inspect host assets, model/voice, credential, loopback, and exclusive audio-handoff readiness. The standard API key stays in Python and is never transported through the bridge.
+The existing pipeline remains the default backend. `BACKEND=realtime` or `--backend realtime` opts into the Realtime WebRTC path. Run `python -m src.main --backend realtime`, click **Arm hands-free audio** once in the launched Chrome app, then say the configured wake phrase. Confirmed local wake closes Python capture, plays the local acknowledgement, and hands exclusive microphone/playback ownership to a continuous WebRTC session; follow-up turns and server-managed interruption do not require another wake. Idle, maximum-duration, explicit-stop, transport-error, and Ctrl+C cleanup stop browser media before returning to fresh local wake listening. Realtime defaults use `gpt-realtime-2.1`, voice `marin`, direct browser output gain `0.1`, 15-second idle and 600-second maximum duration, server VAD, input transcription, a local acknowledgement, bounded debug events, conservative bilingual end phrases, and `127.0.0.1:8770`. Run `python -m src.main --backend realtime --diagnose` to inspect host assets, model/voice/output gain, credential, loopback, and exclusive audio-handoff readiness. The standard API key stays in Python and is never transported through the bridge.
+
+Arming is a one-time action for each Chrome app launch, not each conversation.
+Chrome owns its microphone permission for that host lifetime; macOS or Chrome
+may ask again after permission is revoked, the app profile changes, or the host
+is relaunched. Before a local wake, only the Python wake detector holds the
+microphone: no pre-wake PCM, transcript, or wake audio is uploaded to OpenAI.
+After handoff, WebRTC sends session audio directly to Realtime and plays its
+returned audio directly. Realtime audio and optional input transcription are
+billable API usage; check the current OpenAI pricing for the selected model.
+This remains an opt-in developer MVP: signing, notarization, a bundled browser
+host, launch-at-login, and distributable `.app` packaging are deferred.
+
+Default `/api/report` and application logs retain at most bounded sanitized
+lifecycle events. They exclude API keys, ephemeral credentials, raw/base64
+audio, audio deltas, tool arguments/results, call ids, and transcript text.
+`REALTIME_DEBUG=1` enables additional browser-side local troubleshooting events,
+but the browser list is still bounded and content fields remain summarized; do
+not publish debug output without reviewing it.
 
 `REALTIME_END_PHRASES` closes an active session only when a completed input
 transcription is an exact short utterance after case, outer punctuation, and
@@ -48,9 +66,11 @@ This follows the [official Realtime function-calling flow](https://developers.op
 BACKEND=pipeline
 REALTIME_MODEL=gpt-realtime-2.1
 REALTIME_VOICE=marin
+REALTIME_OUTPUT_VOLUME=0.1
 REALTIME_IDLE_TIMEOUT_SECONDS=15
 REALTIME_MAX_DURATION_SECONDS=600
 REALTIME_SERVER_VAD_ENABLED=1
+REALTIME_SERVER_VAD_THRESHOLD=0.8
 REALTIME_INPUT_TRANSCRIPTION_ENABLED=1
 REALTIME_ACKNOWLEDGEMENT_MODE=local
 REALTIME_DEBUG=0
@@ -58,6 +78,18 @@ REALTIME_END_PHRASES=结束对话,再见,goodbye,end conversation
 REALTIME_BRIDGE_HOST=127.0.0.1
 REALTIME_BRIDGE_PORT=8770
 ```
+
+`REALTIME_OUTPUT_VOLUME` is the browser `<audio>` playback gain, from `0.1` to
+`1.0`; it does not re-encode or route returned audio through Python. The `0.1`
+default passed five consecutive built-in-speaker cycles with no unexpected
+speech starts while preserving deliberate barge-in from 15 ms through 118 ms on
+the tested Mac. Higher values are louder but can reintroduce speaker echo as
+false user speech; tune against M057 rather than assuming one value is universal.
+
+`REALTIME_SERVER_VAD_THRESHOLD` is the official server-VAD activation threshold
+from `0.0` through `1.0`. The quiet speakerphone profile defaults to `0.8` so
+residual speaker echo must be louder before it can interrupt; M057 must still
+prove that deliberate speech triggers promptly at the chosen microphone distance.
 
 For full local macOS deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 For manual acceptance cases, see [MANUAL_TESTING.md](MANUAL_TESTING.md).
@@ -121,7 +153,11 @@ For the dependency-free full-loop smoke path, run:
 python -m src.main --fake-backend
 ```
 
-The opt-in Realtime controller has a separate dependency-free two-turn lifecycle smoke. It transports no PCM and opens no microphone, browser, speaker, network, or OpenAI connection:
+The opt-in Realtime controller has a deterministic full-lifecycle smoke covering
+wake, exclusive handoff, connection, two turns, assistant completion,
+interruption, calculator output, end phrase, close, and return to `WAIT_WAKE`.
+It transports no PCM and opens no microphone, browser, speaker, network, OpenAI
+connection, or wall-clock sleep:
 
 ```bash
 python -m src.realtime.fake_smoke

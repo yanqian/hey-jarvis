@@ -60,37 +60,102 @@ class FixtureAcceptanceRunner:
             if not self.session_id:
                 raise FixtureRunError("ACTIVE_SESSION did not expose a sanitized session identity")
 
-            completed = self._count("host_response_done")
+            created = self._count("host_response_created")
             self.play(self._fixture_path("turn-1"))
-            first = self._wait_count("host_response_done", completed + 1, "turn-1 response.done")
-            self._require_latest_reason(first, "completed", "turn-1")
+            first_created = self._wait_count("host_response_created", created + 1, "turn-1 response.created")
+            first = self._wait_event_after(
+                "host_response_done",
+                int(self._latest_event(first_created, "host_response_created")["at_ms"]),
+                "turn-1 response.done",
+            )
+            self._require_event_reason(first, "completed", "turn-1")
 
-            completed += 1
+            created += 1
             self.play(self._fixture_path("turn-2"))
-            second = self._wait_count("host_response_done", completed + 1, "turn-2 response.done")
-            self._require_latest_reason(second, "completed", "turn-2")
+            second_created = self._wait_count("host_response_created", created + 1, "turn-2 response.created")
+            second = self._wait_event_after(
+                "host_response_done",
+                int(self._latest_event(second_created, "host_response_created")["at_ms"]),
+                "turn-2 response.done",
+            )
+            self._require_event_reason(second, "completed", "turn-2")
+
+            created += 1
+            tool_calls = self._count("host_tool_call")
+            self.play(self._fixture_path("calculator"))
+            self._wait_count("host_tool_call", tool_calls + 1, "calculator tool call")
+            # The first response closes the function call; the second is the
+            # spoken continuation created after the local tool result.
+            continuation_created = self._wait_count(
+                "host_response_created",
+                created + 2,
+                "calculator continuation response.created",
+            )
+            continuation = self._latest_event(continuation_created, "host_response_created")
+            calculator = self._wait_event_after(
+                "host_response_done",
+                int(continuation["at_ms"]),
+                "calculator continuation response.done",
+            )
+            self._require_event_reason(calculator, "completed", "calculator continuation")
 
             created = self._count("host_response_created")
             self.request(f"{self.base_url}/api/long-answer", method="POST")
             long_report = self._wait_count("host_response_created", created + 1, "long answer response.created")
             long_created = self._latest_event(long_report, "host_response_created")
             self.sleep(1.0)
-            completed += 1
             self.play(self._fixture_path("barge-in"))
-            interrupted = self._wait_count("host_response_done", completed + 1, "barge-in response.done")
-            done = self._require_latest_reason(interrupted, "cancelled", "barge-in")
-            speech = self._latest_event(interrupted, "host_speech_started", after_ms=int(long_created["at_ms"]))
+            long_created_ms = int(long_created["at_ms"])
+            interrupted = self._wait(
+                lambda report: self._first_event(
+                    report,
+                    "host_response_done",
+                    after_ms=long_created_ms,
+                )
+                is not None,
+                "barge-in response.done",
+            )
+            done = self._first_event(interrupted, "host_response_done", after_ms=long_created_ms)
+            if done is None or done.get("reason") != "cancelled":
+                actual = None if done is None else done.get("reason")
+                raise FixtureRunError(f"barge-in response.done was {actual!r}, expected 'cancelled'")
+            speech = self._latest_event(interrupted, "host_speech_started", after_ms=long_created_ms)
             if speech is None:
                 raise FixtureRunError("barge-in cancellation had no speech_started after the long answer began")
             interruption_ms = int(done["at_ms"]) - int(speech["at_ms"])
             if interruption_ms < 0 or interruption_ms > 1_000:
                 raise FixtureRunError(f"barge-in cancellation latency was not prompt: {interruption_ms}ms")
-            self.request(f"{self.base_url}/api/stop", method="POST")
-            final = self._wait(
-                lambda report: report.get("state") == "wake_owned" and report.get("wake_microphone_open") is True,
-                "fresh wake ownership",
+            barge_created = self._wait_count(
+                "host_response_created",
+                created + 2,
+                "barge-in continuation response.created",
             )
-            return self._summary(final, interruption_ms=interruption_ms)
+            barge_continuation = self._latest_event(barge_created, "host_response_created")
+            barge_answer = self._wait_event_after(
+                "host_response_done",
+                int(barge_continuation["at_ms"]),
+                "barge-in continuation response.done",
+            )
+            self._require_event_reason(barge_answer, "completed", "barge-in continuation")
+
+            self.play(self._fixture_path("end-phrase"))
+            final = self._wait(
+                lambda report: report.get("state") == "wake_owned"
+                and report.get("wake_microphone_open") is True
+                and any(
+                    isinstance(event, dict)
+                    and event.get("type") == "host_end_phrase_matched"
+                    and event.get("session_id") == self.session_id
+                    for event in report.get("events", [])
+                ),
+                "end phrase and fresh wake ownership",
+            )
+            summary = self._summary(final, interruption_ms=interruption_ms)
+            if summary["speech_started"] != 5:
+                raise FixtureRunError(
+                    f"unexpected speech_started count: {summary['speech_started']!r}, expected 5 fixture utterances"
+                )
+            return summary
         except Exception:
             try:
                 self.request(f"{self.base_url}/api/stop", method="POST")
@@ -121,6 +186,16 @@ class FixtureAcceptanceRunner:
             label,
         )
 
+    def _wait_event_after(self, event_type: str, after_ms: int, label: str) -> dict[str, object]:
+        report = self._wait(
+            lambda candidate: self._first_event(candidate, event_type, after_ms=after_ms) is not None,
+            label,
+        )
+        event = self._first_event(report, event_type, after_ms=after_ms)
+        if event is None:  # Predicate and extraction deliberately share the same condition.
+            raise FixtureRunError(f"timed out waiting for {label}")
+        return event
+
     def _wait(self, predicate: Callable[[dict[str, object]], bool], label: str) -> dict[str, object]:
         deadline = self.clock() + self.transition_timeout
         while self.clock() < deadline:
@@ -150,14 +225,30 @@ class FixtureAcceptanceRunner:
                 return event
         return None
 
-    def _require_latest_reason(
+    def _first_event(
         self,
         report: dict[str, object],
+        event_type: str,
+        *,
+        after_ms: int,
+    ) -> dict[str, object] | None:
+        events = report.get("events", [])
+        for event in events if isinstance(events, list) else []:
+            if (
+                isinstance(event, dict)
+                and self._matches(event, event_type)
+                and int(event.get("at_ms", -1)) >= after_ms
+            ):
+                return event
+        return None
+
+    def _require_event_reason(
+        self,
+        event: dict[str, object],
         expected: str,
         label: str,
     ) -> dict[str, object]:
-        event = self._latest_event(report, "host_response_done")
-        actual = None if event is None else event.get("reason")
+        actual = event.get("reason")
         if actual != expected:
             raise FixtureRunError(f"{label} response.done was {actual!r}, expected {expected!r}")
         return event
@@ -175,6 +266,8 @@ class FixtureAcceptanceRunner:
             "turns_completed": event_types.count("host_response_done"),
             "speech_started": event_types.count("host_speech_started"),
             "barge_in_cancel_latency_ms": interruption_ms,
+            "calculator_calls": event_types.count("host_tool_call"),
+            "end_phrase_matches": event_types.count("host_end_phrase_matched"),
             "recovered_to_wake": report.get("state") == "wake_owned" and report.get("wake_microphone_open") is True,
             "note": "acoustic replay may be suppressed by same-device echo cancellation",
         }

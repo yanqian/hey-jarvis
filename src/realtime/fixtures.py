@@ -15,7 +15,7 @@ from src.audio_input import DEFAULT_BLOCK_FRAMES, open_microphone_stream
 
 
 DEFAULT_FIXTURE_ROOT = Path("tmp/realtime-fixtures")
-FIXTURE_NAMES = ("wake", "turn-1", "turn-2", "barge-in")
+FIXTURE_NAMES = ("wake", "turn-1", "turn-2", "calculator", "barge-in", "end-phrase")
 SAMPLE_RATE = 16_000
 CHANNELS = 1
 SAMPLE_WIDTH_BYTES = 2

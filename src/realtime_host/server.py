@@ -169,7 +169,9 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 token["session"] = {
                     "model": settings.realtime_model,
                     "voice": settings.realtime_voice,
+                    "output_volume": settings.realtime_output_volume,
                     "server_vad": settings.realtime_server_vad_enabled,
+                    "server_vad_threshold": settings.realtime_server_vad_threshold,
                     "input_transcription": settings.realtime_input_transcription_enabled,
                     "transcription_model": settings.transcribe_model,
                 }

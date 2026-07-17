@@ -250,6 +250,9 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertIn("Arm hands-free audio", html)
         for text in ("getUserMedia", "/api/command?after=", "host_id", "echoCancellation:true", "track.stop()", "peer.close()"):
             self.assertIn(text, javascript)
+        self.assertIn("REMOTE_AUDIO_VOLUME=0.1", javascript)
+        self.assertIn("threshold:sessionConfig.server_vad_threshold", javascript)
+        self.assertIn("sessionConfig.output_volume", javascript)
         for text in ('type:"server_vad"', "create_response:true", "interrupt_response:true", 'event.type==="session.updated"'):
             self.assertIn(text, javascript)
         for text in (
@@ -278,6 +281,32 @@ class RealtimeHostTests(unittest.TestCase):
         )
         self.assertEqual(result, {"value": "ek_test", "model": "model-test", "voice": "marin"})
         self.assertNotIn("sk-fake-standard", json.dumps(result))
+
+    def test_report_is_bounded_and_redacts_content_and_tool_secrets(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event("connected", session_id)
+        coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="call-secret",
+            name="calculator",
+            arguments=json.dumps({"expression": "2 + 2"}),
+        )
+        coordinator.host_event(
+            "response_done",
+            session_id,
+            reason="sk-secret ek_secret raw transcript c2VjcmV0 audio delta",
+        )
+        for _ in range(250):
+            coordinator.host_event("response_created", session_id)
+
+        report = coordinator.report()
+        report_text = json.dumps(report)
+        self.assertLessEqual(len(report["events"]), 200)
+        for secret in ("call-secret", "The answer is 4", "sk-secret", "ek_secret", "raw transcript", "c2VjcmV0"):
+            self.assertNotIn(secret, report_text)
 
 
 if __name__ == "__main__":

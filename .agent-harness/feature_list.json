@@ -1177,9 +1177,9 @@
         "Default logs and reports are bounded and redact keys, ephemeral credentials, raw/base64 audio, audio deltas, tool secrets, and transcript text unless an explicit debug mode is enabled; debug mode remains bounded and documented for local troubleshooting.",
         "All focused tests, full unittest discovery, pipeline dry-run/fake-backend, Realtime fake smoke, selected-backend diagnostics, final ./init.sh, and separate cold-start evaluator approval pass while BACKEND=pipeline remains the default and existing untracked user logs remain untouched."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [

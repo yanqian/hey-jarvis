@@ -1,6 +1,7 @@
 "use strict";
 
 const AUDIO_CONSTRAINTS={echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1};
+const REMOTE_AUDIO_VOLUME=0.1;
 let armed=false,lastCommand=0,pc=null,dc=null,stream=null,sessionId=null,sessionConfig=null,events=[];
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
@@ -15,6 +16,7 @@ async function arm(){
     const warm=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
     renderSettings(warm.getAudioTracks()[0]?.getSettings()||{});
     warm.getTracks().forEach(track=>track.stop());
+    $("remoteAudio").volume=REMOTE_AUDIO_VOLUME;
     const playAttempt=$("remoteAudio").play();if(playAttempt)playAttempt.catch(()=>{});
     sessionId=null;await hostEvent("armed");armed=true;$("arm").disabled=true;
     $("status").textContent="Armed · waiting for Python wake";log("armed");poll();
@@ -22,7 +24,7 @@ async function arm(){
 }
 
 function sendSessionUpdate(){
-  const turnDetection=sessionConfig.server_vad?{type:"server_vad",threshold:0.5,prefix_padding_ms:300,silence_duration_ms:500,create_response:true,interrupt_response:true}:null;
+  const turnDetection=sessionConfig.server_vad?{type:"server_vad",threshold:sessionConfig.server_vad_threshold,prefix_padding_ms:300,silence_duration_ms:500,create_response:true,interrupt_response:true}:null;
   const input={turn_detection:turnDetection};
   if(sessionConfig.input_transcription)input.transcription={model:sessionConfig.transcription_model};
   const tools=[{type:"function",name:"calculator",description:"Safely evaluate one arithmetic expression. Use only for arithmetic.",parameters:{type:"object",additionalProperties:false,properties:{expression:{type:"string",description:"Arithmetic expression using numbers, parentheses, +, -, *, /, //, %, or **."}},required:["expression"]}}];
@@ -58,9 +60,10 @@ async function start(command){
   await hostEvent("microphone_requested");
   const token=await fetch("/token",{method:"POST"}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.message||data.error);return data;});
   sessionConfig=token.session;
+  $("remoteAudio").volume=Number.isFinite(sessionConfig.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;
   stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
   const track=stream.getAudioTracks()[0],settings=track.getSettings();renderSettings(settings);
-  await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,sampleRate:settings.sampleRate,channelCount:settings.channelCount});
+  await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
   pc=new RTCPeerConnection();
   pc.ontrack=event=>{$("remoteAudio").srcObject=event.streams[0];log("remote_audio_track")};
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};

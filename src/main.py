@@ -361,7 +361,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--backend",
         choices=SUPPORTED_BACKENDS,
-        help="override BACKEND for this invocation; pipeline remains the default",
+        help="select pipeline (default) or opt-in billable Realtime WebRTC (arm Chrome once per launch)",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -372,7 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--diagnose",
         action="store_true",
-        help="report runtime configuration, dependency, and macOS readiness checks",
+        help="report selected-backend configuration, permission, privacy, and macOS readiness checks",
     )
     mode.add_argument(
         "--fake-backend",

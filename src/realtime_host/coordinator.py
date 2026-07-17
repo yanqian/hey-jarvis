@@ -262,7 +262,7 @@ class HandoffCoordinator:
             safe_detail = {
                 key: value
                 for key, value in detail.items()
-                if key in {"echoCancellation", "noiseSuppression", "autoGainControl", "sampleRate", "channelCount", "reason"}
+                if key in {"echoCancellation", "noiseSuppression", "autoGainControl", "sampleRate", "channelCount", "outputVolume", "reason"}
                 and isinstance(value, (str, int, float, bool))
             }
             self._record(f"host_{event_type}", session_id=session_id, **safe_detail)
@@ -381,10 +381,18 @@ class HandoffCoordinator:
         self._next_command_id += 1
         self._commands.append(command)
         self._commands = self._commands[-32:]
-        self._record("host_command", command=command_type, session_id=session_id, **detail)
+        # The browser still receives command detail, but the default report only
+        # records lifecycle metadata. In particular, tool call ids and outputs
+        # must never become durable diagnostic evidence.
+        evidence_detail = {"reason": detail["reason"]} if "reason" in detail else {}
+        self._record("host_command", command=command_type, session_id=session_id, **evidence_detail)
 
     def _record(self, event_type: str, **detail: object) -> None:
-        entry = {"at_ms": round(self._clock() * 1000), "type": event_type, **detail}
+        safe_detail = {
+            key: value if not isinstance(value, str) or _SAFE_VALUE.fullmatch(value) else "[redacted]"
+            for key, value in detail.items()
+        }
+        entry = {"at_ms": round(self._clock() * 1000), "type": event_type, **safe_detail}
         self._evidence.append(entry)
         self._evidence = self._evidence[-MAX_EVIDENCE_EVENTS:]
 
