@@ -114,6 +114,10 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
+F055 - End Realtime sessions with deterministic phrases.
+
+F055 has been completed through evaluator-gated fast work, separate cold-start evaluator approval, and real-device Chrome-hosted acceptance. Completed input transcription is treated only as asynchronous item-correlated rough-guide metadata; exact short bilingual end phrases are normalized across Unicode form, case, outer punctuation, and ASR whitespace, while substrings, partial/missing/oversized events, ordinary cancellation language, duplicates, failures, and stale events remain safe. A host-instance lease prevents stale Chrome app windows from consuming commands. A real spoken English end phrase produced `host_end_phrase_matched`, stopped WebRTC media through the shared close path, and returned to `wake_owned` with the microphone open and no transcript text in the report. Final recovery passes with 259 project tests plus pipeline and Realtime fake smoke paths. Coding evidence is in `.agent-harness/runs/F055-fast-coding.md`, real-device evidence is in `.agent-harness/runs/F055-real-device-acceptance.md`, and approval is recorded as `EVAL_PASS: F055` in `.agent-harness/runs/20260717T075325Z-F055-evaluation-pass.md`.
+
 F054 - Run wake-triggered continuous WebRTC voice sessions.
 
 F054 has been completed through evaluator-gated fast work, separate cold-start evaluator approval, and a repeatable real-device acceptance run. The opt-in Realtime runtime now performs confirmed local wake, exclusive pre-capture acknowledgement handoff, connected/session-created readiness, continuous follow-up turns, server-VAD interruption, bounded idle/maximum/error/explicit/Ctrl+C closure, browser-media teardown, and fresh wake recovery without changing the pipeline default. Private local voice fixtures plus event-driven replay remain Git-ignored and transcript-free. A clean no-headphones run completed two turns in one session, cancelled a long answer 32 ms after replay speech detection, and returned microphone ownership. Final recovery passes with 255 project tests plus pipeline and Realtime fake smoke paths. Coding evidence is in `.agent-harness/runs/F054-fast-coding.md`, real-device evidence is in `.agent-harness/runs/F054-real-device-acceptance.md`, and approval is recorded as `EVAL_PASS: F054` in `.agent-harness/runs/20260717T050500Z-F054-evaluation-pass.md`.
@@ -154,9 +158,9 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Next Feature
 
-F055 - End Realtime sessions with deterministic phrases.
+F056 - Bridge the safe calculator into Realtime.
 
-F055 is the next planned Realtime MVP slice. It will use completed input-transcription events only as a conservative bilingual session-end control signal, reuse F054's idempotent closing path, and keep idle, maximum-duration, explicit stop, and transport failures independent.
+F056 is the next planned Realtime MVP slice. It will advertise only the existing safe calculator as a strict Realtime function, correlate and execute bounded calls through the existing local implementation, return one function result to the same conversation, and keep every other tool out of scope.
 
 ## Known Issues
 

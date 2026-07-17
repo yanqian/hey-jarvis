@@ -1135,9 +1135,9 @@
         "Transcription failure, missing transcription, event reordering, and duplicate completion events are logged safely and do not crash the session or expose transcript content in default logs; idle/max/explicit stop remain valid independent exits.",
         "Focused bilingual normalization, false-positive, ordering, duplicate, and cleanup tests plus live end-phrase acceptance, pipeline regressions, and final ./init.sh pass with transcription pricing/rough-guide limitations documented."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [

@@ -271,6 +271,11 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("Interrupt playback", readme)
         self.assertIn("six-second follow-up", readme)
         self.assertIn("custom wake-word model loading", readme)
+        self.assertIn("REALTIME_END_PHRASES", readme)
+        self.assertIn("rough guide", readme)
+        self.assertIn("ASR model", readme)
+        self.assertIn("never transcript text", readme)
+        self.assertIn("conversation.item.input_audio_transcription.completed", readme)
 
         for package_name in DEPENDENCY_MODULES:
             self.assertIn(package_name, readme)

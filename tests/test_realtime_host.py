@@ -73,6 +73,18 @@ class RealtimeHostTests(unittest.TestCase):
         types = [event["type"] for event in coordinator.report()["events"]]
         self.assertLess(types.index("wake_microphone_closed"), types.index("host_microphone_requested"))
 
+    def test_only_the_armed_browser_instance_can_consume_commands_or_emit_events(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
+        coordinator.host_event("armed", host_id="host-current")
+        session_id = coordinator.begin_handoff()
+        self.assertIsNone(coordinator.command_after(0, host_id="host-stale"))
+        self.assertEqual(coordinator.command_after(0, host_id="host-current")["type"], "start")
+        with self.assertRaisesRegex(HandoffError, "armed host"):
+            coordinator.host_event("connected", session_id, host_id="host-stale")
+        coordinator.host_event("connected", session_id, host_id="host-current")
+        self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
     def test_real_wake_lease_can_wait_until_browser_arm_warmup_finishes(self):
         lease = FakeLease()
         coordinator = HandoffCoordinator(lease, open_wake_on_init=False)
@@ -96,6 +108,85 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertTrue(lease.is_open)
         self.assertEqual(coordinator.state, HandoffState.WAKE_OWNED)
 
+    def test_completed_transcription_matches_only_exact_bilingual_end_utterances(self):
+        for transcript in (
+            " 再见。 ",
+            "GOODBYE!",
+            "good bye.",
+            "结束对话",
+            "结束 对话。",
+            "end   conversation...",
+        ):
+            with self.subTest(transcript=transcript):
+                lease = FakeLease()
+                coordinator = HandoffCoordinator(
+                    lease,
+                    session_ids=lambda: "session-end",
+                    end_phrases=("再见", "goodbye", "结束对话", "end conversation"),
+                )
+                coordinator.host_event("armed")
+                session_id = coordinator.begin_handoff()
+                coordinator.host_event("connected", session_id)
+                result = coordinator.host_event(
+                    "transcription", session_id, item_id="item-1", transcript=transcript
+                )
+                self.assertEqual(result, "stopping")
+                self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
+                report_text = json.dumps(coordinator.report(), ensure_ascii=False)
+                self.assertNotIn(transcript.strip(), report_text)
+                self.assertNotIn("GOODBYE", report_text)
+
+    def test_transcription_false_positives_duplicates_failures_and_late_events_are_safe(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(
+            lease,
+            session_ids=lambda: "session-1",
+            end_phrases=("再见", "goodbye"),
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event("connected", session_id)
+        for index, transcript in enumerate(("", "goodbye for now please", "please say goodbye", "取消", "再见北京")):
+            self.assertEqual(
+                coordinator.host_event(
+                    "transcription", session_id, item_id=f"item-{index}", transcript=transcript
+                ),
+                "accepted",
+            )
+        self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+        self.assertEqual(
+            coordinator.host_event("transcription", session_id, item_id="item-4", transcript="再见"),
+            "accepted",
+        )
+        coordinator.host_event("transcription_failed", session_id, item_id="item-failed")
+        coordinator.host_event("response_created", session_id)
+        coordinator.request_stop("explicit")
+        self.assertEqual(
+            coordinator.host_event("transcription", session_id, item_id="item-late", transcript="再见"),
+            "stopping",
+        )
+        self.assertFalse(lease.is_open)
+        coordinator.host_event("stopped", session_id)
+        self.assertTrue(lease.is_open)
+        report_text = json.dumps(coordinator.report(), ensure_ascii=False)
+        for transcript in ("goodbye for now please", "please say goodbye", "取消", "再见北京"):
+            self.assertNotIn(transcript, report_text)
+
+    def test_missing_item_text_and_long_completed_transcripts_never_close(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1", end_phrases=("goodbye",))
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event("connected", session_id)
+        for detail in (
+            {"transcript": "goodbye"},
+            {"item_id": "item-empty", "transcript": "  "},
+            {"item_id": "item-long", "transcript": "x" * 201},
+            {"item_id": "item-not-short", "transcript": "goodbye " + "please " * 10},
+        ):
+            self.assertEqual(coordinator.host_event("transcription", session_id, **detail), "accepted")
+        self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
     def test_invalid_generated_session_does_not_release_wake_microphone(self):
         lease = FakeLease()
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "invalid session id")
@@ -110,7 +201,7 @@ class RealtimeHostTests(unittest.TestCase):
         javascript = server.resolve_static("/app.js")[0].decode()
         guidance = (server.STATIC_ROOT.parent / "README.md").read_text()
         self.assertIn("Arm hands-free audio", html)
-        for text in ("getUserMedia", "/api/command?after=", "echoCancellation:true", "track.stop()", "peer.close()"):
+        for text in ("getUserMedia", "/api/command?after=", "host_id", "echoCancellation:true", "track.stop()", "peer.close()"):
             self.assertIn(text, javascript)
         for text in ('type:"server_vad"', "create_response:true", "interrupt_response:true", 'event.type==="session.updated"'):
             self.assertIn(text, javascript)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -13,6 +14,8 @@ from typing import Callable, Protocol
 
 MAX_EVIDENCE_EVENTS = 200
 _SAFE_VALUE = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
+MAX_TRANSCRIPT_CONTROL_CHARS = 200
+MAX_NORMALIZED_END_PHRASE_CHARS = 64
 
 
 class HandoffError(RuntimeError):
@@ -86,12 +89,14 @@ class HandoffCoordinator:
         clock: Callable[[], float] = time.monotonic,
         session_ids: Callable[[], str] = lambda: uuid.uuid4().hex,
         open_wake_on_init: bool = True,
+        end_phrases: tuple[str, ...] = (),
     ) -> None:
         self._wake_lease = wake_lease
         self._clock = clock
         self._session_ids = session_ids
         self._lock = threading.RLock()
         self._armed = False
+        self._host_id: str | None = None
         self._state = HandoffState.WAKE_OWNED
         self._session_id: str | None = None
         self._transport_connected = False
@@ -102,6 +107,12 @@ class HandoffCoordinator:
         self._next_command_id = 1
         self._commands: list[HostCommand] = []
         self._evidence: list[dict[str, object]] = []
+        self._end_phrases = frozenset(
+            normalized
+            for normalized in (_normalize_end_phrase(value) for value in end_phrases)
+            if normalized and len(normalized) <= MAX_NORMALIZED_END_PHRASE_CHARS
+        )
+        self._seen_transcription_items: set[str] = set()
         if open_wake_on_init:
             if not self._wake_lease.is_open:
                 self._wake_lease.open()
@@ -148,8 +159,13 @@ class HandoffCoordinator:
                 self._wake_lease.open()
                 self._record("wake_microphone_reopened", result=reason)
 
-    def arm_host(self) -> None:
+    def arm_host(self, host_id: str | None = None) -> None:
         with self._lock:
+            if host_id is not None and not _SAFE_VALUE.fullmatch(host_id):
+                raise HandoffError("Host identity was invalid")
+            if self._session_id is not None and host_id != self._host_id:
+                raise HandoffError("A different host already owns the active session")
+            self._host_id = host_id
             if self._state == HandoffState.WAKE_OWNED and not self._wake_lease.is_open:
                 self._wake_lease.open()
                 self._record("wake_microphone_opened", reason="host_armed")
@@ -174,6 +190,7 @@ class HandoffCoordinator:
             self._session_configured = False
             self._connected_at = None
             self._last_activity_at = self._clock()
+            self._seen_transcription_items.clear()
             self._state = HandoffState.HOST_STARTING
             self._enqueue("start", session_id)
             return session_id
@@ -203,17 +220,32 @@ class HandoffCoordinator:
                 raise HandoffError("A connected host session is required")
             self._enqueue("long_answer", self._session_id)
 
-    def host_event(self, event_type: str, session_id: str | None = None, **detail: object) -> None:
+    def host_event(
+        self,
+        event_type: str,
+        session_id: str | None = None,
+        *,
+        host_id: str | None = None,
+        **detail: object,
+    ) -> str:
         with self._lock:
             if event_type == "armed":
-                self.arm_host()
-                return
+                self.arm_host(host_id)
+                return "accepted"
             if not _SAFE_VALUE.fullmatch(event_type):
                 raise HandoffError("Host event type was invalid")
+            if host_id != self._host_id:
+                raise HandoffError("Host event did not match the armed host")
             if session_id != self._session_id or self._session_id is None:
                 raise HandoffError("Host event did not match the active session")
             if event_type in {"microphone_requested", "microphone_acquired"} and self._wake_lease.is_open:
                 raise HandoffError("Host microphone requested before wake microphone closed")
+            if event_type == "transcription":
+                return self._handle_completed_transcription(session_id, detail)
+            if event_type == "transcription_failed":
+                self._record("host_transcription_failed", session_id=session_id, reason="provider_failure")
+                self._last_activity_at = self._clock()
+                return "accepted"
             safe_detail = {
                 key: value
                 for key, value in detail.items()
@@ -244,9 +276,43 @@ class HandoffCoordinator:
                 self.request_stop(str(safe_detail.get("reason", "host_error")))
             elif event_type == "stopped":
                 self._finish_handoff(event_type)
+            return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
 
-    def command_after(self, command_id: int) -> dict[str, object] | None:
+    def _handle_completed_transcription(self, session_id: str, detail: dict[str, object]) -> str:
+        item_id = detail.get("item_id")
+        if not isinstance(item_id, str) or not _SAFE_VALUE.fullmatch(item_id):
+            self._record("host_transcription_ignored", session_id=session_id, reason="missing_item")
+            return "accepted"
+        if self._state != HandoffState.HOST_ACTIVE:
+            self._record("host_transcription_ignored", session_id=session_id, reason="late_event")
+            return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
+        if item_id in self._seen_transcription_items:
+            self._record("host_transcription_duplicate", session_id=session_id)
+            return "accepted"
+        self._seen_transcription_items.add(item_id)
+        transcript = detail.get("transcript")
+        if not isinstance(transcript, str) or not transcript.strip():
+            self._record("host_transcription_ignored", session_id=session_id, reason="missing_text")
+            return "accepted"
+        if len(transcript) > MAX_TRANSCRIPT_CONTROL_CHARS:
+            self._record("host_transcription_ignored", session_id=session_id, reason="too_long")
+            return "accepted"
+        self._record("host_transcription", session_id=session_id)
+        self._last_activity_at = self._clock()
+        normalized = _normalize_end_phrase(transcript)
+        if len(normalized) > MAX_NORMALIZED_END_PHRASE_CHARS:
+            self._record("host_transcription_ignored", session_id=session_id, reason="not_short")
+            return "accepted"
+        if normalized and normalized in self._end_phrases:
+            self._record("host_end_phrase_matched", session_id=session_id)
+            self.request_stop("end_phrase")
+            return "stopping"
+        return "accepted"
+
+    def command_after(self, command_id: int, *, host_id: str | None = None) -> dict[str, object] | None:
         with self._lock:
+            if host_id != self._host_id:
+                return None
             return next((command.as_dict() for command in self._commands if command.command_id > command_id), None)
 
     def report(self) -> dict[str, object]:
@@ -274,6 +340,7 @@ class HandoffCoordinator:
         self._session_configured = False
         self._connected_at = None
         self._last_activity_at = None
+        self._seen_transcription_items.clear()
         if not self._wake_lease.is_open:
             self._wake_lease.open()
         self._state = HandoffState.WAKE_OWNED
@@ -290,3 +357,19 @@ class HandoffCoordinator:
         entry = {"at_ms": round(self._clock() * 1000), "type": event_type, **detail}
         self._evidence.append(entry)
         self._evidence = self._evidence[-MAX_EVIDENCE_EVENTS:]
+
+
+def _normalize_end_phrase(value: str) -> str:
+    """Normalize one complete short utterance without enabling substring matches."""
+
+    text = unicodedata.normalize("NFKC", value).casefold().strip()
+    while text and (text[0].isspace() or unicodedata.category(text[0]).startswith("P")):
+        text = text[1:]
+    while text and (text[-1].isspace() or unicodedata.category(text[-1]).startswith("P")):
+        text = text[:-1]
+    # Completed input transcription is only a rough guide and may insert spaces
+    # inside a short spoken control phrase (for example ``good bye`` or
+    # ``结束 对话``). Whitespace is not semantically significant for these
+    # exact, whole-utterance controls; removing it does not enable substring
+    # matching because the complete normalized value is still compared.
+    return "".join(text.split())

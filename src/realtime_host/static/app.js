@@ -2,11 +2,12 @@
 
 const AUDIO_CONSTRAINTS={echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1};
 let armed=false,lastCommand=0,pc=null,dc=null,stream=null,sessionId=null,sessionConfig=null,events=[];
+const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
 function log(type,detail={}){events.push({at_ms:Math.round(performance.now()),type,...detail});events=events.slice(-100);$("events").textContent=events.map(JSON.stringify).join("\n");}
 async function post(path,payload={}){const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const data=await response.json();if(!response.ok)throw new Error(data.message||data.error);return data;}
-async function hostEvent(type,detail={}){return post("/api/event",{type,session_id:sessionId,...detail});}
+async function hostEvent(type,detail={}){return post("/api/event",{type,session_id:sessionId,host_id:hostId,...detail});}
 function renderSettings(settings){for(const row of $("settings").querySelectorAll("div")){const key=row.querySelector("dt").textContent;row.querySelector("dd").textContent=String(settings[key]??"not reported");}}
 
 async function arm(){
@@ -28,7 +29,7 @@ function sendSessionUpdate(){
 }
 
 async function handleServerEvent(event){
-  const tracked=["session.created","session.updated","input_audio_buffer.speech_started","input_audio_buffer.speech_stopped","response.created","response.done","conversation.item.input_audio_transcription.completed","error"];
+  const tracked=["session.created","session.updated","input_audio_buffer.speech_started","input_audio_buffer.speech_stopped","response.created","response.done","conversation.item.input_audio_transcription.completed","conversation.item.input_audio_transcription.failed","error"];
   if(!tracked.includes(event.type))return;
   log(event.type,{status:event.response?.status});
   if(event.type==="session.created"){await hostEvent("session_created");sendSessionUpdate();}
@@ -37,7 +38,12 @@ async function handleServerEvent(event){
   if(event.type==="input_audio_buffer.speech_stopped")await hostEvent("speech_stopped");
   if(event.type==="response.created")await hostEvent("response_created");
   if(event.type==="response.done")await hostEvent("response_done",{reason:String(event.response?.status||"unknown")});
-  if(event.type==="conversation.item.input_audio_transcription.completed")await hostEvent("transcription");
+  if(event.type==="conversation.item.input_audio_transcription.completed"){
+    const transcript=typeof event.transcript==="string"&&event.transcript.length<=200?event.transcript:null;
+    const result=await hostEvent("transcription",{item_id:event.item_id,transcript});
+    if(result.status==="stopping")await stop("end_phrase");
+  }
+  if(event.type==="conversation.item.input_audio_transcription.failed")await hostEvent("transcription_failed",{item_id:event.item_id});
   if(event.type==="error"){await hostEvent("error",{reason:"realtime_error"}).catch(()=>{});await stop("realtime_error");}
 }
 
@@ -76,7 +82,7 @@ async function stop(reason="command"){
   $("status").textContent="Armed · Python wake microphone restored";
 }
 
-async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){await hostEvent("error",{reason:"host_command_failure"}).catch(()=>{});await stop("error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
+async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){await hostEvent("error",{reason:"host_command_failure"}).catch(()=>{});await stop("error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
 function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:"Count slowly from one to one hundred, saying every number clearly. Do not abbreviate or skip any number."}]}}));dc.send(JSON.stringify({type:"response.create"}));}
 
 $("arm").addEventListener("click",arm);$("long").addEventListener("click",longAnswer);$("stop").addEventListener("click",()=>post("/api/stop"));window.addEventListener("beforeunload",()=>{if(stream)stream.getTracks().forEach(track=>track.stop());});

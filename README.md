@@ -15,6 +15,25 @@ This project now includes the MVP voice-assistant loop behind testable boundarie
 
 The existing pipeline remains the default backend. `BACKEND=realtime` or `--backend realtime` opts into the Realtime WebRTC path. Run `python -m src.main --backend realtime`, click **Arm hands-free audio** once in the launched Chrome app, then say the configured wake phrase. Confirmed local wake closes Python capture, plays the local acknowledgement, and hands exclusive microphone/playback ownership to a continuous WebRTC session; follow-up turns and server-managed interruption do not require another wake. Idle, maximum-duration, explicit-stop, transport-error, and Ctrl+C cleanup stop browser media before returning to fresh local wake listening. Realtime defaults use `gpt-realtime-2.1`, voice `marin`, 15-second idle and 600-second maximum duration, server VAD, input transcription, a local acknowledgement, bounded debug events, conservative bilingual end phrases, and `127.0.0.1:8770`. Run `python -m src.main --backend realtime --diagnose` to inspect host assets, model/voice, credential, loopback, and exclusive audio-handoff readiness. The standard API key stays in Python and is never transported through the bridge.
 
+`REALTIME_END_PHRASES` closes an active session only when a completed input
+transcription is an exact short utterance after case, outer punctuation, and
+whitespace normalization. For example, `再见。` and `GOODBYE!` match defaults,
+while `再见北京`, `please say goodbye`, partial events, ordinary
+`CANCEL_PHRASES`, and duplicate item events do not. A match enters the same
+bounded media-closing path as explicit stop; default logs record only the
+outcome, never transcript text. Set `REALTIME_INPUT_TRANSCRIPTION_ENABLED=0`
+to disable this optional control signal; idle, maximum duration, explicit stop,
+and transport-error exits continue to work.
+
+OpenAI documents that Realtime input transcription runs asynchronously from
+response creation, may arrive before or after response events, uses a separate
+ASR model, can diverge from the Realtime model's interpretation, and should be
+treated only as a rough guide. Its usage is billed according to the selected
+ASR model rather than the Realtime model. This project therefore uses it only
+for conservative exact end-phrase control, not for conversation meaning. See
+the [official completed-transcription event reference](https://developers.openai.com/api/reference/resources/realtime/server-events#conversation.item.input_audio_transcription.completed)
+for current behavior and pricing semantics.
+
 ```text
 BACKEND=pipeline
 REALTIME_MODEL=gpt-realtime-2.1

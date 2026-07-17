@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from src.audio_input import open_microphone_stream
-from src.config import ConfigError, load_settings
+from src.config import ConfigError, DEFAULT_REALTIME_END_PHRASES, load_settings
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffError, SoundDeviceWakeLease
 
 
@@ -93,12 +93,17 @@ def build_server(
     *,
     real_microphone: bool = False,
     wake_after_arm: bool = False,
+    end_phrases: tuple[str, ...] = DEFAULT_REALTIME_END_PHRASES,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
     lease = SoundDeviceWakeLease(open_microphone_stream) if real_microphone else MemoryWakeLease()
     server = HostHTTPServer((host, port), HostRequestHandler)
-    server.coordinator = HandoffCoordinator(lease, open_wake_on_init=not wake_after_arm)
+    server.coordinator = HandoffCoordinator(
+        lease,
+        open_wake_on_init=not wake_after_arm,
+        end_phrases=end_phrases,
+    )
     return server
 
 
@@ -125,7 +130,14 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             except ValueError:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_command_cursor"})
                 return
-            self._json(HTTPStatus.OK, {"command": self.server.coordinator.command_after(after)})
+            host_id = urllib.parse.parse_qs(parsed.query).get("host_id", [None])[0]
+            if not isinstance(host_id, str):
+                self._json(HTTPStatus.BAD_REQUEST, {"error": "missing_host_identity"})
+                return
+            self._json(
+                HTTPStatus.OK,
+                {"command": self.server.coordinator.command_after(after, host_id=host_id)},
+            )
             return
         if parsed.path == "/api/report":
             self._json(HTTPStatus.OK, self.server.coordinator.report())
@@ -178,10 +190,20 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 payload = self._read_json()
                 event_type = payload.pop("type", None)
                 session_id = payload.pop("session_id", None)
-                if not isinstance(event_type, str) or (session_id is not None and not isinstance(session_id, str)):
+                host_id = payload.pop("host_id", None)
+                if (
+                    not isinstance(event_type, str)
+                    or not isinstance(host_id, str)
+                    or (session_id is not None and not isinstance(session_id, str))
+                ):
                     raise HandoffError("Host event payload was invalid")
-                self.server.coordinator.host_event(event_type, session_id, **payload)
-                self._json(HTTPStatus.OK, {"status": "accepted"})
+                result = self.server.coordinator.host_event(
+                    event_type,
+                    session_id,
+                    host_id=host_id,
+                    **payload,
+                )
+                self._json(HTTPStatus.OK, {"status": result})
                 return
         except (ConfigError, HandoffError, HostServerError) as exc:
             self._json(HTTPStatus.CONFLICT, {"error": "host_control_failed", "message": str(exc)})
