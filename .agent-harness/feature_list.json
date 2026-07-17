@@ -1075,9 +1075,9 @@
         "Permission denial, autoplay or user-gesture blocking, host launch/close failure, microphone reacquisition failure, and network/API failure are bounded and leave no stuck microphone or leaked standard API key; if hands-free hosting fails, the feature fails closed and records the capability gap instead of introducing a WebSocket fallback.",
         "Offline control/handoff tests, a sanitized real-device capability record, unchanged pipeline tests, and final ./init.sh pass while the chosen host, dependency rationale, operational lifetime of initial arming, and packaging deferral are recorded durably."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
