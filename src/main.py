@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TextIO
 
 from .audio_input import open_microphone_stream
-from .config import Settings
+from .config import SUPPORTED_BACKENDS, Settings
 from .config import collect_diagnostics, format_diagnostics, load_settings, wake_acknowledgement_missing_message
 from .openai_client import build_openai_client
 from .player import MacOSPlayer
@@ -241,11 +241,14 @@ def run_wake_file_debug(
     return 0
 
 
-def run_assistant_forever() -> int:
+def run_assistant_forever(*, backend: str | None = None) -> int:
     """Run the real assistant until interrupted."""
 
     logger = logging.getLogger(LOGGER_NAME)
-    settings = load_settings(require_openai_api_key=True)
+    settings = load_settings(require_openai_api_key=True, backend=backend)
+    if settings.backend == "realtime":
+        logger.error("Realtime backend contracts are ready; the wake/session controller is delivered by F054")
+        return 1
     history: list[dict[str, str]] = []
 
     logger.info("Assistant started")
@@ -290,6 +293,11 @@ def run_assistant_forever() -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m src.main")
+    parser.add_argument(
+        "--backend",
+        choices=SUPPORTED_BACKENDS,
+        help="override BACKEND for this invocation; pipeline remains the default",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--dry-run",
@@ -354,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return run_dry_run()
     if args.diagnose:
-        report = collect_diagnostics()
+        report = collect_diagnostics(backend=args.backend)
         print(format_diagnostics(report))
         return 1 if report.has_errors else 0
     if args.fake_backend:
@@ -373,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.wake_file:
         return run_wake_file_debug(args.wake_file)
 
-    return run_assistant_forever()
+    return run_assistant_forever(backend=args.backend)
 
 
 def configure_logging() -> None:

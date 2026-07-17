@@ -13,6 +13,23 @@ Assistant: "The answer is 4."
 
 This project now includes the MVP voice-assistant loop behind testable boundaries. The recovery entrypoint proves the Python package, tests, and a fake-backend state-machine path work without requiring a microphone, speakers, or OpenAI credentials. Real audio capture, wake-word detection, OpenAI transcription/chat/TTS, and macOS playback are wired through `python -m src.main`.
 
+The existing pipeline remains the default backend. `BACKEND=realtime` or `--backend realtime` opts into the Realtime WebRTC path; F053 provides validated configuration, diagnostics, and a loopback-only fakeable bridge without activating live WebRTC. Until the F054 controller is present, selecting Realtime fails closed before microphone or network access. Realtime defaults use `gpt-realtime-2.1`, voice `marin`, 15-second idle and 600-second maximum duration, server VAD, input transcription, a local acknowledgement, bounded debug events, conservative bilingual end phrases, and `127.0.0.1:8770`. Run `python -m src.main --backend realtime --diagnose` to inspect host assets, model/voice, credential, loopback, and exclusive audio-handoff readiness. The standard API key stays in Python and is never transported through the bridge.
+
+```text
+BACKEND=pipeline
+REALTIME_MODEL=gpt-realtime-2.1
+REALTIME_VOICE=marin
+REALTIME_IDLE_TIMEOUT_SECONDS=15
+REALTIME_MAX_DURATION_SECONDS=600
+REALTIME_SERVER_VAD_ENABLED=1
+REALTIME_INPUT_TRANSCRIPTION_ENABLED=1
+REALTIME_ACKNOWLEDGEMENT_MODE=local
+REALTIME_DEBUG=0
+REALTIME_END_PHRASES=结束对话,再见,goodbye,end conversation
+REALTIME_BRIDGE_HOST=127.0.0.1
+REALTIME_BRIDGE_PORT=8770
+```
+
 For full local macOS deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 For manual acceptance cases, see [MANUAL_TESTING.md](MANUAL_TESTING.md).
 

@@ -94,6 +94,27 @@ DEFAULT_ARMED_LAST_CHUNK_MUST_BE_VOICED = True
 DEFAULT_MIN_VALID_SPEECH_SECONDS = 0.50
 DEFAULT_MIN_TRANSCRIPT_LENGTH = 2
 DEFAULT_CANCEL_PHRASES = ("取消", "没事", "不用了", "算了", "stop", "cancel", "never mind")
+DEFAULT_BACKEND = "pipeline"
+SUPPORTED_BACKENDS = ("pipeline", "realtime")
+DEFAULT_REALTIME_MODEL = "gpt-realtime-2.1"
+DEFAULT_REALTIME_VOICE = "marin"
+DEFAULT_REALTIME_IDLE_TIMEOUT_SECONDS = 15.0
+DEFAULT_REALTIME_MAX_DURATION_SECONDS = 600.0
+DEFAULT_REALTIME_SERVER_VAD_ENABLED = True
+DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED = True
+DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE = "local"
+SUPPORTED_REALTIME_ACKNOWLEDGEMENT_MODES = ("local", "none")
+DEFAULT_REALTIME_DEBUG = False
+DEFAULT_REALTIME_END_PHRASES = ("结束对话", "再见", "goodbye", "end conversation")
+DEFAULT_REALTIME_BRIDGE_HOST = "127.0.0.1"
+DEFAULT_REALTIME_BRIDGE_PORT = 8770
+
+
+def normalize_realtime_acknowledgement_mode(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in SUPPORTED_REALTIME_ACKNOWLEDGEMENT_MODES:
+        raise ValueError(value)
+    return normalized
 
 SUPPORTED_PYTHON_VERSIONS = {(3, 11), (3, 12)}
 PLACEHOLDER_API_KEYS = {"", "your_api_key_here", "replace_me", "changeme"}
@@ -183,6 +204,18 @@ class Settings:
     recording_vad_speech_ratio: float = DEFAULT_RECORDING_VAD_SPEECH_RATIO
     recording_hangover_seconds: float = DEFAULT_RECORDING_HANGOVER_SECONDS
     recording_end_silence_seconds: float = DEFAULT_SILENCE_SECONDS
+    backend: str = DEFAULT_BACKEND
+    realtime_model: str = DEFAULT_REALTIME_MODEL
+    realtime_voice: str = DEFAULT_REALTIME_VOICE
+    realtime_idle_timeout_seconds: float = DEFAULT_REALTIME_IDLE_TIMEOUT_SECONDS
+    realtime_max_duration_seconds: float = DEFAULT_REALTIME_MAX_DURATION_SECONDS
+    realtime_server_vad_enabled: bool = DEFAULT_REALTIME_SERVER_VAD_ENABLED
+    realtime_input_transcription_enabled: bool = DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED
+    realtime_acknowledgement_mode: str = DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE
+    realtime_debug: bool = DEFAULT_REALTIME_DEBUG
+    realtime_end_phrases: tuple[str, ...] = DEFAULT_REALTIME_END_PHRASES
+    realtime_bridge_host: str = DEFAULT_REALTIME_BRIDGE_HOST
+    realtime_bridge_port: int = DEFAULT_REALTIME_BRIDGE_PORT
 
 
 @dataclass(frozen=True)
@@ -210,6 +243,7 @@ def load_settings(
     env_file: str | Path | None = ".env",
     *,
     require_openai_api_key: bool = False,
+    backend: str | None = None,
 ) -> Settings:
     """Load settings from .env and environment mappings.
 
@@ -227,6 +261,72 @@ def load_settings(
     openai_api_key = _optional_secret(raw_env.get("OPENAI_API_KEY"))
     if require_openai_api_key and openai_api_key is None:
         errors.append("OPENAI_API_KEY is required; set it in .env or the environment")
+
+    backend_value = (backend or raw_env.get("BACKEND", DEFAULT_BACKEND)).strip().lower()
+    if backend_value not in SUPPORTED_BACKENDS:
+        errors.append(f"BACKEND must be one of: {', '.join(SUPPORTED_BACKENDS)}")
+        backend_value = DEFAULT_BACKEND
+
+    realtime_model = DEFAULT_REALTIME_MODEL
+    realtime_voice = DEFAULT_REALTIME_VOICE
+    realtime_idle_timeout_seconds = DEFAULT_REALTIME_IDLE_TIMEOUT_SECONDS
+    realtime_max_duration_seconds = DEFAULT_REALTIME_MAX_DURATION_SECONDS
+    realtime_server_vad_enabled = DEFAULT_REALTIME_SERVER_VAD_ENABLED
+    realtime_input_transcription_enabled = DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED
+    realtime_acknowledgement_mode = DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE
+    realtime_debug = DEFAULT_REALTIME_DEBUG
+    realtime_end_phrases = DEFAULT_REALTIME_END_PHRASES
+    realtime_bridge_host = DEFAULT_REALTIME_BRIDGE_HOST
+    realtime_bridge_port = DEFAULT_REALTIME_BRIDGE_PORT
+    if backend_value == "realtime":
+        realtime_model = _text_value(raw_env, "REALTIME_MODEL", DEFAULT_REALTIME_MODEL, errors)
+        realtime_voice = _text_value(raw_env, "REALTIME_VOICE", DEFAULT_REALTIME_VOICE, errors)
+        realtime_idle_timeout_seconds = _float_value(
+            raw_env,
+            "REALTIME_IDLE_TIMEOUT_SECONDS",
+            DEFAULT_REALTIME_IDLE_TIMEOUT_SECONDS,
+            errors,
+            minimum=1.0,
+        )
+        realtime_max_duration_seconds = _float_value(
+            raw_env,
+            "REALTIME_MAX_DURATION_SECONDS",
+            DEFAULT_REALTIME_MAX_DURATION_SECONDS,
+            errors,
+            minimum=1.0,
+            maximum=3600.0,
+        )
+        realtime_server_vad_enabled = _bool_value(
+            raw_env, "REALTIME_SERVER_VAD_ENABLED", DEFAULT_REALTIME_SERVER_VAD_ENABLED, errors
+        )
+        realtime_input_transcription_enabled = _bool_value(
+            raw_env,
+            "REALTIME_INPUT_TRANSCRIPTION_ENABLED",
+            DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED,
+            errors,
+        )
+        realtime_acknowledgement_mode = _choice_value(
+            raw_env,
+            "REALTIME_ACKNOWLEDGEMENT_MODE",
+            DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE,
+            SUPPORTED_REALTIME_ACKNOWLEDGEMENT_MODES,
+            errors,
+            normalizer=normalize_realtime_acknowledgement_mode,
+        )
+        realtime_debug = _bool_value(raw_env, "REALTIME_DEBUG", DEFAULT_REALTIME_DEBUG, errors)
+        realtime_end_phrases = _text_list_value(
+            raw_env, "REALTIME_END_PHRASES", DEFAULT_REALTIME_END_PHRASES, errors
+        )
+        realtime_bridge_host = _text_value(
+            raw_env, "REALTIME_BRIDGE_HOST", DEFAULT_REALTIME_BRIDGE_HOST, errors
+        )
+        realtime_bridge_port = _int_value(
+            raw_env, "REALTIME_BRIDGE_PORT", DEFAULT_REALTIME_BRIDGE_PORT, errors, minimum=1, maximum=65535
+        )
+        if realtime_max_duration_seconds <= realtime_idle_timeout_seconds:
+            errors.append("REALTIME_MAX_DURATION_SECONDS must be greater than REALTIME_IDLE_TIMEOUT_SECONDS")
+        if realtime_bridge_host not in {"127.0.0.1", "localhost", "::1"}:
+            errors.append("REALTIME_BRIDGE_HOST must be loopback-only")
 
     wake_backend = _choice_value(
         raw_env,
@@ -631,6 +731,18 @@ def load_settings(
         recording_vad_speech_ratio=recording_vad_speech_ratio,
         recording_hangover_seconds=recording_hangover_seconds,
         recording_end_silence_seconds=recording_end_silence_seconds,
+        backend=backend_value,
+        realtime_model=realtime_model,
+        realtime_voice=realtime_voice,
+        realtime_idle_timeout_seconds=realtime_idle_timeout_seconds,
+        realtime_max_duration_seconds=realtime_max_duration_seconds,
+        realtime_server_vad_enabled=realtime_server_vad_enabled,
+        realtime_input_transcription_enabled=realtime_input_transcription_enabled,
+        realtime_acknowledgement_mode=realtime_acknowledgement_mode,
+        realtime_debug=realtime_debug,
+        realtime_end_phrases=realtime_end_phrases,
+        realtime_bridge_host=realtime_bridge_host,
+        realtime_bridge_port=realtime_bridge_port,
     )
 
 
@@ -642,6 +754,7 @@ def collect_diagnostics(
     afplay_path: str | None = None,
     dependency_modules: Mapping[str, str] | None = None,
     wake_word_model_paths: Mapping[str, str | Path] | None = None,
+    backend: str | None = None,
 ) -> DiagnosticReport:
     """Collect diagnostics, probing an optional runtime only when configured."""
 
@@ -671,12 +784,15 @@ def collect_diagnostics(
         )
 
     try:
-        settings = load_settings(env=env, env_file=env_file)
+        settings = load_settings(env=env, env_file=env_file, backend=backend)
     except ConfigError as exc:
         checks.append(DiagnosticCheck("configuration", "error", "; ".join(exc.errors)))
         settings = None
     else:
         checks.append(DiagnosticCheck("configuration", "ok", "Environment values loaded"))
+
+    if settings is not None:
+        checks.extend(_backend_readiness_checks(settings))
 
     if settings is None or settings.openai_api_key is None:
         checks.append(
@@ -747,6 +863,54 @@ def collect_diagnostics(
     )
 
     return DiagnosticReport(tuple(checks))
+
+
+def _backend_readiness_checks(settings: Settings) -> list[DiagnosticCheck]:
+    if settings.backend == "pipeline":
+        return [
+            DiagnosticCheck("backend:pipeline", "ok", "Pipeline backend selected and Realtime-only settings are inactive"),
+            DiagnosticCheck("backend:realtime", "skip", "Realtime backend is not selected"),
+        ]
+
+    static_root = Path(__file__).resolve().parent / "realtime_host" / "static"
+    required_assets = ("index.html", "app.js", "styles.css")
+    assets_ready = all((static_root / name).is_file() for name in required_assets)
+    loopback_ready = settings.realtime_bridge_host in {"127.0.0.1", "localhost", "::1"}
+    checks = [
+        DiagnosticCheck("backend:pipeline", "skip", "Pipeline backend is available but not selected"),
+        DiagnosticCheck(
+            "realtime:host-assets",
+            "ok" if assets_ready else "error",
+            "Realtime Chrome app-mode host assets are present"
+            if assets_ready
+            else "Realtime host assets are missing; restore src/realtime_host/static",
+        ),
+        DiagnosticCheck(
+            "realtime:model-voice",
+            "ok",
+            f"Realtime model={settings.realtime_model} voice={settings.realtime_voice}",
+        ),
+        DiagnosticCheck(
+            "realtime:credential",
+            "ok" if settings.openai_api_key else "error",
+            "Standard API key is configured for server-side ephemeral credential minting"
+            if settings.openai_api_key
+            else "OPENAI_API_KEY is required by the selected Realtime backend",
+        ),
+        DiagnosticCheck(
+            "realtime:loopback",
+            "ok" if loopback_ready else "error",
+            f"Realtime bridge is loopback-only at {settings.realtime_bridge_host}:{settings.realtime_bridge_port}"
+            if loopback_ready
+            else "Realtime bridge host is not loopback-only",
+        ),
+        DiagnosticCheck(
+            "realtime:audio-handoff",
+            "ok",
+            "Exclusive wake/host microphone handoff contract is available",
+        ),
+    ]
+    return checks
 
 
 def wake_acknowledgement_missing_message(settings: Settings) -> str | None:

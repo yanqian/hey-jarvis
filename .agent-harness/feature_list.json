@@ -1095,9 +1095,9 @@
         "Diagnostics distinguish pipeline readiness from Realtime host/assets, model/voice, credential, loopback, and audio-handoff readiness; invalid Realtime-only settings do not break ordinary pipeline startup when Realtime is not selected.",
         "Focused config/CLI/bridge/diagnostic tests, existing pipeline and fake-backend tests, and final ./init.sh pass without opening a live microphone, WebRTC peer, browser host, speaker, or OpenAI connection."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
