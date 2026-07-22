@@ -114,6 +114,12 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
+F058 - Log pipeline latency and enforce Chinese replies.
+
+F058 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. Successful pipeline loops now emit ordered `pipeline_timing` stage records and a bounded `response_timing` summary with recording duration, transcription, answer or local-tool routing, TTS, ready-to-play, playback, post-recording total, and route. General chat and structured-tool naturalization receive a current-turn language system instruction: Chinese input requires concise Simplified Chinese, explicit English terminology/translation/pronunciation requests may include requested English content with Chinese explanation, and English input remains English regardless of prior history. Focused tests pass with 66 tests, full supported-runtime discovery and final recovery pass with 233 project tests, coding evidence is recorded in `.agent-harness/runs/F058-fast-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F058` in `.agent-harness/runs/20260717T000000Z-F058-evaluation-pass.md`.
+
+## Recent Completed Feature History
+
 F051 - Validate speakerphone Realtime WebRTC full duplex.
 
 F051 has been accepted by a separate cold-start Evaluator and subsequently passed a deliberate real-device speakerphone interruption trial. Chrome reported active echo cancellation, noise suppression, automatic gain control, 48 kHz mono capture, a connected peer, and a remote audio track with no Realtime errors. During the fixed long answer, user speech detection was followed by output completion and `response.done status=cancelled` in about 27-28 ms, then the user turn received a response. The report's `speechDuringAssistant=0` is a known probe-observability limitation because WebRTC playout used the remote media track without continuous output-audio delta events on the data channel. A second rapid cancellation cannot be classified from sanitized events alone, so universal absence of speaker self-echo remains unclaimed. Coding evidence is in `.agent-harness/runs/F051-fast-coding.md`, approval is in `.agent-harness/runs/20260716T151618Z-F051-evaluation-pass.md`, and post-evaluation real-device evidence is in `.agent-harness/runs/F051-real-device-acceptance.md`.
@@ -149,6 +155,10 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 F052 - Validate hands-free WebRTC hosting and microphone handoff.
 
 The Realtime WebRTC MVP has been normalized and decomposed into F052-F057 without beginning production implementation. F052 is the required capability gate: it must select a macOS WebRTC host that, after a documented initial permission/arming step, can start from a Python wake command without another click, exclusively take the microphone from the existing wake stream, autoplay remote audio with actual capture processing enabled, and return microphone ownership across repeated cycles. Failure blocks the WebRTC MVP rather than triggering a WebSocket/local-playback rewrite. F053 then adds opt-in configuration and bridge contracts; F054 delivers wake-triggered continuous voice sessions and server-managed barge-in; F055 adds conservative bilingual end phrases; F056 bridges only the existing safe calculator; and F057 performs final diagnostics, documentation, fake smoke, and repeated real-device acceptance. The pipeline remains the default throughout, and distributable `.app` packaging is explicitly deferred.
+
+F058 has been planned from the user's latest pipeline debug log and is the active user-selected interactive feature ahead of the previously queued Realtime sequence. The log proves recording durations of roughly 3.84-6.24 seconds but lacks per-request timing for transcription, chat/tool routing, TTS, and playback. It also shows a clearly Chinese historical question while the current prompt only softly requests the user's language and logs no answer body. F058 adds safe monotonic stage timings plus a stricter Chinese-response contract with explicit-English exceptions. It intentionally does not change audio endpoint thresholds, models, streaming architecture, or Realtime work.
+
+F058 is complete and evaluator-approved. The managed Worktree still does not contain the ignored `.env`, `.venv`, or acknowledgement asset, so live voice acceptance should run after the work is handed to or merged into a checkout with those local runtime files.
 
 ## Known Issues
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, MutableSequence
@@ -31,6 +32,16 @@ TOOL_NATURALIZATION_SYSTEM_PROMPT = (
     "dates, timestamps, locations, provider or source names, caveats, and advice disclaimers. "
     "Do not add facts, recommendations, forecasts, prices, sources, or speculation. "
     "Answer in the user's language when it is clear, in one or two concise sentences."
+)
+_CJK_RANGE_START = "\u3400"
+_CJK_RANGE_END = "\u9fff"
+_EXPLICIT_ENGLISH_PATTERNS = (
+    re.compile(r"(?:英文|英语|英語)(?:怎么|怎麼)?(?:说|說|读|讀|写|寫|拼|表达|表達)"),
+    re.compile(r"用(?:英文|英语|英語)(?:怎么|怎麼)?(?:说|說|表达|表達|写|寫)"),
+    re.compile(r"(?:怎么|怎麼)用(?:英文|英语|英語)(?:说|說|表达|表達|写|寫)"),
+    re.compile(r"(?:翻译|翻譯)(?:成|为|為|到)?(?:英文|英语|英語)"),
+    re.compile(r"(?:英文|英语|英語)(?:翻译|翻譯|术语|術語|名称|名稱|拼写|拼寫|发音|發音)"),
+    re.compile(r"\b(?:in english|translate\b.*\bto english|english (?:term|translation|spelling|pronunciation))\b", re.IGNORECASE),
 )
 OPENAI_RECOVERY_GUIDANCE = (
     "Set OPENAI_API_KEY in .env or the environment and install requirements.txt "
@@ -80,6 +91,7 @@ class OpenAIClient:
         history_messages = _validated_history(history)
         messages = (
             [{"role": "system", "content": CHAT_SYSTEM_PROMPT}]
+            + [{"role": "system", "content": _language_policy(user_text)}]
             + history_messages[-self.history_limit :]
             + [{"role": "user", "content": user_text}]
         )
@@ -125,6 +137,7 @@ class OpenAIClient:
         }
         messages = [
             {"role": "system", "content": TOOL_NATURALIZATION_SYSTEM_PROMPT},
+            {"role": "system", "content": _language_policy(user_question)},
             {
                 "role": "user",
                 "content": json.dumps(payload, ensure_ascii=False, sort_keys=True),
@@ -278,6 +291,27 @@ def _require_text(value: str, name: str) -> str:
     if not stripped:
         raise OpenAIClientError(f"{name} must not be empty")
     return stripped
+
+
+def _language_policy(user_text: str) -> str:
+    """Return a current-turn language instruction that outranks chat history."""
+
+    has_cjk = any(_CJK_RANGE_START <= character <= _CJK_RANGE_END for character in user_text)
+    if not has_cjk:
+        return (
+            "Language policy for the current request: match the current user's language; "
+            "for English input, answer in English. Do not copy a different language from prior history."
+        )
+    if any(pattern.search(user_text) for pattern in _EXPLICIT_ENGLISH_PATTERNS):
+        return (
+            "Language policy for the current request: the user is asking in Chinese for English wording, "
+            "translation, spelling, or pronunciation. Include the requested English content, but keep any "
+            "surrounding explanation in concise Simplified Chinese. Prior chat-history language must not override this."
+        )
+    return (
+        "Language policy for the current request: answer entirely in concise Simplified Chinese because the "
+        "current request contains Chinese. Prior chat-history language must not override this instruction."
+    )
 
 
 def _validated_history(history: MutableSequence[dict[str, str]]) -> list[dict[str, str]]:

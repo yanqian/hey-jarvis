@@ -1314,6 +1314,55 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("Transition PLAYING -> WAIT_WAKE", log_output)
         self.assertIn("suppressing post-playback wake detection", log_output)
 
+    def test_success_logs_deterministic_safe_pipeline_stage_timings(self):
+        logger = logging.getLogger("tests.state_machine.pipeline_timing")
+
+        class StepClock:
+            def __init__(self):
+                self.value = 0.0
+
+            def __call__(self):
+                self.value += 0.25
+                return self.value
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    post_playback_wake_cooldown_seconds=0,
+                    post_playback_quiet_seconds=0,
+                ),
+                audio_source=FakeAudioSource(),
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(),
+                player=FakePlayer(),
+                record_audio=fake_record_audio,
+                input_path=Path(tmp_dir) / "input.wav",
+                output_path=Path(tmp_dir) / "output.mp3",
+                logger=logger,
+                clock=StepClock(),
+            )
+
+            with self.assertLogs(logger, level="INFO") as logs:
+                result = machine.run_once()
+
+        self.assertFalse(result.cancelled)
+        log_output = "\n".join(logs.output)
+        stage_positions = [
+            log_output.index("pipeline_timing stage=transcription status=success duration=0.250s"),
+            log_output.index("pipeline_timing stage=answer status=success duration=0.250s"),
+            log_output.index("pipeline_timing stage=tts status=success duration=0.250s"),
+            log_output.index("pipeline_timing stage=playback status=success duration=0.250s"),
+        ]
+        self.assertEqual(stage_positions, sorted(stage_positions))
+        self.assertIn(
+            "response_timing recording=0.640s transcription=0.250s answer=0.250s "
+            "tts=0.250s ready_to_play=1.500s playback=0.250s "
+            "post_recording_total=2.000s route=chat",
+            log_output,
+        )
+        self.assertNotIn(result.answer, log_output)
+        self.assertNotIn("sk-test", log_output)
+
     def test_silent_recording_cancels_before_transcription(self):
         logger = logging.getLogger("tests.state_machine.silent_recording")
         openai_client = FakeOpenAIClient()
@@ -1575,7 +1624,11 @@ class StateMachineTests(unittest.TestCase):
         self.assertEqual(openai_client.tts_calls, 1)
         self.assertEqual(history, [])
         self.assertEqual(synthesized_text, "The answer is 4.")
-        self.assertIn("tool route=calculator status=success", "\n".join(logs.output))
+        log_output = "\n".join(logs.output)
+        self.assertIn("tool route=calculator status=success", log_output)
+        self.assertIn("pipeline_timing stage=answer status=success", log_output)
+        self.assertIn("route=calculator", log_output)
+        self.assertIn("response_timing recording=0.640s", log_output)
 
     def test_traditional_chinese_local_tool_routes_skip_chat_history(self):
         cases = (

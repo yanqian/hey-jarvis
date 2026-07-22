@@ -13,6 +13,20 @@ MANUAL_TESTING = ROOT / "MANUAL_TESTING.md"
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_pipeline_timing_and_language_policy_are_documented(self):
+        readme = README.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+
+        self.assertIn("Response language and latency diagnostics", readme)
+        self.assertIn("response_timing", readme)
+        self.assertIn("ready_to_play", readme)
+        self.assertIn("monotonic elapsed durations", readme)
+        self.assertIn("do not log assistant answer text", readme)
+        self.assertIn("M058", manual_testing)
+        self.assertIn("中国为什么参与朝鲜战争", manual_testing)
+        self.assertIn("人脸识别的英文怎么读", manual_testing)
+        self.assertIn("Why did China enter the Korean War?", manual_testing)
+
     def test_stable_knowledge_policy_and_manual_boundary_are_documented(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")

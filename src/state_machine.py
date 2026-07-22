@@ -10,7 +10,8 @@ from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, MutableSequence, Protocol, Sequence
+from time import monotonic
+from typing import Any, Callable, MutableSequence, Protocol, Sequence
 
 from .config import Settings
 from .openai_client import OpenAIClientError
@@ -139,6 +140,7 @@ class VoiceAssistantStateMachine:
         output_path: str | Path = DEFAULT_OUTPUT_MP3,
         logger: logging.Logger | None = None,
         vad_detector: VoiceActivityDetector | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self.settings = settings
         self.audio_source = audio_source
@@ -152,6 +154,7 @@ class VoiceAssistantStateMachine:
         self.state = AssistantState.WAIT_WAKE
         self._logger = logger or logging.getLogger(__name__)
         self.vad_detector = vad_detector or DisabledVad()
+        self._clock = clock or monotonic
 
     def run_once(self) -> AssistantLoopResult:
         """Complete one question-answer loop and return to WAIT_WAKE."""
@@ -196,13 +199,19 @@ class VoiceAssistantStateMachine:
         if recording_cancel_reason is not None:
             return self._cancel_to_wait_wake(recording_cancel_reason, recording=recording)
 
+        response_started_at = self._clock()
         self._set_state(AssistantState.TRANSCRIBE)
+        stage_started_at = response_started_at
         try:
             transcription = self.openai_client.transcribe_audio(str(recording.path))
         except OpenAIClientError as exc:
+            self._log_pipeline_stage("transcription", stage_started_at, response_started_at, status="error")
             if _is_empty_transcription_error(exc):
                 return self._cancel_to_wait_wake("empty_transcript", recording=recording)
             return self._recover_from_openai_error(recording, exc)
+        transcription_seconds = self._log_pipeline_stage(
+            "transcription", stage_started_at, response_started_at
+        )
         self._logger.info("State TRANSCRIBE: received transcription")
         transcription, acknowledgement_prefix_removed = self._remove_acknowledgement_prefix(transcription)
         if acknowledgement_prefix_removed:
@@ -223,6 +232,7 @@ class VoiceAssistantStateMachine:
             )
 
         self._set_state(AssistantState.ASK_OPENAI)
+        stage_started_at = self._clock()
         try:
             answer, tool_route, tool_result = answer_with_tools(
                 transcription,
@@ -233,7 +243,15 @@ class VoiceAssistantStateMachine:
                 provider_config=provider_config_from_settings(self.settings),
             )
         except OpenAIClientError as exc:
+            self._log_pipeline_stage("answer", stage_started_at, response_started_at, status="error")
             return self._recover_from_openai_error(recording, exc, transcription=transcription)
+        response_route = "chat" if tool_result is None else tool_route.category
+        answer_seconds = self._log_pipeline_stage(
+            "answer",
+            stage_started_at,
+            response_started_at,
+            route=response_route,
+        )
         if self.settings.tool_router_debug:
             self._logger.info(
                 "Tool router debug: route=%s tool=%s params=%s reason=%s",
@@ -263,19 +281,38 @@ class VoiceAssistantStateMachine:
                 )
 
         self._set_state(AssistantState.TTS)
+        stage_started_at = self._clock()
         try:
             self.openai_client.text_to_speech(answer, str(self.output_path))
         except OpenAIClientError as exc:
+            self._log_pipeline_stage("tts", stage_started_at, response_started_at, status="error")
             return self._recover_from_openai_error(
                 recording,
                 exc,
                 transcription=transcription,
                 answer=answer,
             )
+        tts_seconds = self._log_pipeline_stage("tts", stage_started_at, response_started_at)
         self._logger.info("State TTS: wrote synthesized speech to %s", self.output_path)
 
         self._set_state(AssistantState.PLAYING)
+        stage_started_at = self._clock()
+        ready_to_play_seconds = max(0.0, stage_started_at - response_started_at)
         self.player.play(self.output_path)
+        playback_seconds = self._log_pipeline_stage("playback", stage_started_at, response_started_at)
+        post_recording_total = max(0.0, self._clock() - response_started_at)
+        self._logger.info(
+            "response_timing recording=%.3fs transcription=%.3fs answer=%.3fs tts=%.3fs "
+            "ready_to_play=%.3fs playback=%.3fs post_recording_total=%.3fs route=%s",
+            recording.duration_seconds,
+            transcription_seconds,
+            answer_seconds,
+            tts_seconds,
+            ready_to_play_seconds,
+            playback_seconds,
+            post_recording_total,
+            response_route,
+        )
         self._logger.info("State PLAYING: playback finished")
 
         self._set_state(AssistantState.WAIT_WAKE)
@@ -288,6 +325,29 @@ class VoiceAssistantStateMachine:
             answer=answer,
             final_state=self.state,
         )
+
+    def _log_pipeline_stage(
+        self,
+        stage: str,
+        started_at: float,
+        response_started_at: float,
+        *,
+        status: str = "success",
+        route: str | None = None,
+    ) -> float:
+        finished_at = self._clock()
+        duration = max(0.0, finished_at - started_at)
+        elapsed = max(0.0, finished_at - response_started_at)
+        route_text = "" if route is None else f" route={route}"
+        self._logger.info(
+            "pipeline_timing stage=%s status=%s duration=%.3fs post_recording_elapsed=%.3fs%s",
+            stage,
+            status,
+            duration,
+            elapsed,
+            route_text,
+        )
+        return duration
 
     def _recover_from_openai_error(
         self,

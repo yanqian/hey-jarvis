@@ -374,6 +374,31 @@ such as `今天有什么新闻` continue to require a configured structured prov
 and are refused rather than answered from model memory. See `M047` in
 `MANUAL_TESTING.md` for the optional live OpenAI behavior check.
 
+### Response language and latency diagnostics
+
+The current transcribed request controls the reply language independently of
+earlier chat history. A request containing Chinese is answered in concise
+Simplified Chinese. An explicit request for an English translation, term,
+spelling, or pronunciation may include the requested English content, while
+any surrounding explanation remains Chinese. English input continues to
+receive an English response.
+
+Successful pipeline loops emit `pipeline_timing` lines for transcription,
+answer generation or local-tool routing, TTS, and playback. The final
+`response_timing` line includes the recorded-audio duration, each stage,
+`ready_to_play` (time after recording until synthesized audio is ready),
+playback duration, `post_recording_total`, and route. For example:
+
+```text
+response_timing recording=5.840s transcription=0.800s answer=1.200s tts=0.900s ready_to_play=2.900s playback=4.100s post_recording_total=7.000s route=none
+```
+
+These are monotonic elapsed durations rather than wall-clock timestamps. They
+help separate recording endpoint delay from OpenAI, local-tool, TTS, and
+playback time. They do not log assistant answer text, raw audio, or credentials,
+and they do not by themselves make the serial pipeline faster. See `M058` in
+`MANUAL_TESTING.md` for the real voice comparison.
+
 ## Structured Tool Routing
 
 `ENABLE_TOOLS=1` enables a deterministic routing boundary after transcription

@@ -1189,6 +1189,26 @@
         "F055",
         "F056"
       ]
+    },
+    {
+      "id": "F058",
+      "title": "Log pipeline latency and enforce Chinese replies",
+      "description": "Add bounded per-stage post-recording latency diagnostics and strengthen the language contract so Chinese questions receive Chinese answers except for explicit English translation, terminology, spelling, or pronunciation requests.",
+      "acceptance": [
+        "The pipeline logs ordered, non-negative monotonic durations for transcription, answer generation or local-tool routing, TTS generation, playback, and total post-recording response time without logging raw audio, credentials, provider secrets, or assistant answer text.",
+        "Clearly Chinese general-chat input receives an explicit Simplified-Chinese response instruction that takes precedence over prior history, while English-only input retains English and explicit English translation, terminology, spelling, or pronunciation requests may return the requested English content with Chinese explanation.",
+        "Structured-tool naturalization follows the same Chinese-language contract without changing authoritative provider values, units, dates, sources, freshness, or caveats; deterministic local tools retain their existing output and still produce timing diagnostics.",
+        "Focused OpenAI request-shape and state-machine tests verify language-policy cases, chat-history precedence, both chat and local-tool timing paths, stage ordering, non-negative totals, and safe log contents without live OpenAI, network, microphone, or speaker access.",
+        "README and manual testing explain how to interpret the timing line and retest Chinese versus explicit-English questions; full unittest discovery, dry-run, fake-backend, behavior-compatible diagnose output, final ./init.sh, coding evidence, and separate evaluator approval pass without changing models, audio endpoint thresholds, Realtime behavior, or tracked user logs."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F047"
+      ]
     }
   ]
 }

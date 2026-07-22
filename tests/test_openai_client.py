@@ -188,8 +188,44 @@ class OpenAIClientTests(unittest.TestCase):
         self.assertIn("user's language", prompt)
         self.assertIn("Do not claim that you browsed", prompt)
         self.assertIn("current data cannot be verified", prompt)
-        self.assertEqual(messages[1], {"role": "assistant", "content": "Earlier answer."})
+        self.assertEqual(messages[1]["role"], "system")
+        self.assertIn("answer entirely in concise Simplified Chinese", messages[1]["content"])
+        self.assertIn("Prior chat-history language must not override", messages[1]["content"])
+        self.assertEqual(messages[2], {"role": "assistant", "content": "Earlier answer."})
         self.assertEqual(messages[-1], {"role": "user", "content": question})
+
+    def test_ask_chatgpt_language_policy_uses_current_turn_not_history(self):
+        cases = (
+            (
+                "中国为什么参与朝鲜战争？",
+                [{"role": "assistant", "content": "This earlier answer was in English."}],
+                "answer entirely in concise Simplified Chinese",
+            ),
+            (
+                "Why did China enter the Korean War?",
+                [{"role": "assistant", "content": "上一轮是中文。"}],
+                "for English input, answer in English",
+            ),
+        )
+
+        for question, history, expected_policy in cases:
+            with self.subTest(question=question):
+                fake_sdk = FakeSDKClient()
+                OpenAIClient(make_settings(), sdk_client=fake_sdk).ask_chatgpt(question, history)
+                messages = fake_sdk.chat.completions.calls[0]["messages"]
+                self.assertEqual(messages[1]["role"], "system")
+                self.assertIn(expected_policy, messages[1]["content"])
+                self.assertEqual(messages[-1], {"role": "user", "content": question})
+
+    def test_ask_chatgpt_allows_requested_english_term_with_chinese_explanation(self):
+        fake_sdk = FakeSDKClient()
+        question = "人脸识别的英文怎么读？"
+
+        OpenAIClient(make_settings(), sdk_client=fake_sdk).ask_chatgpt(question, [])
+
+        policy = fake_sdk.chat.completions.calls[0]["messages"][1]["content"]
+        self.assertIn("Include the requested English content", policy)
+        self.assertIn("surrounding explanation in concise Simplified Chinese", policy)
 
     def test_ask_chatgpt_surfaces_api_failures(self):
         class FailingCompletions:
@@ -238,7 +274,8 @@ class OpenAIClientTests(unittest.TestCase):
         self.assertEqual(call["model"], DEFAULT_CHAT_MODEL)
         self.assertEqual(call["messages"][0]["role"], "system")
         self.assertIn("Preserve all numbers", call["messages"][0]["content"])
-        payload = json.loads(call["messages"][1]["content"])
+        self.assertIn("answer entirely in concise Simplified Chinese", call["messages"][1]["content"])
+        payload = json.loads(call["messages"][2]["content"])
         self.assertEqual(payload["user_question"], "明天天气怎么样")
         self.assertEqual(payload["route"]["category"], "weather")
         self.assertEqual(payload["summary"], "Open-Meteo forecast for 2026-07-07")
@@ -246,7 +283,7 @@ class OpenAIClientTests(unittest.TestCase):
         self.assertEqual(payload["data"]["temperature_min_c"], 24.0)
         self.assertNotIn("finnhub_api_key", payload["data"])
         self.assertNotIn("token", payload["data"])
-        self.assertNotIn("fh-secret", call["messages"][1]["content"])
+        self.assertNotIn("fh-secret", call["messages"][2]["content"])
 
     def test_naturalize_tool_answer_rejects_empty_output(self):
         fake_sdk = FakeSDKClient(chat_response=SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="  "))]))
