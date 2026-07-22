@@ -27,6 +27,37 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("人脸识别的英文怎么读", manual_testing)
         self.assertIn("Why did China enter the Korean War?", manual_testing)
 
+    def test_realtime_mvp_operator_boundary_is_consistent(self):
+        documents = [
+            README.read_text(encoding="utf-8"),
+            DEPLOYMENT.read_text(encoding="utf-8"),
+            MANUAL_TESTING.read_text(encoding="utf-8"),
+            ENV_EXAMPLE.read_text(encoding="utf-8"),
+        ]
+        combined = "\n".join(documents)
+        for phrase in (
+            "pipeline remains the default",
+            "once per",
+            "pre-wake",
+            "billable",
+            "calculator",
+            "packaging",
+            "bounded",
+        ):
+            self.assertIn(phrase.lower(), combined.lower())
+        for stale in ("WebSocket host", "conversation.item.truncate", "response.cancel"):
+            self.assertNotIn(stale, combined)
+        self.assertIn("REALTIME_SERVER_VAD_THRESHOLD=0.8", combined)
+
+    def test_realtime_calculator_only_boundary_is_documented(self):
+        readme = README.read_text(encoding="utf-8")
+        self.assertIn("exactly one local function: `calculator`", readme)
+        self.assertIn("same existing `safe_calculator`", readme)
+        self.assertIn("`function_call_output`", readme)
+        self.assertIn("official Realtime function-calling flow", readme)
+        self.assertIn("Weather, FX, stocks", readme)
+        self.assertIn("never executed with `eval`", readme)
+
     def test_stable_knowledge_policy_and_manual_boundary_are_documented(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
@@ -285,6 +316,11 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("Interrupt playback", readme)
         self.assertIn("six-second follow-up", readme)
         self.assertIn("custom wake-word model loading", readme)
+        self.assertIn("REALTIME_END_PHRASES", readme)
+        self.assertIn("rough guide", readme)
+        self.assertIn("ASR model", readme)
+        self.assertIn("never transcript text", readme)
+        self.assertIn("conversation.item.input_audio_transcription.completed", readme)
 
         for package_name in DEPENDENCY_MODULES:
             self.assertIn(package_name, readme)

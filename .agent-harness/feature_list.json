@@ -1075,9 +1075,9 @@
         "Permission denial, autoplay or user-gesture blocking, host launch/close failure, microphone reacquisition failure, and network/API failure are bounded and leave no stuck microphone or leaked standard API key; if hands-free hosting fails, the feature fails closed and records the capability gap instead of introducing a WebSocket fallback.",
         "Offline control/handoff tests, a sanitized real-device capability record, unchanged pipeline tests, and final ./init.sh pass while the chosen host, dependency rationale, operational lifetime of initial arming, and packaging deferral are recorded durably."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
@@ -1095,9 +1095,9 @@
         "Diagnostics distinguish pipeline readiness from Realtime host/assets, model/voice, credential, loopback, and audio-handoff readiness; invalid Realtime-only settings do not break ordinary pipeline startup when Realtime is not selected.",
         "Focused config/CLI/bridge/diagnostic tests, existing pipeline and fake-backend tests, and final ./init.sh pass without opening a live microphone, WebRTC peer, browser host, speaker, or OpenAI connection."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
@@ -1115,9 +1115,9 @@
         "Idle timeout, local maximum duration, explicit stop, peer/data-channel close, Realtime error, host failure, microphone failure, and Ctrl+C all enter one idempotent CLOSING path that stops host media before reopening and resetting a fresh local wake stream; a single session failure does not kill the long-running process.",
         "Fake-host/state/clock/error cleanup tests, pipeline regressions, a Realtime fake smoke, a no-headphones real wake/multi-turn/barge-in/close cycle, bounded redacted logs, and final ./init.sh pass on Python 3.11/3.12 without changing pipeline defaults."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
@@ -1135,9 +1135,9 @@
         "Transcription failure, missing transcription, event reordering, and duplicate completion events are logged safely and do not crash the session or expose transcript content in default logs; idle/max/explicit stop remain valid independent exits.",
         "Focused bilingual normalization, false-positive, ordering, duplicate, and cleanup tests plus live end-phrase acceptance, pipeline regressions, and final ./init.sh pass with transcription pricing/rough-guide limitations documented."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [
@@ -1155,9 +1155,9 @@
         "Malformed arguments, unsupported expressions, duplicate/stale calls, local execution failure, host disconnect, and session closure produce bounded safe outputs or cancellation without executing twice, leaking secrets, or crashing the wake loop.",
         "Fake data-channel/function-call tests, existing Chinese/symbolic calculator regressions, one live spoken calculator trial, unchanged pipeline tools, and final ./init.sh pass with the one-tool MVP boundary documented."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [
@@ -1177,9 +1177,9 @@
         "Default logs and reports are bounded and redact keys, ephemeral credentials, raw/base64 audio, audio deltas, tool secrets, and transcript text unless an explicit debug mode is enabled; debug mode remains bounded and documented for local troubleshooting.",
         "All focused tests, full unittest discovery, pipeline dry-run/fake-backend, Realtime fake smoke, selected-backend diagnostics, final ./init.sh, and separate cold-start evaluator approval pass while BACKEND=pipeline remains the default and existing untracked user logs remain untouched."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [

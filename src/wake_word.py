@@ -85,6 +85,14 @@ class WakeWordDetector:
 
         return self.score(pcm_chunk) >= self.threshold
 
+    def reset(self) -> None:
+        """Reset model streaming state before returning to fresh wake listening."""
+
+        reset = getattr(self._model, "reset", None)
+        if reset is not None:
+            reset()
+        self._last_scores = {}
+
     def score(self, pcm_chunk: bytes) -> float:
         """Return the configured wake-word score for one int16 PCM chunk."""
 

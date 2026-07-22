@@ -6,16 +6,18 @@ import argparse
 from dataclasses import dataclass, replace
 import logging
 import tempfile
+import threading
 import wave
 from pathlib import Path
 from typing import TextIO
 
 from .audio_input import open_microphone_stream
-from .config import Settings
+from .config import SUPPORTED_BACKENDS, Settings
 from .config import collect_diagnostics, format_diagnostics, load_settings, wake_acknowledgement_missing_message
 from .openai_client import build_openai_client
 from .player import MacOSPlayer
 from .recorder import RecordingResult
+from .realtime.controller import RealtimeSessionController
 from .state_machine import AssistantState, VoiceAssistantStateMachine
 from .tools.providers import provider_config_from_settings
 from .tools.router import format_text_debug
@@ -241,11 +243,13 @@ def run_wake_file_debug(
     return 0
 
 
-def run_assistant_forever() -> int:
+def run_assistant_forever(*, backend: str | None = None) -> int:
     """Run the real assistant until interrupted."""
 
     logger = logging.getLogger(LOGGER_NAME)
-    settings = load_settings(require_openai_api_key=True)
+    settings = load_settings(require_openai_api_key=True, backend=backend)
+    if settings.backend == "realtime":
+        return run_realtime_forever(settings)
     history: list[dict[str, str]] = []
 
     logger.info("Assistant started")
@@ -288,8 +292,77 @@ def run_assistant_forever() -> int:
                 close()
 
 
+def run_realtime_forever(settings: Settings) -> int:
+    """Run local wake listening and continuous WebRTC sessions until interrupted."""
+
+    from .realtime_host.server import build_server, launch_chrome_app
+
+    logger = logging.getLogger(LOGGER_NAME)
+    missing_acknowledgement = wake_acknowledgement_missing_message(settings)
+    if settings.realtime_acknowledgement_mode == "local" and missing_acknowledgement is not None:
+        logger.error(missing_acknowledgement)
+        return 1
+
+    detector = _build_wake_detector(settings, logger=logger)
+    if hasattr(detector, "preload"):
+        logger.info("Preparing %s wake-word detector", settings.wake_phrase)
+        detector.preload()
+    server = build_server(
+        settings.realtime_bridge_host,
+        settings.realtime_bridge_port,
+        real_microphone=True,
+        wake_after_arm=True,
+        end_phrases=settings.realtime_end_phrases,
+    )
+    url = f"http://{settings.realtime_bridge_host}:{server.server_port}/"
+    launch_chrome_app(url)
+    server_thread = threading.Thread(target=server.serve_forever, name="realtime-host", daemon=True)
+    server_thread.start()
+    player = MacOSPlayer(logger=logger)
+
+    def play_acknowledgement() -> None:
+        if settings.realtime_acknowledgement_mode == "local":
+            player.play(settings.wake_acknowledgement_audio_path)
+
+    controller = RealtimeSessionController(
+        coordinator=server.coordinator,
+        wake_detector=detector,
+        play_acknowledgement=play_acknowledgement,
+        idle_timeout_seconds=settings.realtime_idle_timeout_seconds,
+        max_duration_seconds=settings.realtime_max_duration_seconds,
+        wake_confirmation_frames=settings.wake_confirmation_frames,
+    )
+    logger.info("Realtime host launched at %s; arm it once, then say %s", url, settings.wake_phrase)
+    try:
+        while True:
+            result = controller.run_once()
+            logger.info(
+                "Realtime session ended reason=%s recovered_to_wake=%s",
+                result.reason,
+                str(result.recovered_to_wake).lower(),
+            )
+            if not result.recovered_to_wake:
+                logger.error("Realtime host did not confirm media teardown; wake capture remains fail-closed")
+                return 1
+    except KeyboardInterrupt:
+        logger.info("Assistant stopped")
+        return 130
+    finally:
+        server.shutdown()
+        server.server_close()
+        server.coordinator.close()
+        close = getattr(detector, "close", None)
+        if close is not None:
+            close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m src.main")
+    parser.add_argument(
+        "--backend",
+        choices=SUPPORTED_BACKENDS,
+        help="select pipeline (default) or opt-in billable Realtime WebRTC (arm Chrome once per launch)",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--dry-run",
@@ -299,7 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--diagnose",
         action="store_true",
-        help="report runtime configuration, dependency, and macOS readiness checks",
+        help="report selected-backend configuration, permission, privacy, and macOS readiness checks",
     )
     mode.add_argument(
         "--fake-backend",
@@ -354,7 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return run_dry_run()
     if args.diagnose:
-        report = collect_diagnostics()
+        report = collect_diagnostics(backend=args.backend)
         print(format_diagnostics(report))
         return 1 if report.has_errors else 0
     if args.fake_backend:
@@ -373,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.wake_file:
         return run_wake_file_debug(args.wake_file)
 
-    return run_assistant_forever()
+    return run_assistant_forever(backend=args.backend)
 
 
 def configure_logging() -> None:

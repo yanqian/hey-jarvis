@@ -13,6 +13,84 @@ Assistant: "The answer is 4."
 
 This project now includes the MVP voice-assistant loop behind testable boundaries. The recovery entrypoint proves the Python package, tests, and a fake-backend state-machine path work without requiring a microphone, speakers, or OpenAI credentials. Real audio capture, wake-word detection, OpenAI transcription/chat/TTS, and macOS playback are wired through `python -m src.main`.
 
+The existing pipeline remains the default backend. `BACKEND=realtime` or `--backend realtime` opts into the Realtime WebRTC path. Run `python -m src.main --backend realtime`, click **Arm hands-free audio** once in the launched Chrome app, then say the configured wake phrase. Confirmed local wake closes Python capture, plays the local acknowledgement, and hands exclusive microphone/playback ownership to a continuous WebRTC session; follow-up turns and server-managed interruption do not require another wake. Idle, maximum-duration, explicit-stop, transport-error, and Ctrl+C cleanup stop browser media before returning to fresh local wake listening. Realtime defaults use `gpt-realtime-2.1`, voice `marin`, direct browser output gain `0.1`, 15-second idle and 600-second maximum duration, server VAD, input transcription, a local acknowledgement, bounded debug events, conservative bilingual end phrases, and `127.0.0.1:8770`. Run `python -m src.main --backend realtime --diagnose` to inspect host assets, model/voice/output gain, credential, loopback, and exclusive audio-handoff readiness. The standard API key stays in Python and is never transported through the bridge.
+
+Arming is a one-time action for each Chrome app launch, not each conversation.
+Chrome owns its microphone permission for that host lifetime; macOS or Chrome
+may ask again after permission is revoked, the app profile changes, or the host
+is relaunched. Before a local wake, only the Python wake detector holds the
+microphone: no pre-wake PCM, transcript, or wake audio is uploaded to OpenAI.
+After handoff, WebRTC sends session audio directly to Realtime and plays its
+returned audio directly. Realtime audio and optional input transcription are
+billable API usage; check the current OpenAI pricing for the selected model.
+This remains an opt-in developer MVP: signing, notarization, a bundled browser
+host, launch-at-login, and distributable `.app` packaging are deferred.
+
+Default `/api/report` and application logs retain at most bounded sanitized
+lifecycle events. They exclude API keys, ephemeral credentials, raw/base64
+audio, audio deltas, tool arguments/results, call ids, and transcript text.
+`REALTIME_DEBUG=1` enables additional browser-side local troubleshooting events,
+but the browser list is still bounded and content fields remain summarized; do
+not publish debug output without reviewing it.
+
+`REALTIME_END_PHRASES` closes an active session only when a completed input
+transcription is an exact short utterance after case, outer punctuation, and
+whitespace normalization. For example, `再见。` and `GOODBYE!` match defaults,
+while `再见北京`, `please say goodbye`, partial events, ordinary
+`CANCEL_PHRASES`, and duplicate item events do not. A match enters the same
+bounded media-closing path as explicit stop; default logs record only the
+outcome, never transcript text. Set `REALTIME_INPUT_TRANSCRIPTION_ENABLED=0`
+to disable this optional control signal; idle, maximum duration, explicit stop,
+and transport-error exits continue to work.
+
+OpenAI documents that Realtime input transcription runs asynchronously from
+response creation, may arrive before or after response events, uses a separate
+ASR model, can diverge from the Realtime model's interpretation, and should be
+treated only as a rough guide. Its usage is billed according to the selected
+ASR model rather than the Realtime model. This project therefore uses it only
+for conservative exact end-phrase control, not for conversation meaning. See
+the [official completed-transcription event reference](https://developers.openai.com/api/reference/resources/realtime/server-events#conversation.item.input_audio_transcription.completed)
+for current behavior and pricing semantics.
+
+Realtime advertises exactly one local function: `calculator`. Completed function
+arguments are correlated to their active call, bounded and de-duplicated in
+Python, and executed through the same existing `safe_calculator` used by the
+pipeline. The host returns one `function_call_output` and asks the same Realtime
+conversation to continue speaking the answer. Weather, FX, stocks, provider
+credentials, shell access, arbitrary routing, and pipeline chat-history mutation
+are intentionally outside this MVP tool boundary. Malformed or unsafe expressions
+receive a bounded calculator error and are never executed with `eval`.
+This follows the [official Realtime function-calling flow](https://developers.openai.com/api/docs/guides/realtime-conversations#function-calling): configure session tools, return a correlated `function_call_output`, then request the continuation response.
+
+```text
+BACKEND=pipeline
+REALTIME_MODEL=gpt-realtime-2.1
+REALTIME_VOICE=marin
+REALTIME_OUTPUT_VOLUME=0.1
+REALTIME_IDLE_TIMEOUT_SECONDS=15
+REALTIME_MAX_DURATION_SECONDS=600
+REALTIME_SERVER_VAD_ENABLED=1
+REALTIME_SERVER_VAD_THRESHOLD=0.8
+REALTIME_INPUT_TRANSCRIPTION_ENABLED=1
+REALTIME_ACKNOWLEDGEMENT_MODE=local
+REALTIME_DEBUG=0
+REALTIME_END_PHRASES=结束对话,再见,goodbye,end conversation
+REALTIME_BRIDGE_HOST=127.0.0.1
+REALTIME_BRIDGE_PORT=8770
+```
+
+`REALTIME_OUTPUT_VOLUME` is the browser `<audio>` playback gain, from `0.1` to
+`1.0`; it does not re-encode or route returned audio through Python. The `0.1`
+default passed five consecutive built-in-speaker cycles with no unexpected
+speech starts while preserving deliberate barge-in from 15 ms through 118 ms on
+the tested Mac. Higher values are louder but can reintroduce speaker echo as
+false user speech; tune against M057 rather than assuming one value is universal.
+
+`REALTIME_SERVER_VAD_THRESHOLD` is the official server-VAD activation threshold
+from `0.0` through `1.0`. The quiet speakerphone profile defaults to `0.8` so
+residual speaker echo must be louder before it can interrupt; M057 must still
+prove that deliberate speech triggers promptly at the chosen microphone distance.
+
 For full local macOS deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 For manual acceptance cases, see [MANUAL_TESTING.md](MANUAL_TESTING.md).
 
@@ -74,6 +152,32 @@ For the dependency-free full-loop smoke path, run:
 ```bash
 python -m src.main --fake-backend
 ```
+
+The opt-in Realtime controller has a deterministic full-lifecycle smoke covering
+wake, exclusive handoff, connection, two turns, assistant completion,
+interruption, calculator output, end phrase, close, and return to `WAIT_WAKE`.
+It transports no PCM and opens no microphone, browser, speaker, network, OpenAI
+connection, or wall-clock sleep:
+
+```bash
+python -m src.realtime.fake_smoke
+```
+
+For repeatable local acceptance, record private voice fixtures with
+`python -m src.realtime.fixtures record wake --seconds 4` (and the names
+`turn-1`, `turn-2`, or `barge-in`). Files and a transcript-free integrity
+manifest persist under `tmp/realtime-fixtures/`, which is excluded from Git.
+`python -m src.realtime.fixtures list` reports only duration and capture health.
+Use `python -m src.realtime.fixtures trim NAME --start SECONDS --end SECONDS`
+to preserve the original while creating a shorter private `replay/` derivative;
+the event-driven runner prefers that derivative when present.
+Same-Mac speaker replay is useful for orchestration but may correctly be removed
+by browser echo cancellation, so final no-headphones barge-in acceptance still
+uses one real near-end spoken interruption.
+After launching and arming the Realtime host, run
+`python -m src.realtime.fixture_runner` for event-driven acoustic replay. The
+runner advances only on sanitized lifecycle events and requests a safe stop on
+failure; it never reads transcripts or sends PCM through the Python bridge.
 
 To inspect local structured tool routing for typed text without microphone,
 wake-word detection, OpenAI, TTS, playback, or network access, run:

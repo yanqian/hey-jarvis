@@ -13,6 +13,49 @@ files on the same machine that launches the assistant.
 - Network access during setup for Python packages and wake-word model downloads.
 - A valid `OPENAI_API_KEY` for real transcription, chat, and text-to-speech.
 
+## Realtime WebRTC MVP
+
+The pipeline backend remains the deployable default. Realtime is an explicit
+opt-in with `BACKEND=realtime` or `python -m src.main --backend realtime`; its
+supported defaults are model `gpt-realtime-2.1` and voice `marin`. On the first
+run of each launched Chrome app host, click **Arm hands-free audio** and grant
+Chrome microphone permission. That arm persists across wake/session cycles only
+for the current host lifetime; relaunching the host, revoking permission, or
+changing its Chrome profile can require another click or permission grant.
+
+`REALTIME_OUTPUT_VOLUME=0.1` controls direct browser playback gain without
+Python audio processing. The tested built-in-speaker path needed this reduction
+to prevent repeatable assistant self-echo from triggering server VAD, while
+deliberate recorded interruption still cancelled in at most 118 ms. Increase it
+only with repeated M057 no-headphones tests; `1.0` reproduced false interruption
+on the tested Mac.
+
+`REALTIME_SERVER_VAD_THRESHOLD=0.8` raises the server-side activation threshold
+for the quiet speakerphone profile. Higher values reject more residual room echo
+but can miss quiet users, so deployment acceptance must test both normal turns
+and deliberate interruption at the intended distance.
+
+While waiting for `Hey Jarvis`, Python alone owns the microphone and sends no
+pre-wake PCM, transcript, or wake clip to OpenAI. On wake it closes that capture
+before Chrome obtains the microphone. The WebRTC session then sends microphone
+audio to Realtime and plays returned audio directly through the built-in
+speaker. Idle timeout, maximum duration, an exact configured end phrase, the
+loopback explicit-stop endpoint, transport failure, or Ctrl-C all use the same
+bounded close-before-wake-restore path. Server VAD owns interruption; this MVP
+does not send manual audio-truncation commands.
+
+Realtime exposes only the existing safe local `calculator`; pipeline weather,
+FX, stocks, shell access, and other tools are not advertised. Realtime audio and
+optional transcription incur API costs for the selected models. Consult current
+OpenAI pricing before long sessions. Default reports are bounded and exclude
+keys, ephemeral credentials, raw/base64 audio, audio deltas, tool content, and
+transcript text. `REALTIME_DEBUG=1` provides bounded local lifecycle detail for
+troubleshooting, not a production telemetry mode.
+
+This is a developer-run MVP. Code signing, notarization, a bundled Chrome host,
+launch-at-login, automatic updating, and a distributable macOS `.app` are
+explicitly deferred rather than deployment requirements.
+
 The active wake-word path is openWakeWord's built-in Hey Jarvis model with TFLite:
 
 ```text
@@ -352,6 +395,17 @@ Only start the real assistant after recovery and diagnostics pass.
 - `tmp/wake-debug.wav`: optional wake-debug capture when requested.
 
 ## Troubleshooting
+
+- Realtime host never starts after wake: confirm the Chrome app host is still
+  open and armed, then run `python -m src.main --backend realtime --diagnose`.
+- Chrome asks for another click or shows no microphone indicator: re-arm after a
+  host relaunch and grant permission to Chrome; permission is not inherited from
+  Terminal or Codex.
+- Speaker audio interrupts itself: confirm Chrome reports echo cancellation,
+  noise suppression, 48 kHz mono capture, and avoid covering the Mac microphone
+  or speaker. Record the sanitized `/api/report`; do not add manual truncation.
+- Realtime usage is unexpectedly high: reduce idle/max-duration limits, close
+  sessions with an end phrase, and verify the host returns to local wake mode.
 
 - `OPENAI_API_KEY is required`: set a real key in `.env`.
 - `OpenAI transcription returned empty text`: the recorded question did not
