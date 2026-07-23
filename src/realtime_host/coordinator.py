@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import threading
 import time
@@ -21,6 +22,22 @@ MAX_TRANSCRIPT_CONTROL_CHARS = 200
 MAX_NORMALIZED_END_PHRASE_CHARS = 64
 MAX_TOOL_ARGUMENT_CHARS = 512
 MAX_CALCULATOR_EXPRESSION_CHARS = 200
+MAX_INPUT_LEVEL_SAMPLE_COUNT = 10
+INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
+NEGOTIATION_DIAGNOSTIC_FIELDS = frozenset(
+    {
+        "errorType",
+        "errorCode",
+        "requestId",
+        "retryAfter",
+        "rateLimitRemainingRequests",
+        "rateLimitRemainingTokens",
+        "rateLimitRemainingProjectTokens",
+        "rateLimitResetRequests",
+        "rateLimitResetTokens",
+        "rateLimitResetProjectTokens",
+    }
+)
 
 
 class HandoffError(RuntimeError):
@@ -259,12 +276,17 @@ class HandoffCoordinator:
                 return "accepted"
             if event_type == "tool_call":
                 return self._handle_tool_call(session_id, detail)
-            safe_detail = {
-                key: value
-                for key, value in detail.items()
-                if key in {"echoCancellation", "noiseSuppression", "autoGainControl", "sampleRate", "channelCount", "outputVolume", "reason"}
-                and isinstance(value, (str, int, float, bool))
-            }
+            if event_type == "input_level":
+                safe_detail = _sanitize_input_level(detail)
+            elif event_type == "error" and detail.get("reason") == "webrtc_negotiation_failed":
+                safe_detail = _sanitize_negotiation_error(detail)
+            else:
+                safe_detail = {
+                    key: value
+                    for key, value in detail.items()
+                    if key in {"echoCancellation", "noiseSuppression", "autoGainControl", "sampleRate", "channelCount", "outputVolume", "reason"}
+                    and isinstance(value, (str, int, float, bool))
+                }
             self._record(f"host_{event_type}", session_id=session_id, **safe_detail)
             if event_type == "connected":
                 self._transport_connected = True
@@ -395,6 +417,63 @@ class HandoffCoordinator:
         entry = {"at_ms": round(self._clock() * 1000), "type": event_type, **safe_detail}
         self._evidence.append(entry)
         self._evidence = self._evidence[-MAX_EVIDENCE_EVENTS:]
+
+
+def _sanitize_input_level(detail: dict[str, object]) -> dict[str, object]:
+    phase = detail.get("phase")
+    rms = detail.get("rms")
+    peak = detail.get("peak")
+    sample_count = detail.get("sampleCount")
+    if phase not in INPUT_LEVEL_PHASES:
+        raise HandoffError("Input-level phase was invalid")
+    if (
+        isinstance(rms, bool)
+        or not isinstance(rms, (int, float))
+        or not math.isfinite(float(rms))
+        or not 0.0 <= float(rms) <= 1.0
+    ):
+        raise HandoffError("Input-level RMS was invalid")
+    if (
+        isinstance(peak, bool)
+        or not isinstance(peak, (int, float))
+        or not math.isfinite(float(peak))
+        or not 0.0 <= float(peak) <= 1.0
+    ):
+        raise HandoffError("Input-level peak was invalid")
+    if (
+        isinstance(sample_count, bool)
+        or not isinstance(sample_count, int)
+        or not 1 <= sample_count <= MAX_INPUT_LEVEL_SAMPLE_COUNT
+    ):
+        raise HandoffError("Input-level sample count was invalid")
+    return {
+        "phase": phase,
+        "rms": round(float(rms), 4),
+        "peak": round(float(peak), 4),
+        "sampleCount": sample_count,
+    }
+
+
+def _sanitize_negotiation_error(detail: dict[str, object]) -> dict[str, object]:
+    http_status = detail.get("httpStatus")
+    if (
+        isinstance(http_status, bool)
+        or not isinstance(http_status, int)
+        or not 400 <= http_status <= 599
+    ):
+        raise HandoffError("Negotiation HTTP status was invalid")
+    safe: dict[str, object] = {
+        "reason": "webrtc_negotiation_failed",
+        "httpStatus": http_status,
+    }
+    for key in NEGOTIATION_DIAGNOSTIC_FIELDS:
+        value = detail.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or not _SAFE_VALUE.fullmatch(value):
+            raise HandoffError(f"Negotiation diagnostic {key} was invalid")
+        safe[key] = value
+    return safe
 
 
 def _normalize_end_phrase(value: str) -> str:

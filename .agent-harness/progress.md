@@ -176,7 +176,7 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Next Feature
 
-No feature is currently planned. If the user wants RT003 product behavior to pass, normalize a separate feature for numeric microphone/input-level observability and human-speech sensitivity diagnosis before changing VAD or output-gain tradeoffs.
+F060 coding and the authorized connected real-device diagnostic are complete pending separate cold-start evaluator approval. After API credit was restored, the controlled retry connected successfully. The first intentionally mistimed run was discarded after the user confirmed they had not spoken during the no-playback prompt. The valid retry measured silence max RMS `0.0128`, no-playback human speech max RMS `0.5671` with server VAD, and remote-playback human speech max RMS `0.1456` with server VAD. Near-end speech cancelled the counting response in about 74 ms and a continuation response was created; cleanup restored `wake_owned` with the wake microphone open. The diagnostic category is `event_orchestration`: capture and server VAD both worked in the controlled run, so F059's earlier missing-speech failures are not reproduced as a capture-path or full-duplex-attenuation defect. A long operator window also exposed that bounded saved event retention could hide late phase windows; summaries now use all strictly validated in-memory level events while persisted report events remain capped and sanitized. Focused diagnosis/host verification and offline reclassification pass. The implementation still does not change Realtime thresholds, output volume, capture constraints, or RT003's oracle. Coding evidence is in `.agent-harness/runs/F060-fast-coding.md` and `.agent-harness/runs/F060-coding-retry.md`; connected live evidence is in `.agent-harness/runs/F060-live-diagnostic-attempt.md`.
 
 ## Known Issues
 
@@ -189,10 +189,10 @@ No feature is currently planned. If the user wants RT003 product behavior to pas
 
 ### Realtime natural human barge-in sensitivity
 
-- Impact: Three F059 live-near-end attempts under the previously accepted `REALTIME_OUTPUT_VOLUME=0.1` and server-VAD threshold `0.8` profile played the quiet long response and captured a user-confirmed spoken interruption, but emitted no `host_speech_started`; all sessions ended safely by idle timeout. The third attempt ran in a quieter room, weakening ambient room noise as the primary explanation. Saved fixtures crossed this threshold in F057, so fixture success does not currently generalize to natural human trials.
-- Current safe interpretation: RT003 remains an honest product FAIL. Do not lower the oracle, claim barge-in success, or substitute same-Mac playback as near-end human evidence.
-- Evidence: `.agent-harness/runs/F059-rt003-live-failures.md`.
-- Follow-up: If prioritized, first add bounded numeric input-level observability and a controlled human/fixture comparison, then separately decide the VAD/output-gain tradeoff with self-echo regression coverage.
+- Impact: Three F059 live-near-end attempts under the previously accepted `REALTIME_OUTPUT_VOLUME=0.1` and server-VAD threshold `0.8` profile emitted no `host_speech_started`. The controlled F060 retry later captured strong natural human speech in both no-playback and remote-playback phases, triggered server VAD in both phases, cancelled the long response in about 74 ms, and created a continuation. The F059 failure therefore did not reproduce as a stable capture-path, server-VAD, or full-duplex attenuation defect.
+- Current safe interpretation: RT003's recorded F059 attempts remain honest failures, while F060 classifies the controlled comparison as `event_orchestration`. Do not rewrite historical evidence or automatically change Realtime tuning.
+- Evidence: `.agent-harness/runs/F059-rt003-live-failures.md` and `.agent-harness/runs/F060-live-diagnostic-attempt.md`.
+- Follow-up: after F060 evaluator review, rerun RT003 with operator timing that explicitly waits for confirmation before starting the long answer; only create a product correction if that controlled RT003 run fails again.
 
 ## Operational and Verification Constraints
 

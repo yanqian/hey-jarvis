@@ -209,6 +209,43 @@ To re-evaluate a saved sanitized observation without live resources:
 python -m src.evals.realtime_barge_in offline path/to/observation.json
 ```
 
+If RT003 reports no `host_speech_started`, run the diagnosis-only F060 workflow
+before changing Realtime settings:
+
+```bash
+python -m src.evals.realtime_input_diagnosis live
+```
+
+The command uses the same private wake fixture and exact browser microphone
+MediaStream sent to WebRTC. It first measures a short silence baseline, asks for
+one normal utterance with no remote answer playing, then starts the counting
+answer and asks for one utterance during playback. The browser retains no sample
+arrays or waveform: it sends only bounded 500 ms normalized, rounded RMS/peak
+windows labeled `no_remote_playback` or `remote_playback`. The result is one of
+`capture_path`, `server_vad_sensitivity`, `full_duplex_attenuation`,
+`event_orchestration`, or `inconclusive`, with supporting summary metrics.
+
+F060 is diagnostic evidence, not automatic tuning and not an RT003 pass. It
+does not change `REALTIME_SERVER_VAD_THRESHOLD`, `REALTIME_OUTPUT_VOLUME`,
+microphone constraints, echo cancellation, noise suppression, or automatic
+gain control. Its live run uses microphone audio, sends the two test utterances
+to OpenAI, and incurs Realtime audio plus optional transcription charges.
+Evidence defaults to `tmp/realtime-evals/F060-diagnosis.json` and excludes raw
+or base64 audio, sample arrays, transcript text, utterance text, credentials,
+and tool payloads. Saved sanitized observations can be classified offline:
+
+```bash
+python -m src.evals.realtime_input_diagnosis offline path/to/observation.json
+```
+
+If WebRTC negotiation fails before the session connects, F060 retains only a
+strict diagnostic allowlist: HTTP status, OpenAI `error.type` and `error.code`,
+`x-request-id`, `retry-after`, and available rate-limit remaining/reset headers.
+It never retains the full provider response body, SDP offer/answer, authorization
+header, ephemeral secret, API key, audio, or transcript. This distinguishes
+request-rate failures from quota failures when OpenAI exposes the corresponding
+safe fields.
+
 To inspect local structured tool routing for typed text without microphone,
 wake-word detection, OpenAI, TTS, playback, or network access, run:
 

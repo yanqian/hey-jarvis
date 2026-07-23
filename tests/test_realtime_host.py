@@ -253,6 +253,22 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertIn("REMOTE_AUDIO_VOLUME=0.1", javascript)
         self.assertIn("threshold:sessionConfig.server_vad_threshold", javascript)
         self.assertIn("sessionConfig.output_volume", javascript)
+        for text in (
+            "createMediaStreamSource(mediaStream)",
+            "getFloatTimeDomainData",
+            'assistantSpeaking?"remote_playback":"no_remote_playback"',
+            'hostEvent("input_level"',
+            "INPUT_LEVEL_WINDOW_SAMPLES=5",
+            "stopInputLevels()",
+            "webrtc_negotiation_failed",
+            'response.headers.get("x-request-id")',
+            'response.headers.get("retry-after")',
+            'response.headers.get("x-ratelimit-remaining-requests")',
+            'response.headers.get("x-ratelimit-reset-requests")',
+            "error.safeDiagnostic=detail",
+        ):
+            self.assertIn(text, javascript)
+        self.assertNotIn("JSON.stringify(payload)", javascript.split("async function negotiationFailure", 1)[1].split("function flushInputLevels", 1)[0])
         for text in ('type:"server_vad"', "create_response:true", "interrupt_response:true", 'event.type==="session.updated"'):
             self.assertIn(text, javascript)
         for text in (
@@ -307,6 +323,104 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertLessEqual(len(report["events"]), 200)
         for secret in ("call-secret", "The answer is 4", "sk-secret", "ek_secret", "raw transcript", "c2VjcmV0"):
             self.assertNotIn(secret, report_text)
+
+    def test_input_level_events_are_strictly_validated_rounded_and_bounded(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event("connected", session_id)
+        coordinator.host_event(
+            "input_level",
+            session_id,
+            phase="no_remote_playback",
+            rms=0.012345,
+            peak=0.234567,
+            sampleCount=5,
+            transcript="must-not-survive",
+        )
+        level = next(
+            event
+            for event in coordinator.report()["events"]
+            if event["type"] == "host_input_level"
+        )
+        self.assertEqual(
+            level,
+            {
+                "at_ms": 1250,
+                "type": "host_input_level",
+                "session_id": session_id,
+                "phase": "no_remote_playback",
+                "rms": 0.0123,
+                "peak": 0.2346,
+                "sampleCount": 5,
+            },
+        )
+        self.assertNotIn("transcript", json.dumps(coordinator.report()))
+
+        invalid_details = (
+            {"phase": "unknown", "rms": 0.1, "peak": 0.2, "sampleCount": 5},
+            {"phase": "remote_playback", "rms": -0.1, "peak": 0.2, "sampleCount": 5},
+            {"phase": "remote_playback", "rms": 0.1, "peak": 1.1, "sampleCount": 5},
+            {"phase": "remote_playback", "rms": 0.1, "peak": 0.2, "sampleCount": 0},
+            {"phase": "remote_playback", "rms": True, "peak": 0.2, "sampleCount": 5},
+        )
+        for detail in invalid_details:
+            with self.subTest(detail=detail), self.assertRaisesRegex(HandoffError, "Input-level"):
+                coordinator.host_event("input_level", session_id, **detail)
+
+    def test_negotiation_error_retains_only_strict_safe_metadata(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event(
+            "error",
+            session_id,
+            reason="webrtc_negotiation_failed",
+            httpStatus=429,
+            errorType="insufficient_quota",
+            errorCode="insufficient_quota",
+            requestId="req_safe_123",
+            retryAfter="60",
+            rateLimitRemainingRequests="0",
+            rateLimitResetRequests="1m0s",
+            responseBody='{"api_key":"sk-secret"}',
+            transcript="private utterance",
+        )
+        error = next(
+            event for event in coordinator.report()["events"] if event["type"] == "host_error"
+        )
+        self.assertEqual(
+            error,
+            {
+                "at_ms": 1250,
+                "type": "host_error",
+                "session_id": session_id,
+                "reason": "webrtc_negotiation_failed",
+                "httpStatus": 429,
+                "errorType": "insufficient_quota",
+                "errorCode": "insufficient_quota",
+                "requestId": "req_safe_123",
+                "retryAfter": "60",
+                "rateLimitRemainingRequests": "0",
+                "rateLimitResetRequests": "1m0s",
+            },
+        )
+        report_text = json.dumps(coordinator.report())
+        self.assertNotIn("sk-secret", report_text)
+        self.assertNotIn("private utterance", report_text)
+        self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
+
+        coordinator2, _lease2 = self.build_coordinator()
+        coordinator2.host_event("armed")
+        session_id2 = coordinator2.begin_handoff()
+        with self.assertRaisesRegex(HandoffError, "Negotiation"):
+            coordinator2.host_event(
+                "error",
+                session_id2,
+                reason="webrtc_negotiation_failed",
+                httpStatus=429,
+                errorCode="unsafe value with spaces",
+            )
 
 
 if __name__ == "__main__":

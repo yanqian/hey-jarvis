@@ -2,7 +2,9 @@
 
 const AUDIO_CONSTRAINTS={echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1};
 const REMOTE_AUDIO_VOLUME=0.1;
+const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
 let armed=false,lastCommand=0,pc=null,dc=null,stream=null,sessionId=null,sessionConfig=null,events=[];
+let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
@@ -10,6 +12,63 @@ function log(type,detail={}){events.push({at_ms:Math.round(performance.now()),ty
 async function post(path,payload={}){const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const data=await response.json();if(!response.ok)throw new Error(data.message||data.error);return data;}
 async function hostEvent(type,detail={}){return post("/api/event",{type,session_id:sessionId,host_id:hostId,...detail});}
 function renderSettings(settings){for(const row of $("settings").querySelectorAll("div")){const key=row.querySelector("dt").textContent;row.querySelector("dd").textContent=String(settings[key]??"not reported");}}
+function boundedDiagnosticValue(value){
+  return typeof value==="string"&&/^[A-Za-z0-9_.:-]{1,100}$/.test(value)?value:null;
+}
+async function negotiationFailure(response){
+  let payload=null;try{payload=await response.clone().json()}catch{}
+  const providerError=payload&&typeof payload.error==="object"&&payload.error?payload.error:{};
+  const detail={reason:"webrtc_negotiation_failed",httpStatus:response.status};
+  const fields=[
+    ["errorType",providerError.type],
+    ["errorCode",providerError.code],
+    ["requestId",response.headers.get("x-request-id")],
+    ["retryAfter",response.headers.get("retry-after")],
+    ["rateLimitRemainingRequests",response.headers.get("x-ratelimit-remaining-requests")],
+    ["rateLimitRemainingTokens",response.headers.get("x-ratelimit-remaining-tokens")],
+    ["rateLimitRemainingProjectTokens",response.headers.get("x-ratelimit-remaining-project-tokens")],
+    ["rateLimitResetRequests",response.headers.get("x-ratelimit-reset-requests")],
+    ["rateLimitResetTokens",response.headers.get("x-ratelimit-reset-tokens")],
+    ["rateLimitResetProjectTokens",response.headers.get("x-ratelimit-reset-project-tokens")],
+  ];
+  for(const [key,value] of fields){const safe=boundedDiagnosticValue(value);if(safe!==null)detail[key]=safe;}
+  const error=new Error(`WebRTC negotiation failed (${response.status})`);error.safeDiagnostic=detail;return error;
+}
+function flushInputLevels(){
+  if(!levelSamples.length||!sessionId)return;
+  const phase=levelSamples[0].phase;
+  const rms=Math.max(...levelSamples.map(sample=>sample.rms));
+  const peak=Math.max(...levelSamples.map(sample=>sample.peak));
+  const sampleCount=levelSamples.length;levelSamples=[];
+  hostEvent("input_level",{phase,rms:Number(rms.toFixed(4)),peak:Number(peak.toFixed(4)),sampleCount}).catch(()=>{});
+}
+function stopInputLevels(){
+  if(levelTimer){clearInterval(levelTimer);levelTimer=null;}
+  flushInputLevels();
+  if(levelSource){try{levelSource.disconnect()}catch{}levelSource=null;}
+  if(levelContext){levelContext.close().catch(()=>{});levelContext=null;}
+  levelAnalyser=null;levelSamples=[];assistantSpeaking=false;
+}
+function startInputLevels(mediaStream){
+  stopInputLevels();
+  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioContextClass)return;
+  levelContext=new AudioContextClass();levelAnalyser=levelContext.createAnalyser();
+  levelAnalyser.fftSize=1024;levelAnalyser.smoothingTimeConstant=0;
+  levelSource=levelContext.createMediaStreamSource(mediaStream);levelSource.connect(levelAnalyser);
+  levelContext.resume().catch(()=>{});
+  const samples=new Float32Array(levelAnalyser.fftSize);
+  levelTimer=setInterval(()=>{
+    if(!levelAnalyser||!sessionId)return;
+    levelAnalyser.getFloatTimeDomainData(samples);
+    let sumSquares=0,peak=0;
+    for(const value of samples){sumSquares+=value*value;peak=Math.max(peak,Math.abs(value));}
+    const phase=assistantSpeaking?"remote_playback":"no_remote_playback";
+    if(levelSamples.length&&levelSamples[0].phase!==phase)flushInputLevels();
+    levelSamples.push({phase,rms:Math.sqrt(sumSquares/samples.length),peak});
+    if(levelSamples.length>=INPUT_LEVEL_WINDOW_SAMPLES)flushInputLevels();
+  },INPUT_LEVEL_SAMPLE_INTERVAL_MS);
+}
 
 async function arm(){
   try{
@@ -39,8 +98,9 @@ async function handleServerEvent(event){
   if(event.type==="session.updated"){await hostEvent("connected");$("status").textContent="Live · follow-up speech stays in this session";}
   if(event.type==="input_audio_buffer.speech_started")await hostEvent("speech_started");
   if(event.type==="input_audio_buffer.speech_stopped")await hostEvent("speech_stopped");
-  if(event.type==="response.created")await hostEvent("response_created");
+  if(event.type==="response.created"){flushInputLevels();assistantSpeaking=true;await hostEvent("response_created");}
   if(event.type==="response.done"){
+    flushInputLevels();assistantSpeaking=false;
     await hostEvent("response_done",{reason:String(event.response?.status||"unknown")});
     for(const item of event.response?.output||[])if(item.type==="function_call")await hostEvent("tool_call",{call_id:item.call_id,name:item.name,arguments:item.arguments});
   }
@@ -64,6 +124,7 @@ async function start(command){
   stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
   const track=stream.getAudioTracks()[0],settings=track.getSettings();renderSettings(settings);
   await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
+  startInputLevels(stream);
   pc=new RTCPeerConnection();
   pc.ontrack=event=>{$("remoteAudio").srcObject=event.streams[0];log("remote_audio_track")};
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};
@@ -73,14 +134,14 @@ async function start(command){
   dc.onclose=()=>{if(sessionId)stop("data_channel_closed").catch(()=>{});};
   const offer=await pc.createOffer();await pc.setLocalDescription(offer);
   const answer=await fetch("https://api.openai.com/v1/realtime/calls",{method:"POST",body:offer.sdp,headers:{Authorization:`Bearer ${token.value}`,"Content-Type":"application/sdp"}});
-  if(!answer.ok)throw new Error(`WebRTC negotiation failed (${answer.status})`);
+  if(!answer.ok)throw await negotiationFailure(answer);
   await pc.setRemoteDescription({type:"answer",sdp:await answer.text()});
   await hostEvent("transport_connected");
   $("status").textContent="Connecting · waiting for session.created";$("long").disabled=false;$("stop").disabled=false;log("transport_connected");
 }
 
 async function stop(reason="command"){
-  const endingSession=sessionId;if(!endingSession)return;sessionId=null;
+  const endingSession=sessionId;if(!endingSession)return;stopInputLevels();sessionId=null;
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}
@@ -90,7 +151,7 @@ async function stop(reason="command"){
   $("status").textContent="Armed · Python wake microphone restored";
 }
 
-async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){await hostEvent("error",{reason:"host_command_failure"}).catch(()=>{});await stop("error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
+async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
 function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:"Count slowly from one to one hundred, saying every number clearly. Do not abbreviate or skip any number."}]}}));dc.send(JSON.stringify({type:"response.create"}));}
 
 $("arm").addEventListener("click",arm);$("long").addEventListener("click",longAnswer);$("stop").addEventListener("click",()=>post("/api/stop"));window.addEventListener("beforeunload",()=>{if(stream)stream.getTracks().forEach(track=>track.stop());});

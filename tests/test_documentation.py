@@ -13,6 +13,23 @@ MANUAL_TESTING = ROOT / "MANUAL_TESTING.md"
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_realtime_input_level_diagnosis_is_documented_without_tuning_claims(self):
+        readme = README.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+
+        self.assertIn("python -m src.evals.realtime_input_diagnosis live", readme)
+        self.assertIn("no_remote_playback", readme)
+        self.assertIn("remote_playback", readme)
+        self.assertIn("server_vad_sensitivity", readme)
+        self.assertIn("full_duplex_attenuation", readme)
+        self.assertIn("not automatic tuning and not an RT003 pass", readme)
+        self.assertIn("does not change `REALTIME_SERVER_VAD_THRESHOLD`", readme)
+        self.assertIn("strict diagnostic allowlist", readme)
+        self.assertIn("`error.type` and `error.code`", readme)
+        self.assertIn("never retains the full provider response body", readme)
+        self.assertIn("M060", manual_testing)
+        self.assertIn("does not retain audio/transcripts", manual_testing)
+
     def test_pipeline_timing_and_language_policy_are_documented(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")

@@ -1240,6 +1240,27 @@
         "F054",
         "F057"
       ]
+    },
+    {
+      "id": "F060",
+      "title": "Diagnose Realtime near-end speech detection",
+      "description": "Add bounded numeric microphone-level observability and a guided no-playback versus remote-playback comparison that classifies RT003's missing-speech failure without changing product tuning.",
+      "acceptance": [
+        "The browser measures normalized rounded RMS/peak windows from the exact microphone MediaStream used by WebRTC, labels no-remote-playback versus remote-playback phase, posts at a bounded cadence, and stops all analyzer resources during the existing cleanup path without storing sample arrays or raw audio.",
+        "The coordinator validates level ranges, phase labels, sample counts, host/session identity, and strict allowlists before retaining at most the existing report bound; negotiation failures may retain only HTTP status, provider error type/code, request ID, retry-after, and available rate-limit remaining/reset headers, while reports and evidence exclude full provider bodies, SDP, authorization headers, ephemeral secrets, API keys, transcripts, utterance text, audio/base64 content, and reconstructable waveforms.",
+        "A guided diagnostic command verifies an armed host, enters one session, captures silence, prompts one human utterance without remote playback, then one during the deterministic long answer, correlates level windows with server VAD/response events, requests bounded cleanup, and confirms fresh wake ownership even on timeout or failure.",
+        "A deterministic offline classifier returns capture_path, server_vad_sensitivity, full_duplex_attenuation, event_orchestration, or inconclusive from sanitized summaries with explicit supporting metrics, and documentation states that the verdict is diagnostic evidence rather than an automatic configuration change or RT003 pass.",
+        "Focused browser-host, coordinator, sanitizer, classifier, and CLI tests, existing Realtime fake-smoke and F059 eval regressions, one authorized sanitized real-device diagnostic run with its honest verdict, full unittest discovery, final ./init.sh, coding evidence, and separate cold-start evaluator approval pass without changing Realtime thresholds, output volume, capture constraints, or tracked private fixtures."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F054",
+        "F059"
+      ]
     }
   ]
 }
