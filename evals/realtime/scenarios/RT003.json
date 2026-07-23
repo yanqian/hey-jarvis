@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "id": "RT003",
+  "version": 1,
+  "title": "Deliberate near-end interruption during a long Realtime answer",
+  "goal": "Prove that one real near-end human utterance promptly cancels the active long answer, receives a continuation, and leaves the assistant ready for a fresh local wake.",
+  "preconditions": [
+    "BACKEND=realtime is configured with a usable OpenAI credential and network connection.",
+    "The loopback Realtime host is launched and Arm hands-free audio has been clicked once.",
+    "The built-in microphone and speaker are used without headphones.",
+    "A private local wake fixture is available only to enter the active session."
+  ],
+  "human_actions": [
+    {
+      "id": "speak_once",
+      "instruction": "When the long answer is audible, speak one natural interruption utterance.",
+      "count": 1,
+      "source": "live_near_end"
+    }
+  ],
+  "observations": [
+    "host_connected",
+    "host_response_created",
+    "host_speech_started",
+    "host_response_done",
+    "host_stopped",
+    "wake_owned",
+    "wake_microphone_open"
+  ],
+  "oracles": {
+    "old_response_reason": "cancelled",
+    "cancellation_latency_ms_max": 1000,
+    "continuation_reason": "completed",
+    "final_state": "wake_owned",
+    "wake_microphone_open": true
+  },
+  "evidence": {
+    "required": [
+      "offline",
+      "live_near_end"
+    ],
+    "offline": "The same deterministic oracle runs against real-shaped sanitized reports without hardware, network, credentials, audio, or wall-clock sleeps.",
+    "live_near_end": "A real human must speak near the microphone because same-Mac speaker replay may be removed by browser echo cancellation and cannot prove near-end interruption."
+  },
+  "privacy": {
+    "commit_audio": false,
+    "commit_transcript": false,
+    "allowed_event_fields": [
+      "type",
+      "at_ms",
+      "session_id",
+      "reason"
+    ],
+    "forbidden_fields": [
+      "audio",
+      "audio_delta",
+      "transcript",
+      "arguments",
+      "output",
+      "api_key",
+      "client_secret",
+      "ephemeral_key",
+      "token"
+    ]
+  }
+}

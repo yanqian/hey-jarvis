@@ -1209,6 +1209,37 @@
       "depends_on": [
         "F047"
       ]
+    },
+    {
+      "id": "F059",
+      "title": "Add a spec-driven assisted Realtime barge-in eval",
+      "description": "Turn deliberate interruption of a Realtime long answer into one versioned RT003 scenario with deterministic offline oracles, one guided human near-end speech action, sanitized PASS or FAIL evidence, and evaluator-gated cleanup verification without requiring the pre-existing product behavior to pass.",
+      "acceptance": [
+        "A versioned project-owned RT003 scenario defines its Realtime preconditions, single guided human speech action, sanitized observations, 1000 ms cancellation oracle, continuation and cleanup oracles, required offline/live evidence tiers, and privacy exclusions without depending on implementation class names.",
+        "A dependency-free offline evaluator applies the RT003 oracle to real-shaped sanitized report fixtures and fails precisely for missing or wrong-session speech, a non-cancelled old response, negative or over-threshold latency, missing continuation, cleanup failure, stale events, and timeout.",
+        "An assisted live command verifies an armed host, enters an active Realtime session, starts a long answer, prompts the human to speak once, and either records a passing cancellation/continuation/cleanup result or exits non-zero with a precise failed stage while requesting bounded cleanup and confirming the final host state.",
+        "Every live outcome emits versioned bounded PASS or FAIL evidence suitable for evaluator review without transcript text, raw/base64 audio, tool arguments/results, credentials, or provider secrets; documentation explains that real near-end speech is required because same-Mac replay does not prove browser AEC behavior.",
+        "Focused schema/oracle/CLI tests, existing Realtime fake-smoke and fixture-runner regressions, one sanitized real-device assisted RT003 run with its honest verdict, full unittest discovery, final ./init.sh, coding evidence, and separate cold-start evaluator approval pass without changing Realtime product behavior, relabeling a product failure as a pass, or modifying tracked private fixtures."
+      ],
+      "evals": [
+        {
+          "scenario": "RT003",
+          "required_evidence": [
+            "offline",
+            "live_near_end"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F052",
+        "F054",
+        "F057"
+      ]
     }
   ]
 }

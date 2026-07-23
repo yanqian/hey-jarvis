@@ -179,6 +179,36 @@ After launching and arming the Realtime host, run
 runner advances only on sanitized lifecycle events and requests a safe stop on
 failure; it never reads transcripts or sends PCM through the Python bridge.
 
+The first spec-driven Realtime evaluation is `RT003`, deliberate near-end
+interruption during a long answer. Its versioned contract is
+`evals/realtime/scenarios/RT003.json`. Offline evaluator tests apply the same
+oracle to sanitized reports without devices or network. For the required live
+evidence, launch the Realtime backend, click **Arm hands-free audio** once, keep
+the built-in microphone and speaker active without headphones, and run:
+
+```bash
+python -m src.evals.realtime_barge_in live
+```
+
+The command uses the private local `wake` fixture to enter the session, starts a
+long answer, and tells the operator when to speak one natural interruption
+utterance. It passes only when the old answer ends as `cancelled` within 1000ms,
+the continuation completes, and cleanup restores `wake_owned` with the local
+wake microphone open. If speech is not detected, the session closes early, an
+oracle fails, or cleanup is incomplete, the command exits non-zero but still
+requests bounded cleanup and saves a precise sanitized FAIL result; a product
+failure is never relabeled as a passing eval. Evidence defaults to
+`tmp/realtime-evals/RT003-evidence.json` and contains only allowlisted sanitized
+event fields. It never stores transcript text, raw/base64 audio, tool payloads,
+or credentials. Real near-end speech is mandatory: same-Mac fixture replay may
+be removed by browser echo cancellation and does not prove human barge-in.
+
+To re-evaluate a saved sanitized observation without live resources:
+
+```bash
+python -m src.evals.realtime_barge_in offline path/to/observation.json
+```
+
 To inspect local structured tool routing for typed text without microphone,
 wake-word detection, OpenAI, TTS, playback, or network access, run:
 

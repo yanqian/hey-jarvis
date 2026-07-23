@@ -114,11 +114,15 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
+F059 - Add a spec-driven assisted Realtime barge-in eval.
+
+F059 has been completed through evaluator-gated fast work, three authorized live-near-end attempts, a coding retry, and separate cold-start evaluator approval. The project now has a versioned RT003 contract, deterministic offline oracle, guided live runner, bounded PASS/FAIL evidence, privacy allowlists, early-close detection, cleanup-safe failure persistence, and 282 passing project tests. The independent evaluator accepted the evaluation capability while preserving the honest product verdict: under the accepted `output_volume=0.1` and `server_vad_threshold=0.8` profile, all three natural human interruption attempts—including a quiet-room retest—produced no `host_speech_started` and ended by idle timeout, even though prior saved fixtures crossed the threshold. Coding evidence is in `.agent-harness/runs/F059-fast-coding.md` and `.agent-harness/runs/F059-coding-retry.md`, live failure evidence is in `.agent-harness/runs/F059-rt003-live-failures.md`, and approval is recorded as `EVAL_PASS: F059` in `.agent-harness/runs/20260723T000000Z-F059-evaluation-pass.md`.
+
+## Recent Completed Feature History
+
 F058 - Log pipeline latency and enforce Chinese replies.
 
 F058 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. Successful pipeline loops now emit ordered `pipeline_timing` stage records and a bounded `response_timing` summary with recording duration, transcription, answer or local-tool routing, TTS, ready-to-play, playback, post-recording total, and route. General chat and structured-tool naturalization receive a current-turn language system instruction: Chinese input requires concise Simplified Chinese, explicit English terminology/translation/pronunciation requests may include requested English content with Chinese explanation, and English input remains English regardless of prior history. Focused tests pass with 66 tests, full supported-runtime discovery and final recovery pass with 233 project tests, coding evidence is recorded in `.agent-harness/runs/F058-fast-coding.md`, and evaluator approval is recorded as `EVAL_PASS: F058` in `.agent-harness/runs/20260717T000000Z-F058-evaluation-pass.md`.
-
-## Recent Completed Feature History
 
 F057 - Accept and document the Realtime WebRTC MVP.
 
@@ -172,11 +176,7 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Next Feature
 
-No feature is currently planned. The opt-in Realtime WebRTC MVP slice F051-F057 is accepted; plan and normalize a new requirement before further implementation.
-
-F058 has been planned from the user's latest pipeline debug log and is the active user-selected interactive feature ahead of the previously queued Realtime sequence. The log proves recording durations of roughly 3.84-6.24 seconds but lacks per-request timing for transcription, chat/tool routing, TTS, and playback. It also shows a clearly Chinese historical question while the current prompt only softly requests the user's language and logs no answer body. F058 adds safe monotonic stage timings plus a stricter Chinese-response contract with explicit-English exceptions. It intentionally does not change audio endpoint thresholds, models, streaming architecture, or Realtime work.
-
-F058 is complete and evaluator-approved. The managed Worktree still does not contain the ignored `.env`, `.venv`, or acknowledgement asset, so live voice acceptance should run after the work is handed to or merged into a checkout with those local runtime files.
+No feature is currently planned. If the user wants RT003 product behavior to pass, normalize a separate feature for numeric microphone/input-level observability and human-speech sensitivity diagnosis before changing VAD or output-gain tradeoffs.
 
 ## Known Issues
 
@@ -186,6 +186,13 @@ F058 is complete and evaluator-approved. The managed Worktree still does not con
 - Current safe configuration: The default remains `RECORDING_VAD_ENABLED=0`; the tested Python 3.12/WebRTC environment may enable it for normal continuous questions. ARMED sustained-window and pre-roll safeguards remain in effect.
 - Evidence: `.agent-harness/runs/F037-real-vad-tuning-results.md` and `.agent-harness/runs/F048-real-device-acceptance.md`.
 - Follow-up: Treat paused-prefix preservation and clap/transient rejection as separate lower-priority features if their real impact becomes material. Default enablement is a separate product decision.
+
+### Realtime natural human barge-in sensitivity
+
+- Impact: Three F059 live-near-end attempts under the previously accepted `REALTIME_OUTPUT_VOLUME=0.1` and server-VAD threshold `0.8` profile played the quiet long response and captured a user-confirmed spoken interruption, but emitted no `host_speech_started`; all sessions ended safely by idle timeout. The third attempt ran in a quieter room, weakening ambient room noise as the primary explanation. Saved fixtures crossed this threshold in F057, so fixture success does not currently generalize to natural human trials.
+- Current safe interpretation: RT003 remains an honest product FAIL. Do not lower the oracle, claim barge-in success, or substitute same-Mac playback as near-end human evidence.
+- Evidence: `.agent-harness/runs/F059-rt003-live-failures.md`.
+- Follow-up: If prioritized, first add bounded numeric input-level observability and a controlled human/fixture comparison, then separately decide the VAD/output-gain tradeoff with self-echo regression coverage.
 
 ## Operational and Verification Constraints
 

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "title": "Hey Jarvis Realtime evaluation scenario contract",
+  "required": [
+    "schema_version",
+    "id",
+    "version",
+    "title",
+    "goal",
+    "preconditions",
+    "human_actions",
+    "observations",
+    "oracles",
+    "evidence",
+    "privacy"
+  ],
+  "oracle_required": [
+    "old_response_reason",
+    "cancellation_latency_ms_max",
+    "continuation_reason",
+    "final_state",
+    "wake_microphone_open"
+  ],
+  "evidence_tiers": [
+    "offline",
+    "live_near_end"
+  ],
+  "notes": [
+    "Scenario contracts describe observable product behavior, not implementation class names.",
+    "Raw audio, transcripts, credentials, and provider secrets are forbidden in committed evidence."
+  ]
+}
