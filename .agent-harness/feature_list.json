@@ -1261,6 +1261,124 @@
         "F054",
         "F059"
       ]
+    },
+    {
+      "id": "F061",
+      "title": "Synchronize and pass the assisted RT003 live eval",
+      "description": "Add pre-session operator readiness and in-band audible confirmation to the assisted RT003 workflow, then obtain one honest real-device pass without changing product audio tuning or weakening the existing oracle.",
+      "acceptance": [
+        "The live runner waits fail-closed for explicit operator readiness before wake playback and timeout-bound session acquisition, then promptly requests the long answer and begins observing only after the exact active response.created; the one live-near-end utterance is both audible-answer confirmation and the barge-in action, avoiding a second chat/terminal round trip.",
+        "Injected readiness, request, clock, and fake-host seams prove that no wake, long-answer request, or speech-action observation advances early, while EOF, operator cancellation, an answer naturally ending before valid speech, host closure, and timeout produce precise sanitized FAIL evidence and the existing bounded cleanup path.",
+        "RT003 retains exactly one real near-end human speech action, its 1000 ms cancellation threshold, cancelled-old-response oracle, completed-continuation oracle, restored-wake oracle, and existing privacy exclusions; F061 does not change Realtime model, voice, VAD threshold, output volume, capture/AEC settings, product interruption logic, or historical F059/F060 evidence.",
+        "One newly authorized built-in-microphone/speaker live run passes RT003 with sanitized evidence showing active-session host_speech_started, cancelled old response within 1000 ms, completed continuation, bounded stop, and restored wake ownership without transcript, utterance, audio, credential, or tool content.",
+        "Focused runner/oracle/CLI/documentation tests, existing F059/F060 and Realtime fake-smoke regressions, full unittest discovery, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without committing private fixtures or local tmp logs."
+      ],
+      "evals": [
+        {
+          "scenario": "RT003",
+          "required_evidence": [
+            "offline",
+            "live_near_end"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F059",
+        "F060"
+      ]
+    },
+    {
+      "id": "F062",
+      "title": "Add shared automatic Realtime eval runner and RT001",
+      "description": "Generalize the F061 evidence pattern and add automatic RT001 coverage for wake, exclusive microphone handoff, connection, and cleanup using a reusable private wake fixture.",
+      "acceptance": [
+        "A versioned project-owned RT001 scenario defines saved-wake input, ordered Python-microphone close before browser acquisition/connection, bounded stop, restored-wake oracles, offline/live-host evidence tiers, and strict privacy exclusions with no user question or assistant-response requirement.",
+        "A backward-compatible generic Realtime scenario/eval boundary supports offline, fixture_replay, live_host, and RT003 live_near_end evidence; provides injected request/clock/play seams, lifecycle polling, bounded cleanup, sanitized PASS/FAIL evidence, and CLI support; and preserves RT003 version 2 behavior.",
+        "Deterministic tests prove RT001 pass and precise failures for missing, stale, wrong-session, duplicated, or misordered ownership/connection events, timeout, stop failure, and cleanup defect without microphone, browser, network, credentials, cost, or wall-clock sleeps.",
+        "One newly authorized built-in-device RT001 live-host run passes automatically using the existing private wake fixture, proving exclusive handoff and host_connected before bounded cleanup and wake recovery, with no human speech and no transcript, audio, credential, SDP, provider-body, or tool content in evidence.",
+        "Focused scenario/shared-runner/CLI/documentation and RT003 regressions, Realtime fake smoke, full unittest discovery, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing Realtime product settings or committing private fixtures/tmp logs."
+      ],
+      "evals": [
+        {
+          "scenario": "RT001",
+          "required_evidence": [
+            "offline",
+            "live_host"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F054",
+        "F061"
+      ]
+    },
+    {
+      "id": "F063",
+      "title": "Add automatic RT002 two-turn fixture-replay eval",
+      "description": "Add RT002 coverage that records a private two-turn fixture set once, then automatically replays it to prove two completed turns in one continuous Realtime session.",
+      "acceptance": [
+        "A versioned RT002 scenario defines a one-time private two-clip fixture setup, automatic wake/turn replay, exactly one active connection/session identity, two ordered speech cycles and completed responses, bounded cleanup, restored wake ownership, offline/fixture-replay evidence tiers, and strict privacy exclusions.",
+        "After the Git-ignored turn-1 and turn-2 fixtures are recorded once, the routine runner automatically replays turn 1, waits for its completed response, replays turn 2, waits for its completed response under the same session, then stops without fresh human speech, another wake, or another Arm action.",
+        "Deterministic tests pass one valid same-session fixture run and fail precisely for fixture missing/integrity mismatch, second connection, intervening close/wake, early/missing/extra speech, cancelled/failed response, wrong session, timeout, or cleanup defect without retaining or judging transcript/answer content.",
+        "One authorized built-in-device RT002 fixture-replay run passes automatically after the one-time fixture setup with two speech/response cycles under one session identity, bounded stop, restored wake ownership, and sanitized lifecycle evidence only.",
+        "Focused RT002/shared-runner/CLI/documentation tests, RT001/RT003 and Realtime fake-smoke regressions, full unittest discovery, final ./init.sh, coding evidence, and separate evaluator approval pass without product tuning or private artifact commits."
+      ],
+      "evals": [
+        {
+          "scenario": "RT002",
+          "required_evidence": [
+            "offline",
+            "fixture_replay"
+          ]
+        }
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F062"
+      ]
+    },
+    {
+      "id": "F064",
+      "title": "Add automatic RT004 close and next-wake recovery eval",
+      "description": "Add automatic RT004 coverage proving explicit close tears down browser media, restores Python microphone ownership, and permits a fresh saved wake to connect a distinct next session.",
+      "acceptance": [
+        "A versioned RT004 scenario defines automatic first wake/connect, deterministic explicit close, ordered browser-media stop and Python-microphone reopen, a second saved-wake connection with a distinct session identity, final bounded cleanup, offline/live-host evidence tiers, and strict privacy exclusions.",
+        "The runner automatically connects session A from the private wake fixture, calls the existing stop control, proves media cleanup and wake ownership, replays the same wake fixture to connect session B without another Arm click or human utterance, then stops and verifies final recovery.",
+        "Deterministic tests pass the two-session lifecycle and fail precisely for missing/misordered stop/reopen, concurrent microphone ownership, reused/stale identity, failed next-wake connection, either cleanup failure, or timeout without relying on transcript or response content.",
+        "One authorized built-in-device RT004 live-host run passes automatically with two distinct wake-triggered connections, bounded explicit stops, media teardown before each microphone reopen, and final wake recovery using sanitized lifecycle evidence only and no human speech.",
+        "Focused RT004/shared-runner/CLI/documentation tests, RT001-RT003 and Realtime fake-smoke regressions, full unittest discovery, final ./init.sh, coding evidence, and separate evaluator approval pass without changing close/media product behavior or committing private artifacts."
+      ],
+      "evals": [
+        {
+          "scenario": "RT004",
+          "required_evidence": [
+            "offline",
+            "live_host"
+          ]
+        }
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F062"
+      ]
     }
   ]
 }

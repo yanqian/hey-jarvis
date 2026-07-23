@@ -271,6 +271,18 @@ def _json_request(url: str, *, method: str = "GET") -> dict[str, object]:
         return json.loads(response.read())
 
 
+def wait_for_operator(prompt: str) -> None:
+    """Fail closed unless an interactive operator explicitly advances RT003."""
+    try:
+        response = input(prompt)
+    except EOFError as exc:
+        raise RealtimeEvalError("RT003 operator readiness input closed before confirmation") from exc
+    except KeyboardInterrupt as exc:
+        raise RealtimeEvalError("RT003 operator cancelled the readiness gate") from exc
+    if response.strip().lower() in {"cancel", "q", "quit"}:
+        raise RealtimeEvalError("RT003 operator cancelled the readiness gate")
+
+
 class AssistedBargeInRunner:
     def __init__(
         self,
@@ -284,6 +296,7 @@ class AssistedBargeInRunner:
         sleep: Callable[[float], None] = time.sleep,
         transition_timeout: float = 30.0,
         announce: Callable[[str], None] = print,
+        operator_wait: Callable[[str], None] = wait_for_operator,
     ) -> None:
         validate_scenario(scenario)
         self.scenario = scenario
@@ -295,6 +308,7 @@ class AssistedBargeInRunner:
         self.sleep = sleep
         self.transition_timeout = transition_timeout
         self.announce = announce
+        self.operator_wait = operator_wait
 
     def run(self) -> dict[str, object]:
         stage = "preconditions"
@@ -309,6 +323,12 @@ class AssistedBargeInRunner:
             if not self.wake_fixture.exists():
                 raise RealtimeEvalError(f"RT003 wake fixture is missing: {self.wake_fixture}")
 
+            stage = "operator_ready"
+            self.operator_wait(
+                "RT003 ready: press Enter to wake the assistant and start the long counting answer "
+                "(type 'cancel' to abort): "
+            )
+
             stage = "session_start"
             self.play(self.wake_fixture)
             active = self._wait(
@@ -322,10 +342,6 @@ class AssistedBargeInRunner:
 
             stage = "long_answer"
             created_count = self._event_count(active, "host_response_created", session_id)
-            self.announce(
-                "RT003: a long answer will start now. When it is audible, "
-                "speak one natural interruption utterance near the microphone."
-            )
             self.request(f"{self.base_url}/api/long-answer", method="POST")
             long_report = self._wait(
                 lambda report: self._event_count(report, "host_response_created", session_id)
@@ -339,6 +355,10 @@ class AssistedBargeInRunner:
             long_started = int(long_created["at_ms"])
 
             stage = "near_end_speech"
+            self.announce(
+                "RT003: when counting is audible, speak one natural interruption utterance "
+                "near the microphone now."
+            )
             interrupted = self._wait(
                 lambda report: self._first_session_event(
                     report,
@@ -358,6 +378,12 @@ class AssistedBargeInRunner:
             )
             if old_done is None:
                 raise RealtimeEvalError("RT003 did not observe the old response ending")
+            expected_reason = self.scenario["oracles"]["old_response_reason"]
+            if old_done.get("reason") != expected_reason:
+                raise RealtimeEvalError(
+                    f"RT003 long answer ended as {old_done.get('reason')!r} before a valid "
+                    f"near-end interruption; expected {expected_reason!r}"
+                )
             stage = "continuation"
             continuation_report = self._wait(
                 lambda report: self._completed_continuation(

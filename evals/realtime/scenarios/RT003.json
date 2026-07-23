@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "RT003",
-  "version": 1,
+  "version": 2,
   "title": "Deliberate near-end interruption during a long Realtime answer",
   "goal": "Prove that one real near-end human utterance promptly cancels the active long answer, receives a continuation, and leaves the assistant ready for a fresh local wake.",
   "preconditions": [
@@ -13,7 +13,7 @@
   "human_actions": [
     {
       "id": "speak_once",
-      "instruction": "When the long answer is audible, speak one natural interruption utterance.",
+      "instruction": "Once prepared before session start, wait until the long answer is audible and speak one natural interruption utterance; that utterance is also the audible-answer confirmation.",
       "count": 1,
       "source": "live_near_end"
     }

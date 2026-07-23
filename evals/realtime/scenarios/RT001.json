@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "id": "RT001",
+  "version": 1,
+  "title": "Wake-triggered exclusive microphone handoff and Realtime connection",
+  "goal": "Prove that a saved wake transfers exclusive microphone ownership from Python to the armed browser, reaches one connected Realtime session, then stops and restores wake listening without a user question.",
+  "preconditions": [
+    "BACKEND=realtime is configured with a usable OpenAI credential and network connection.",
+    "The loopback Realtime host is launched and Arm hands-free audio has been clicked once.",
+    "A private local wake fixture has already been recorded."
+  ],
+  "human_actions": [],
+  "observations": [
+    "wake_microphone_closed",
+    "host_microphone_requested",
+    "host_microphone_acquired",
+    "host_connected",
+    "host_stopped",
+    "wake_microphone_reopened"
+  ],
+  "oracles": {
+    "connected_state": "host_active",
+    "wake_microphone_open_during_host": false,
+    "final_state": "wake_owned",
+    "wake_microphone_open": true
+  },
+  "evidence": {
+    "required": [
+      "offline",
+      "live_host"
+    ],
+    "offline": "The same deterministic oracle evaluates sanitized lifecycle reports without microphone, browser, network, credentials, audio, or wall-clock sleeps.",
+    "live_host": "The runner automatically replays the existing private wake fixture, observes exclusive handoff and connection, then performs bounded cleanup; no fresh human speech is required."
+  },
+  "privacy": {
+    "commit_audio": false,
+    "commit_transcript": false,
+    "allowed_event_fields": [
+      "type",
+      "at_ms",
+      "session_id",
+      "reason"
+    ],
+    "forbidden_fields": [
+      "audio",
+      "audio_delta",
+      "transcript",
+      "arguments",
+      "output",
+      "api_key",
+      "client_secret",
+      "ephemeral_key",
+      "token",
+      "sdp",
+      "provider_body"
+    ]
+  }
+}

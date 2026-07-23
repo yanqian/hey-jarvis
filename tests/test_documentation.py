@@ -13,6 +13,31 @@ MANUAL_TESTING = ROOT / "MANUAL_TESTING.md"
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_rt001_documents_automatic_no_speech_handoff_boundary(self):
+        readme = README.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+        readme_words = " ".join(readme.split())
+
+        self.assertIn("python -m src.evals.realtime_handoff live", readme)
+        self.assertIn("needs no fresh human speech", readme)
+        self.assertIn("requires explicit authorization", readme_words)
+        self.assertIn("python -m src.evals.realtime_handoff offline", readme)
+        self.assertIn("M062", manual_testing)
+        self.assertIn("Do not speak", manual_testing)
+        self.assertIn("No user question or assistant answer is part of RT001", manual_testing)
+
+    def test_rt003_documents_one_pre_session_gate_and_in_band_confirmation(self):
+        readme = README.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+        readme_words = " ".join(readme.split())
+        manual_words = " ".join(manual_testing.split())
+
+        self.assertIn("one fail-closed pre-session readiness gate", readme)
+        self.assertIn("no second terminal/chat round trip", readme_words)
+        self.assertNotIn("two fail-closed operator gates", readme)
+        self.assertIn("That utterance doubles as audible confirmation", manual_words)
+        self.assertIn("no second terminal/chat round trip", manual_words)
+
     def test_realtime_input_level_diagnosis_is_documented_without_tuning_claims(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")

@@ -58,7 +58,7 @@ class ScenarioContractTests(unittest.TestCase):
     def test_checked_in_scenario_is_versioned_private_and_requires_two_evidence_tiers(self):
         scenario = load_scenario()
         self.assertEqual(scenario["id"], "RT003")
-        self.assertEqual(scenario["version"], 1)
+        self.assertEqual(scenario["version"], 2)
         self.assertEqual(scenario["oracles"]["cancellation_latency_ms_max"], 1000)
         self.assertEqual(scenario["evidence"]["required"], ["offline", "live_near_end"])
         self.assertFalse(scenario["privacy"]["commit_audio"])
@@ -200,12 +200,15 @@ class FakeLiveHost:
         self.now = 0
         self.complete_barge_in = complete_barge_in
         self.stop_calls = 0
+        self.long_answer_requests = 0
+        self.play_calls = 0
 
     def add(self, event_type: str, **detail: object) -> None:
         self.now += 100
         self.events.append(event(self.now, event_type, **detail))
 
     def play(self, _path: Path) -> None:
+        self.play_calls += 1
         self.state = "host_active"
         self.mic_open = False
         self.add("host_connected")
@@ -218,12 +221,8 @@ class FakeLiveHost:
                 "events": deepcopy(self.events),
             }
         if url.endswith("/api/long-answer"):
+            self.long_answer_requests += 1
             self.add("host_response_created")
-            if self.complete_barge_in:
-                self.add("host_speech_started")
-                self.add("host_response_done", reason="cancelled")
-                self.add("host_response_created")
-                self.add("host_response_done", reason="completed")
             return {"ok": True}
         if url.endswith("/api/stop"):
             self.stop_calls += 1
@@ -233,11 +232,29 @@ class FakeLiveHost:
             return {"ok": True}
         raise AssertionError((url, method))
 
+    def emit_barge_in(self) -> None:
+        self.add("host_speech_started")
+        self.add("host_response_done", reason="cancelled")
+        self.add("host_response_created")
+        self.add("host_response_done", reason="completed")
+
 
 class AssistedRunnerTests(unittest.TestCase):
     def test_guided_live_run_reuses_host_controls_and_emits_sanitized_evidence(self):
         host = FakeLiveHost()
         announcements: list[str] = []
+        prompts: list[str] = []
+
+        def operator_wait(prompt: str) -> None:
+            prompts.append(prompt)
+            self.assertEqual(host.play_calls, 0)
+            self.assertEqual(host.long_answer_requests, 0)
+
+        def announce(message: str) -> None:
+            announcements.append(message)
+            if "speak one natural interruption" in message:
+                host.emit_barge_in()
+
         with tempfile.TemporaryDirectory() as directory:
             wake = Path(directory) / "wake.wav"
             wake.write_bytes(b"fixture-present")
@@ -247,15 +264,18 @@ class AssistedRunnerTests(unittest.TestCase):
                 request=host.request,
                 play=host.play,
                 sleep=lambda _seconds: None,
-                announce=announcements.append,
+                announce=announce,
+                operator_wait=operator_wait,
             )
             evidence = runner.run()
         self.assertEqual(evidence["scenario_id"], "RT003")
-        self.assertEqual(evidence["scenario_version"], 1)
+        self.assertEqual(evidence["scenario_version"], 2)
         self.assertEqual(evidence["evidence_tier"], "live_near_end")
         self.assertEqual(evidence["result"]["cancellation_latency_ms"], 100)
         self.assertTrue(evidence["result"]["recovered_to_wake"])
         self.assertEqual(host.stop_calls, 1)
+        self.assertEqual(len(prompts), 1)
+        self.assertIn("press Enter to wake", prompts[0])
         self.assertIn("speak one natural interruption", announcements[0])
         encoded = json.dumps(evidence)
         for forbidden in ("transcript", "audio_delta", "api_key", "client_secret"):
@@ -276,6 +296,7 @@ class AssistedRunnerTests(unittest.TestCase):
                 sleep=lambda seconds: now.__setitem__(0, now[0] + seconds),
                 transition_timeout=0.5,
                 announce=lambda _message: None,
+                operator_wait=lambda _prompt: None,
             )
             with self.assertRaisesRegex(RealtimeLiveFailure, "timed out") as caught:
                 runner.run()
@@ -310,6 +331,7 @@ class AssistedRunnerTests(unittest.TestCase):
                 play=host.play,
                 sleep=lambda _seconds: None,
                 announce=lambda _message: None,
+                operator_wait=lambda _prompt: None,
             )
             with self.assertRaisesRegex(RealtimeLiveFailure, "closed before") as caught:
                 runner.run()
@@ -317,6 +339,71 @@ class AssistedRunnerTests(unittest.TestCase):
         self.assertIn('"result": "failed"', evidence_text)
         for forbidden in ("transcript", "audio_delta", "api_key", "client_secret"):
             self.assertNotIn(forbidden, evidence_text)
+
+    def test_operator_cancel_and_closed_input_fail_closed_with_cleanup(self):
+        for name, failure in (
+            ("cancel", RealtimeEvalError("RT003 operator cancelled the readiness gate")),
+            ("eof", EOFError()),
+        ):
+            with self.subTest(name=name):
+                host = FakeLiveHost()
+
+                def operator_wait(_prompt: str, error: BaseException = failure) -> None:
+                    if isinstance(error, EOFError):
+                        raise RealtimeEvalError(
+                            "RT003 operator readiness input closed before confirmation"
+                        ) from error
+                    raise error
+
+                with tempfile.TemporaryDirectory() as directory:
+                    wake = Path(directory) / "wake.wav"
+                    wake.write_bytes(b"fixture-present")
+                    runner = AssistedBargeInRunner(
+                        scenario=load_scenario(),
+                        wake_fixture=wake,
+                        request=host.request,
+                        play=host.play,
+                        announce=lambda _message: None,
+                        operator_wait=operator_wait,
+                    )
+                    with self.assertRaises(RealtimeLiveFailure) as caught:
+                        runner.run()
+                self.assertEqual(host.long_answer_requests, 0)
+                self.assertEqual(host.play_calls, 0)
+                self.assertEqual(host.stop_calls, 1)
+                self.assertEqual(
+                    caught.exception.evidence["result"]["failure_stage"],
+                    "operator_ready",
+                )
+
+    def test_answer_that_ends_before_near_end_speech_fails_precisely(self):
+        host = FakeLiveHost()
+
+        def announce(message: str) -> None:
+            if "when counting is audible" in message:
+                host.add("host_response_done", reason="completed")
+
+        with tempfile.TemporaryDirectory() as directory:
+            wake = Path(directory) / "wake.wav"
+            wake.write_bytes(b"fixture-present")
+            runner = AssistedBargeInRunner(
+                scenario=load_scenario(),
+                wake_fixture=wake,
+                request=host.request,
+                play=host.play,
+                announce=announce,
+                operator_wait=lambda _prompt: None,
+            )
+            with self.assertRaisesRegex(
+                RealtimeLiveFailure,
+                "ended as 'completed' before a valid near-end interruption",
+            ) as caught:
+                runner.run()
+        self.assertEqual(host.stop_calls, 1)
+        self.assertEqual(
+            caught.exception.evidence["result"]["failure_stage"],
+            "near_end_speech",
+        )
 
     def test_cli_offline_evaluates_saved_observation_without_live_resources(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -25,6 +25,41 @@
     "offline",
     "live_near_end"
   ],
+  "allowed_evidence_tiers": [
+    "offline",
+    "fixture_replay",
+    "live_host",
+    "live_near_end"
+  ],
+  "scenario_contracts": {
+    "RT001": {
+      "oracle_required": [
+        "connected_state",
+        "wake_microphone_open_during_host",
+        "final_state",
+        "wake_microphone_open"
+      ],
+      "evidence_tiers": [
+        "offline",
+        "live_host"
+      ],
+      "human_action_count": 0
+    },
+    "RT003": {
+      "oracle_required": [
+        "old_response_reason",
+        "cancellation_latency_ms_max",
+        "continuation_reason",
+        "final_state",
+        "wake_microphone_open"
+      ],
+      "evidence_tiers": [
+        "offline",
+        "live_near_end"
+      ],
+      "human_action_count": 1
+    }
+  },
   "notes": [
     "Scenario contracts describe observable product behavior, not implementation class names.",
     "Raw audio, transcripts, credentials, and provider secrets are forbidden in committed evidence."

@@ -179,8 +179,32 @@ After launching and arming the Realtime host, run
 runner advances only on sanitized lifecycle events and requests a safe stop on
 failure; it never reads transcripts or sends PCM through the Python bridge.
 
-The first spec-driven Realtime evaluation is `RT003`, deliberate near-end
-interruption during a long answer. Its versioned contract is
+The spec-driven Realtime suite starts with `RT001`, the automatic
+saved-wake-to-connected ownership check. Its versioned contract is
+`evals/realtime/scenarios/RT001.json`. Once the Realtime backend is launched,
+the browser host has been armed once, and the private `wake` fixture exists,
+run:
+
+```bash
+python -m src.evals.realtime_handoff live
+```
+
+RT001 needs no fresh human speech: it replays the saved wake, proves the Python
+wake microphone closes before browser microphone request/acquisition and
+`host_connected`, explicitly stops the session, and proves wake ownership is
+restored. The command still opens the real microphone, connects to OpenAI, and
+can incur Realtime charges, so each live-host run requires explicit
+authorization. It writes only bounded lifecycle metadata to
+`tmp/realtime-evals/RT001-evidence.json`; audio, transcripts, credentials, SDP,
+provider bodies, and tool content are excluded. The same oracle can evaluate a
+saved sanitized observation with no live resources:
+
+```bash
+python -m src.evals.realtime_handoff offline path/to/observation.json
+```
+
+`RT003` covers deliberate near-end interruption during a long answer. Its
+versioned contract is
 `evals/realtime/scenarios/RT003.json`. Offline evaluator tests apply the same
 oracle to sanitized reports without devices or network. For the required live
 evidence, launch the Realtime backend, click **Arm hands-free audio** once, keep
@@ -190,14 +214,22 @@ the built-in microphone and speaker active without headphones, and run:
 python -m src.evals.realtime_barge_in live
 ```
 
-The command uses the private local `wake` fixture to enter the session, starts a
-long answer, and tells the operator when to speak one natural interruption
-utterance. It passes only when the old answer ends as `cancelled` within 1000ms,
-the continuation completes, and cleanup restores `wake_owned` with the local
-wake microphone open. If speech is not detected, the session closes early, an
-oracle fails, or cleanup is incomplete, the command exits non-zero but still
-requests bounded cleanup and saves a precise sanitized FAIL result; a product
-failure is never relabeled as a passing eval. Evidence defaults to
+The command uses the private local `wake` fixture to enter the session, then
+waits at one fail-closed pre-session readiness gate. Press Enter once when
+ready; only then does it play the wake fixture, establish the Realtime session,
+and promptly send the long-answer request so operator delay cannot consume the
+session's idle timeout. After the exact `response.created` marker, it
+immediately tells the prepared operator to wait until counting is audible and
+speak one natural interruption utterance. That one utterance is both the
+audible-answer confirmation and the only scenario speech action; no second
+terminal/chat round trip can let the active answer expire. Type `cancel`, `q`,
+or `quit` at the readiness gate to stop safely. It passes only when the old answer
+ends as `cancelled` within 1000ms, the continuation completes, and cleanup
+restores `wake_owned` with the local wake microphone open. If input closes,
+confirmation is cancelled, the answer or session ends before speech, speech is
+not detected, an oracle fails, or cleanup is incomplete, the command exits non-zero
+but still requests bounded cleanup and saves a precise sanitized FAIL result; a
+product failure is never relabeled as a passing eval. Evidence defaults to
 `tmp/realtime-evals/RT003-evidence.json` and contains only allowlisted sanitized
 event fields. It never stores transcript text, raw/base64 audio, tool payloads,
 or credentials. Real near-end speech is mandatory: same-Mac fixture replay may
