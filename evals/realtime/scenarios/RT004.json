@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "id": "RT004",
+  "version": 1,
+  "title": "Explicit close, media cleanup, and distinct next wake",
+  "goal": "Prove that explicit close restores Python wake ownership and the same saved wake can establish a distinct second Realtime session before final cleanup.",
+  "preconditions": [
+    "BACKEND=realtime is configured with a usable OpenAI credential and network connection.",
+    "The loopback Realtime host is launched and Arm hands-free audio has been clicked once.",
+    "A private local wake fixture has already been recorded."
+  ],
+  "human_actions": [],
+  "observations": [
+    "wake_microphone_closed",
+    "host_microphone_requested",
+    "host_microphone_acquired",
+    "host_connected",
+    "host_stopped",
+    "wake_microphone_reopened"
+  ],
+  "oracles": {
+    "session_count": 2,
+    "distinct_session_ids": true,
+    "media_stop_before_wake_reopen": true,
+    "final_state": "wake_owned",
+    "wake_microphone_open": true
+  },
+  "evidence": {
+    "required": [
+      "offline",
+      "live_host"
+    ],
+    "offline": "The same fail-closed oracle evaluates sanitized two-session lifecycle snapshots without devices, network, credentials, audio, or sleeps.",
+    "live_host": "The runner automatically replays one private wake twice around two explicit stops under one Arm lease; no fresh human speech is required."
+  },
+  "privacy": {
+    "commit_audio": false,
+    "commit_transcript": false,
+    "allowed_event_fields": [
+      "type",
+      "at_ms",
+      "session_id",
+      "reason"
+    ],
+    "forbidden_fields": [
+      "audio",
+      "audio_delta",
+      "transcript",
+      "utterance",
+      "answer",
+      "arguments",
+      "output",
+      "api_key",
+      "client_secret",
+      "ephemeral_key",
+      "token",
+      "sdp",
+      "provider_body"
+    ]
+  }
+}

@@ -1079,3 +1079,85 @@ Implementation paths: `src/openai_client.py`, `src/state_machine.py`, focused Op
 Verification surface: request-shape tests for Chinese, English, mixed explicit-English, and chat-history language precedence; tool-naturalization prompt coverage; deterministic state-machine timing tests for chat and local-tool paths with ordered non-negative stage/total metrics; tests that diagnostics omit answer content and secrets; documentation tests; full unittest discovery; dry-run, fake-backend, behavior-compatible diagnose output, final `./init.sh`; and optional real voice comparison using the user's debug-log workflow. A Codex-managed worktree without copied `.env`, `.venv`, or acknowledgement audio may report those pre-existing capability gaps rather than claiming live readiness.
 
 Decomposition decision: this is one feature because the user reported latency and wrong-language output from the same serial post-recording answer path, and both changes share the OpenAI/state-machine observability and manual voice-test surface. The feature diagnoses rather than redesigns latency; streaming or endpoint-threshold optimization remains separately verifiable future work.
+
+### Automatic RT004 Close And Next-Wake Recovery Evaluation
+
+Goal: prove automatically that an explicit Realtime close tears down browser
+media, restores Python wake-microphone ownership, and permits the same saved
+wake fixture to establish a distinct second Realtime session before a final
+clean shutdown.
+
+Included scope: a versioned RT004 contract; offline and live-host evidence
+tiers; automatic saved-wake connection for session A; explicit stop;
+`host_stopped` before `wake_microphone_reopened`; an intermediate
+`wake_owned` snapshot; automatic replay of the same wake fixture without
+another Arm action; a distinct session B connection; a second explicit stop;
+final wake recovery; sanitized evidence; CLI, documentation, deterministic
+tests, full recovery verification, and evaluator-gated harness evidence.
+
+Excluded scope: user questions, assistant responses, transcript or answer
+semantics, end-phrase/idle/error close variants, changing production
+close/media behavior, changing Arm policy, fresh human speech, CI hardware
+automation, audio-content retention, or modifying RT001-RT003 semantics.
+
+Core flows: from an already armed `wake_owned` host, the runner verifies the
+private wake fixture exists, records the current event boundary, and replays
+the fixture. Session A must become `host_active` while the Python wake
+microphone is closed. The runner calls the existing stop control and observes
+one `host_stopped` before one `wake_microphone_reopened`, with an intermediate
+`wake_owned`/wake-microphone-open snapshot. It replays the same fixture without
+another Arm click, requires session B to become active under a non-empty
+identity different from session A, explicitly stops again, and requires the
+same ordered cleanup plus final wake ownership. Any partial run performs
+best-effort bounded cleanup and persists sanitized failure evidence.
+
+Constraints: each active snapshot must show exclusive browser microphone
+ownership; session-scoped request, acquisition, connection, stop, and reopen
+events must use the correct session identity; exactly two ordered lifecycle
+cycles are accepted; session identities must be distinct; stop must precede
+wake reopen in both cycles; timeout and cleanup paths fail closed; the wake
+fixture and all live evidence remain Git-ignored; committed evidence excludes
+raw/base64 audio, transcripts, answers, credentials, ephemeral secrets, SDP,
+provider bodies, tool content, and fixture bytes. Automated tests use injected
+request/play/clock/sleep boundaries and no hardware, network, OpenAI, or
+wall-clock waits.
+
+Ambiguities or assumptions: RT004 uses deterministic explicit stop because it
+isolates media teardown and next-wake recovery from transcription and response
+semantics. “Media cleanup” is proven through the browser-confirmed
+`host_stopped` lifecycle event followed by Python wake-microphone reopen and
+exclusive active snapshots; committed evidence does not retain browser track
+objects. The same already recorded wake fixture is reused for both cycles.
+One Arm action per host launch remains a precondition, but no second Arm action
+is allowed between sessions. A live-host run still requires fresh explicit
+microphone/OpenAI/cost authorization even though no user utterance is needed.
+
+Required capabilities: the F062 generic Realtime scenario schema, sanitizer
+and injected live-runner boundary; the existing loopback `/api/report` and
+`/api/stop` controls; the existing browser-confirmed lifecycle events; one
+private saved wake fixture; an armed built-in-device Realtime host with a
+usable OpenAI credential and network; temporary sanitized evidence storage;
+deterministic fake hosts; full project recovery; and a separate cold-start
+Evaluator Agent.
+
+Implementation paths: `evals/realtime/scenario.schema.json`,
+`evals/realtime/scenarios/RT004.json`, a project-owned RT004 runner under
+`src/evals/`, focused tests under `tests/`, `README.md`,
+`MANUAL_TESTING.md`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: schema/contract validation; offline pass for two
+distinct ordered lifecycles; deterministic rejection of missing, duplicated,
+misordered, stale, or wrong-session lifecycle events, reused identities,
+concurrent microphone ownership, failed second connection, first/final cleanup
+defects, and timeouts; offline CLI; RT001-RT003 regression tests; documentation
+assertions; Realtime fake smoke; full unittest discovery; final root
+`./init.sh`; one newly authorized built-in-device live-host pass with two
+connections and no human speech; fast coding evidence; and separate evaluator
+approval.
+
+Decomposition decision: RT004 is one focused lifecycle evaluation feature. It
+reuses existing production stop and wake behavior without modifying them.
+RT001 separately proves one wake-to-connect handoff, RT002 proves two turns
+inside one session, and RT003 proves live human barge-in; combining those
+independently verifiable semantics would weaken failure attribution.

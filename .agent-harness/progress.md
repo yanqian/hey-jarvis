@@ -178,9 +178,22 @@ F049 has been completed through evaluator-gated fast work and separate cold-star
 
 F050 has been completed through evaluator-gated fast work and separate cold-start evaluator approval. Recovery state now reflects F049's approval, README and manual guidance reflect F048's 5/5 real-device endpoint acceptance without implying default enablement, manual testing distinguishes post-RECORDING hangover from unresolved pre-trigger ARMED prefix loss, and the duplicate M012 test ID is removed. Focused documentation assertions guard these boundaries. Coding evidence is recorded in `.agent-harness/runs/F050-fast-coding.md`, and approval is recorded as `EVAL_PASS: F050` in `.agent-harness/runs/20260716T071443Z-F050-evaluation-pass.md`.
 
+## Current Feature
+
+No feature is currently in progress.
+
 ## Next Feature
 
-F061 is complete after a real RT003 pass at 69 ms cancellation latency, final recovery verification, documentation correction, and separate cold-start evaluator approval recorded in `.agent-harness/runs/20260723T100500Z-F061-evaluation-pass.md`. The user has now fixed the authoritative scenario matrix: RT001 is saved wake → exclusive microphone handoff → connected, with no routine human speech; RT002 is two-turn conversation using a private fixture set recorded once and automatically replayed afterward; RT003 remains the critical-version real-human barge-in eval; RT004 is deterministic close → browser-media cleanup → fresh next wake, with no routine human speech. F062 is complete with its shared generic schema/runner boundary, versioned automatic RT001 contract, deterministic oracle and failure coverage, CLI/documentation, 309 passing project tests, Realtime fake smoke, and final recovery verification. Its authorized built-in-device `live_host` run passed automatically with ordered wake close, browser microphone request/acquisition, connection, explicit stop, and wake reopen under one fresh session; no human speech was required and sanitized evidence remained content-free. The first strict evaluator rejected an active-snapshot validation gap, the retry applied exact ordered same-session checks to both active and final snapshots, and direct regressions now reject wrong-session and duplicated `host_connected`. A fresh non-overlapping cold-start evaluator approved the correction in `.agent-harness/runs/20260723T132123Z-F062-evaluation-pass.md`; the earlier concurrent shallow verdict is explicitly retained as superseded rather than valid completion evidence. F063 automatic RT002 is complete after its final authorized one-session/two-turn fixture replay and separate cold-start evaluator approval in `.agent-harness/runs/20260723T135129Z-F063-evaluation-pass.md`. F064 automatic two-session RT004 is now next. RT001/RT004 require only an already recorded private wake fixture, while RT002 requires one-time turn-fixture setup. Real-host/replay executions still require explicit microphone/OpenAI/cost authorization, but only RT003 requires a fresh human utterance per critical run.
+F064 is complete after separate cold-start evaluator approval recorded in
+`.agent-harness/runs/20260723T141351Z-F064-evaluation-pass.md`. The normalized
+spec, versioned RT004 contract, deterministic offline oracle, automatic
+two-session saved-wake runner, bounded failure evidence, CLI/documentation, and
+privacy controls are accepted. Focused RT001-RT004/shared-runner/documentation
+tests, full project discovery with 332 tests, final recovery verification, and
+one authorized built-in-device `live_host` pass all succeeded. The accepted
+RT004 evidence proves two distinct wake-triggered Realtime sessions under one
+Arm lease, explicit stop before each wake-microphone reopen, and final recovery
+to `wake_owned` without fresh human speech or committed private content.
 
 ## Known Issues
 

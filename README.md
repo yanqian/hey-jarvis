@@ -225,6 +225,23 @@ authorization. Offline sanitized observations use:
 python -m src.evals.realtime_two_turn offline path/to/observation.json
 ```
 
+`RT004` automatically proves that close and next-wake recovery work twice under
+one browser Arm lease. It replays the saved private wake, connects session A,
+uses the existing explicit stop, requires browser stop before Python wake
+microphone reopen, then replays the same wake to connect a distinct session B
+and performs the same bounded cleanup:
+
+```bash
+python -m src.evals.realtime_close_recovery live
+python -m src.evals.realtime_close_recovery offline path/to/observation.json
+```
+
+Routine RT004 runs require no fresh speech and do not ask or judge a user
+question. The live-host command still opens the built-in microphone, connects
+to OpenAI twice, and may incur Realtime charges, so every execution requires
+fresh explicit microphone/OpenAI/cost authorization. Evidence contains only
+bounded lifecycle metadata; private wake audio and content remain Git-ignored.
+
 `RT003` covers deliberate near-end interruption during a long answer. Its
 versioned contract is
 `evals/realtime/scenarios/RT003.json`. Offline evaluator tests apply the same

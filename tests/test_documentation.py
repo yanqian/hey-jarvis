@@ -37,6 +37,16 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("without speaking", manual_testing)
         self.assertIn("after browser AEC", manual_testing)
 
+    def test_rt004_documents_automatic_two_session_cleanup(self):
+        readme = README.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+        self.assertIn("python -m src.evals.realtime_close_recovery live", readme)
+        self.assertIn("Routine RT004 runs require no fresh speech", readme)
+        self.assertIn("connects session A", readme)
+        self.assertIn("distinct session B", readme)
+        self.assertIn("M064", manual_testing)
+        self.assertIn("without another Arm action", manual_testing)
+
     def test_rt003_documents_one_pre_session_gate_and_in_band_confirmation(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")

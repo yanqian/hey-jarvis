@@ -72,6 +72,20 @@
         "live_near_end"
       ],
       "human_action_count": 1
+    },
+    "RT004": {
+      "oracle_required": [
+        "session_count",
+        "distinct_session_ids",
+        "media_stop_before_wake_reopen",
+        "final_state",
+        "wake_microphone_open"
+      ],
+      "evidence_tiers": [
+        "offline",
+        "live_host"
+      ],
+      "human_action_count": 0
     }
   },
   "notes": [
