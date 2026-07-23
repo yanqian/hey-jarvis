@@ -20,6 +20,7 @@ SAFE_EVENT_TYPES = frozenset(
         "host_microphone_requested",
         "host_microphone_acquired",
         "host_connected",
+        "host_fixture_submitted",
         "host_response_created",
         "host_speech_started",
         "host_speech_stopped",

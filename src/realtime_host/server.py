@@ -188,6 +188,15 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 self.server.coordinator.request_long_answer()
                 self._json(HTTPStatus.OK, {"status": "requested"})
                 return
+            if path == "/api/fixture-audio":
+                payload = self._read_json(max_length=800_000)
+                name = payload.get("name")
+                audio = payload.get("audio")
+                if not isinstance(name, str) or not isinstance(audio, str):
+                    raise HandoffError("Fixture audio payload was invalid")
+                self.server.coordinator.request_fixture_audio(name, audio)
+                self._json(HTTPStatus.OK, {"status": "requested"})
+                return
             if path == "/api/event":
                 payload = self._read_json()
                 event_type = payload.pop("type", None)
@@ -212,12 +221,12 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             return
         self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
-    def _read_json(self) -> dict[str, object]:
+    def _read_json(self, *, max_length: int = 4096) -> dict[str, object]:
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError as exc:
             raise HandoffError("Host event payload size was invalid") from exc
-        if length <= 0 or length > 4096:
+        if length <= 0 or length > max_length:
             raise HandoffError("Host event payload size was invalid")
         try:
             payload = json.loads(self.rfile.read(length).decode())

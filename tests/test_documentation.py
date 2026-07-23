@@ -26,6 +26,17 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("Do not speak", manual_testing)
         self.assertIn("No user question or assistant answer is part of RT001", manual_testing)
 
+    def test_rt002_documents_one_time_fixture_setup_and_automatic_replay(self):
+        readme = README.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+        self.assertIn("python -m src.evals.realtime_two_turn live", readme)
+        self.assertIn("require no fresh speech", readme)
+        self.assertIn("not transcript or answer semantics", readme)
+        self.assertIn("after browser echo cancellation", readme)
+        self.assertIn("M063", manual_testing)
+        self.assertIn("without speaking", manual_testing)
+        self.assertIn("after browser AEC", manual_testing)
+
     def test_rt003_documents_one_pre_session_gate_and_in_band_confirmation(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")

@@ -1327,10 +1327,10 @@
       "title": "Add automatic RT002 two-turn fixture-replay eval",
       "description": "Add RT002 coverage that records a private two-turn fixture set once, then automatically replays it to prove two completed turns in one continuous Realtime session.",
       "acceptance": [
-        "A versioned RT002 scenario defines a one-time private two-clip fixture setup, automatic wake/turn replay, exactly one active connection/session identity, two ordered speech cycles and completed responses, bounded cleanup, restored wake ownership, offline/fixture-replay evidence tiers, and strict privacy exclusions.",
+        "A versioned RT002 scenario defines a one-time private two-clip fixture setup, automatic wake/turn replay, exactly one active connection/session identity, two ordered atomic fixture submissions and completed responses, bounded cleanup, restored wake ownership, offline/fixture-replay evidence tiers, and strict privacy exclusions.",
         "After the Git-ignored turn-1 and turn-2 fixtures are recorded once, the routine runner automatically replays turn 1, waits for its completed response, replays turn 2, waits for its completed response under the same session, then stops without fresh human speech, another wake, or another Arm action.",
         "Deterministic tests pass one valid same-session fixture run and fail precisely for fixture missing/integrity mismatch, second connection, intervening close/wake, early/missing/extra speech, cancelled/failed response, wrong session, timeout, or cleanup defect without retaining or judging transcript/answer content.",
-        "One authorized built-in-device RT002 fixture-replay run passes automatically after the one-time fixture setup with two speech/response cycles under one session identity, bounded stop, restored wake ownership, and sanitized lifecycle evidence only.",
+        "One authorized built-in-device RT002 fixture-replay run passes automatically after the one-time fixture setup with two atomic input/response cycles under one session identity, bounded stop, restored wake ownership, and sanitized lifecycle evidence only.",
         "Focused RT002/shared-runner/CLI/documentation tests, RT001/RT003 and Realtime fake-smoke regressions, full unittest discovery, final ./init.sh, coding evidence, and separate evaluator approval pass without product tuning or private artifact commits."
       ],
       "evals": [
@@ -1342,9 +1342,9 @@
           ]
         }
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

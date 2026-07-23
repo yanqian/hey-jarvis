@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import math
 import re
@@ -23,6 +25,8 @@ MAX_NORMALIZED_END_PHRASE_CHARS = 64
 MAX_TOOL_ARGUMENT_CHARS = 512
 MAX_CALCULATOR_EXPRESSION_CHARS = 200
 MAX_INPUT_LEVEL_SAMPLE_COUNT = 10
+MAX_FIXTURE_AUDIO_BYTES = 384_000
+FIXTURE_AUDIO_NAMES = frozenset({"turn-1", "turn-2"})
 INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 NEGOTIATION_DIAGNOSTIC_FIELDS = frozenset(
     {
@@ -248,6 +252,24 @@ class HandoffCoordinator:
                 raise HandoffError("A connected host session is required")
             self._enqueue("long_answer", self._session_id)
 
+    def request_fixture_audio(self, name: str, audio: str) -> None:
+        """Queue private eval audio without retaining it in lifecycle evidence."""
+
+        with self._lock:
+            if self._session_id is None or self._state != HandoffState.HOST_ACTIVE:
+                raise HandoffError("A connected host session is required")
+            if name not in FIXTURE_AUDIO_NAMES:
+                raise HandoffError("Fixture audio name was invalid")
+            if not isinstance(audio, str) or not audio or len(audio) > MAX_FIXTURE_AUDIO_BYTES * 2:
+                raise HandoffError("Fixture audio payload size was invalid")
+            try:
+                decoded = base64.b64decode(audio, validate=True)
+            except (binascii.Error, ValueError) as exc:
+                raise HandoffError("Fixture audio payload was invalid") from exc
+            if not decoded or len(decoded) > MAX_FIXTURE_AUDIO_BYTES or len(decoded) % 2:
+                raise HandoffError("Fixture audio payload size was invalid")
+            self._enqueue("fixture_audio", self._session_id, fixture_name=name, audio=audio)
+
     def host_event(
         self,
         event_type: str,
@@ -305,7 +327,14 @@ class HandoffCoordinator:
                 self._state = HandoffState.HOST_ACTIVE
                 self._connected_at = self._clock()
                 self._last_activity_at = self._connected_at
-            if event_type in {"speech_started", "speech_stopped", "response_created", "response_done", "transcription"}:
+            if event_type in {
+                "fixture_submitted",
+                "speech_started",
+                "speech_stopped",
+                "response_created",
+                "response_done",
+                "transcription",
+            }:
                 self._last_activity_at = self._clock()
             if event_type == "error":
                 self.request_stop(str(safe_detail.get("reason", "host_error")))

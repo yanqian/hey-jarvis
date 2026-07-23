@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "id": "RT002",
+  "version": 1,
+  "title": "Two automatic fixture-replay turns in one Realtime session",
+  "goal": "Prove that two saved private utterance fixtures each produce one completed response in one continuous Realtime session, followed by clean wake recovery.",
+  "preconditions": [
+    "The loopback Realtime host is launched and armed once with configured OpenAI access.",
+    "Private wake, turn-1, and turn-2 fixtures have been recorded once and retain matching local integrity metadata."
+  ],
+  "human_actions": [],
+  "observations": [
+    "host_connected",
+    "host_fixture_submitted",
+    "host_response_created",
+    "host_response_done",
+    "host_stopped",
+    "wake_microphone_reopened"
+  ],
+  "oracles": {
+    "connection_count": 1,
+    "turn_count": 2,
+    "response_reason": "completed",
+    "final_state": "wake_owned",
+    "wake_microphone_open": true
+  },
+  "evidence": {
+    "required": ["offline", "fixture_replay"],
+    "offline": "The deterministic oracle evaluates sanitized lifecycle reports without devices, network, credentials, audio, or sleeps.",
+    "fixture_replay": "After one-time private recording, the runner automatically replays wake, turn-1, and turn-2 with no fresh human speech."
+  },
+  "privacy": {
+    "commit_audio": false,
+    "commit_transcript": false,
+    "allowed_event_fields": ["type", "at_ms", "session_id", "reason"],
+    "forbidden_fields": [
+      "audio", "audio_delta", "transcript", "utterance", "answer", "arguments",
+      "output", "api_key", "client_secret", "ephemeral_key", "token", "sdp", "provider_body"
+    ]
+  }
+}

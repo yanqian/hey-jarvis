@@ -45,6 +45,20 @@
       ],
       "human_action_count": 0
     },
+    "RT002": {
+      "oracle_required": [
+        "connection_count",
+        "turn_count",
+        "response_reason",
+        "final_state",
+        "wake_microphone_open"
+      ],
+      "evidence_tiers": [
+        "offline",
+        "fixture_replay"
+      ],
+      "human_action_count": 0
+    },
     "RT003": {
       "oracle_required": [
         "old_response_reason",

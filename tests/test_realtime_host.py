@@ -234,6 +234,24 @@ class RealtimeHostTests(unittest.TestCase):
                 self.assertIn(expected, output["answer"])
                 self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
 
+    def test_fixture_audio_is_bounded_session_scoped_and_excluded_from_report(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event("connected", session_id)
+        encoded = "AQACAA=="
+        coordinator.request_fixture_audio("turn-1", encoded)
+        command = coordinator.command_after(1)
+        self.assertEqual(command["type"], "fixture_audio")
+        self.assertEqual(command["fixture_name"], "turn-1")
+        self.assertEqual(command["audio"], encoded)
+        report_text = json.dumps(coordinator.report())
+        self.assertNotIn(encoded, report_text)
+        with self.assertRaisesRegex(HandoffError, "name"):
+            coordinator.request_fixture_audio("wake", encoded)
+        with self.assertRaisesRegex(HandoffError, "payload"):
+            coordinator.request_fixture_audio("turn-2", "not-base64")
+
     def test_invalid_generated_session_does_not_release_wake_microphone(self):
         lease = FakeLease()
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "invalid session id")
@@ -266,6 +284,9 @@ class RealtimeHostTests(unittest.TestCase):
             'response.headers.get("x-ratelimit-remaining-requests")',
             'response.headers.get("x-ratelimit-reset-requests")',
             "error.safeDiagnostic=detail",
+            'type:"input_audio"',
+            'hostEvent("fixture_submitted")',
+            'command.type==="fixture_audio"',
         ):
             self.assertIn(text, javascript)
         self.assertNotIn("JSON.stringify(payload)", javascript.split("async function negotiationFailure", 1)[1].split("function flushInputLevels", 1)[0])

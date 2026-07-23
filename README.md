@@ -203,6 +203,28 @@ saved sanitized observation with no live resources:
 python -m src.evals.realtime_handoff offline path/to/observation.json
 ```
 
+`RT002` extends that automatic pattern to two continuous turns. Record the
+private `turn-1` and `turn-2` fixtures once. Routine runs require no fresh speech:
+
+```bash
+python -m src.evals.realtime_two_turn live
+```
+
+The runner verifies each selected WAV against its local Git-ignored manifest,
+plays wake acoustically, injects both saved turns through the active WebRTC data
+channel after browser echo cancellation as two atomic audio conversation items,
+waits for exactly two ordered completed responses under one connection/session
+identity, then stops and
+restores wake ownership. Post-AEC injection keeps routine replay deterministic
+without disabling the product's real microphone processing.
+It evaluates lifecycle continuity only, not transcript or answer semantics.
+The live fixture-replay run still requires explicit microphone/OpenAI/cost
+authorization. Offline sanitized observations use:
+
+```bash
+python -m src.evals.realtime_two_turn offline path/to/observation.json
+```
+
 `RT003` covers deliberate near-end interruption during a long answer. Its
 versioned contract is
 `evals/realtime/scenarios/RT003.json`. Offline evaluator tests apply the same
