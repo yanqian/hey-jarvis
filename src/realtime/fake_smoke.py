@@ -146,10 +146,11 @@ def run_fake_smoke() -> FakeSmokeResult:
             stage = 2
         elif coordinator.state == HandoffState.HOST_ACTIVE and stage == 2:
             coordinator.host_event(
-                "transcription",
+                "tool_call",
                 session_id,
-                item_id="fake-end-item",
-                transcript="Goodbye.",
+                call_id="fake-end-call",
+                name="end_conversation",
+                arguments="{}",
             )
             stage = 3
         elif coordinator.state == HandoffState.HOST_STOPPING:
@@ -173,7 +174,7 @@ def run_fake_smoke() -> FakeSmokeResult:
         assistant_completions=assistant_completions,
         barge_in=barge_in,
         calculator_output=calculator_output,
-        end_phrase="host_end_phrase_matched" in event_types,
+        end_phrase="host_end_conversation_tool" in event_types,
         closed=stage == 3,
         recovered_to_wake=result.recovered_to_wake and lease.is_open,
     )

@@ -1161,3 +1161,92 @@ reuses existing production stop and wake behavior without modifying them.
 RT001 separately proves one wake-to-connect handoff, RT002 proves two turns
 inside one session, and RT003 proves live human barge-in; combining those
 independently verifiable semantics would weaken failure attribution.
+
+### Robust Realtime Farewell Closure
+
+Goal: make a clearly spoken Realtime farewell such as `再见` close the active
+session promptly through the existing bounded media-cleanup path instead of
+being answered as an ordinary turn and eventually closing only by idle timeout.
+
+Included scope: root-cause evidence for the two observed failures; a narrowly
+scoped `end_conversation` Realtime function tool; session instructions that
+require the model to call that tool for an unambiguous user request to end the
+conversation and not continue with a substantive answer; Python-side
+validation, de-duplication, sanitized lifecycle evidence, and stop request;
+browser handling of the stopping result; preservation of the existing exact
+completed-transcription end-phrase fallback; deterministic coordinator,
+browser-contract, fake-smoke, documentation, and real-device verification.
+
+Excluded scope: fuzzy substring matching, retaining transcript text, treating
+mentions such as `please say goodbye` as commands, changing the configured
+Realtime model/voice/VAD/output volume, replacing idle/maximum/error/explicit
+stop paths, general semantic command routing, adding arbitrary Realtime tools,
+or changing wake, barge-in, calculator, and RT001-RT004 evaluation semantics.
+
+Core flows: after wake and connection, a user clearly says `再见`, `goodbye`,
+`结束对话`, or otherwise unambiguously asks to end the current conversation.
+The Realtime model calls only `end_conversation`; the browser forwards the
+bounded function-call identity/name/arguments to Python; the coordinator
+validates the active session and empty argument object, records a sanitized
+`host_end_conversation_tool` event, enters `HOST_STOPPING`, and requests the
+existing stop command with `end_phrase`. The browser observes the stopping
+result, tears down the data channel, peer, tracks, and remote audio, reports
+`stopped`, and Python reopens the wake microphone. If the official completed
+input transcription exactly matches a configured end phrase first, the
+existing fallback closes through the same path. Ordinary conversation,
+quoted/mentioned farewell words, malformed calls, unknown tools, duplicate
+events, and stale-session events must not close incorrectly.
+
+Constraints: the API key remains in Python; no transcript, utterance, raw or
+base64 audio, tool arguments, credentials, SDP, provider body, or ephemeral
+secret may enter committed evidence; tool name, bounded call identity, outcome,
+session identity, and close reason may be retained; the end tool must not
+execute arbitrary code or return conversational output; stop remains
+idempotent and session-scoped; exact transcription matching remains available
+when input transcription is enabled; disabling optional transcription must not
+disable semantic farewell closure; automated verification uses fakes and no
+network, microphone, OpenAI, cost, or wall-clock sleeps.
+
+Ambiguities or assumptions: the two real reports prove that microphone capture,
+server speech detection, completed transcription delivery, GPT turn handling,
+idle cleanup, and wake recovery worked, while `host_end_phrase_matched` did not.
+Existing tests prove exact normalized `再见。` would match, so the narrow root
+cause is divergence between the separate ASR rough-guide transcript and the
+configured exact control phrase; privacy controls intentionally prevent
+reconstructing the precise transcript. The Realtime model demonstrably
+understood the utterance as a farewell because it replied conversationally, so
+an explicitly advertised semantic end tool is the preferred robust control
+instead of weakening exact matching with unsafe fuzzy rules. A fresh authorized
+real-device run is still required to prove tool selection in the selected live
+model.
+
+Required capabilities: the existing Realtime session tool configuration and
+function-call event flow, coordinator tool-call validation/de-duplication,
+existing stop/media cleanup path, built-in microphone/speaker host, usable
+OpenAI credential and network for final live verification, fresh explicit
+microphone/OpenAI/cost authorization, deterministic fake coordinator/browser
+tests, Realtime fake smoke, final project recovery, and a separate cold-start
+Evaluator Agent.
+
+Implementation paths: `src/realtime_host/static/app.js`,
+`src/realtime_host/coordinator.py`, focused Realtime host/controller/fake-smoke
+tests under `tests/`, `README.md`, `MANUAL_TESTING.md`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: deterministic exact-transcription fallback tests; valid
+end-tool pass with one stop request and no calculator output; malformed,
+unknown, duplicate, mentioned-word, stale-session, and ordinary-conversation
+non-close regressions; static browser contract assertions for advertised tool,
+instructions, stopping-result handling, and cleanup; calculator regression;
+Realtime fake smoke; full unittest discovery; final `./init.sh`; one newly
+authorized built-in-device run where a human says a clear farewell and evidence
+shows `host_end_conversation_tool -> host_stopped ->
+wake_microphone_reopened` without idle timeout or substantive assistant reply;
+fast coding evidence; and separate evaluator approval.
+
+Decomposition decision: this is one focused product correction because semantic
+farewell recognition, coordinator stop authorization, browser cleanup, and its
+tests jointly implement one independently verifiable close behavior. General
+semantic intent routing, fuzzy ASR matching, and broader tool expansion have
+different false-positive and security boundaries and remain excluded.

@@ -112,14 +112,18 @@ class DocumentationTests(unittest.TestCase):
             self.assertNotIn(stale, combined)
         self.assertIn("REALTIME_SERVER_VAD_THRESHOLD=0.8", combined)
 
-    def test_realtime_calculator_only_boundary_is_documented(self):
+    def test_realtime_tool_boundary_is_documented(self):
         readme = README.read_text(encoding="utf-8")
-        self.assertIn("exactly one local function: `calculator`", readme)
+        self.assertIn("exactly two local functions", readme)
+        self.assertIn("`calculator`", readme)
+        self.assertIn("`end_conversation`", readme)
         self.assertIn("same existing `safe_calculator`", readme)
         self.assertIn("`function_call_output`", readme)
         self.assertIn("official Realtime function-calling flow", readme)
         self.assertIn("Weather, FX, stocks", readme)
-        self.assertIn("never executed with `eval`", readme)
+        self.assertIn("executed with `eval`", readme)
+        self.assertIn("does not depend on the rough-guide transcription", readme)
+        self.assertIn("M065", MANUAL_TESTING.read_text(encoding="utf-8"))
 
     def test_stable_knowledge_policy_and_manual_boundary_are_documented(self):
         readme = README.read_text(encoding="utf-8")

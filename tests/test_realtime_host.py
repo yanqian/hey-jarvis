@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 import unittest
 
-from src.realtime_host.coordinator import HandoffCoordinator, HandoffError, HandoffState
+from src.realtime_host.coordinator import (
+    MAX_TOOL_ARGUMENT_CHARS,
+    HandoffCoordinator,
+    HandoffError,
+    HandoffState,
+)
 from src.realtime_host import server
 
 
@@ -234,6 +239,72 @@ class RealtimeHostTests(unittest.TestCase):
                 self.assertIn(expected, output["answer"])
                 self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
 
+    def test_end_conversation_tool_requests_one_existing_stop_without_output(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event("connected", session_id)
+
+        result = coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="end-call",
+            name="end_conversation",
+            arguments="{}",
+        )
+
+        self.assertEqual(result, "stopping")
+        self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
+        command = coordinator.command_after(1)
+        self.assertEqual(command["type"], "stop")
+        self.assertEqual(command["reason"], "end_phrase")
+        self.assertNotIn("output", command)
+        self.assertEqual(
+            coordinator.host_event(
+                "tool_call",
+                session_id,
+                call_id="end-call",
+                name="end_conversation",
+                arguments="{}",
+            ),
+            "stopping",
+        )
+        self.assertIsNone(coordinator.command_after(command["command_id"]))
+        report_text = json.dumps(coordinator.report())
+        self.assertIn("host_end_conversation_tool", report_text)
+        for private in ("end-call", "arguments"):
+            self.assertNotIn(private, report_text)
+
+    def test_end_conversation_tool_rejects_nonempty_or_malformed_arguments(self):
+        for index, arguments in enumerate(
+            (
+                "not-json",
+                "[]",
+                json.dumps({"reason": "goodbye"}),
+                " " * (MAX_TOOL_ARGUMENT_CHARS + 1),
+            )
+        ):
+            with self.subTest(arguments=arguments):
+                lease = FakeLease()
+                coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
+                coordinator.host_event("armed")
+                session_id = coordinator.begin_handoff()
+                coordinator.host_event("connected", session_id)
+                result = coordinator.host_event(
+                    "tool_call",
+                    session_id,
+                    call_id=f"bad-end-{index}",
+                    name="end_conversation",
+                    arguments=arguments,
+                )
+                self.assertEqual(result, "accepted")
+                self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+                self.assertIsNone(coordinator.command_after(1))
+                report_text = json.dumps(coordinator.report())
+                self.assertIn("host_end_conversation_tool_ignored", report_text)
+                self.assertNotIn(arguments, report_text)
+
     def test_fixture_audio_is_bounded_session_scoped_and_excluded_from_report(self):
         coordinator, _lease = self.build_coordinator()
         coordinator.host_event("armed")
@@ -294,6 +365,12 @@ class RealtimeHostTests(unittest.TestCase):
             self.assertIn(text, javascript)
         for text in (
             'name:"calculator"',
+            'name:"end_conversation"',
+            "clearly and unambiguously wants to end",
+            "do not provide a spoken or substantive response",
+            "async function forwardToolCall",
+            'result.status==="stopping"',
+            'await stop("end_phrase")',
             'response.function_call_arguments.done',
             'item.type==="function_call"',
             'type:"function_call_output"',

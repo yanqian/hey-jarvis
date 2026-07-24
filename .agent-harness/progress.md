@@ -184,16 +184,31 @@ No feature is currently in progress.
 
 ## Next Feature
 
-F064 is complete after separate cold-start evaluator approval recorded in
-`.agent-harness/runs/20260723T141351Z-F064-evaluation-pass.md`. The normalized
-spec, versioned RT004 contract, deterministic offline oracle, automatic
-two-session saved-wake runner, bounded failure evidence, CLI/documentation, and
-privacy controls are accepted. Focused RT001-RT004/shared-runner/documentation
-tests, full project discovery with 332 tests, final recovery verification, and
-one authorized built-in-device `live_host` pass all succeeded. The accepted
-RT004 evidence proves two distinct wake-triggered Realtime sessions under one
-Arm lease, explicit stop before each wake-microphone reopen, and final recovery
-to `wake_owned` without fresh human speech or committed private content.
+No next feature is currently planned.
+
+## Recently Completed
+
+F065 - Make Realtime farewell closure robust.
+
+F065 has been completed through evaluator-gated fast work, newly authorized
+built-in-device live-human acceptance, and separate cold-start evaluator
+approval. The root cause was reliance on a separate asynchronous rough-guide
+ASR transcript for exact control: GPT understood the farewell but previously
+treated it as an ordinary turn when the transcript did not exactly match. The
+Realtime session now advertises one constrained semantic `end_conversation`
+function alongside the calculator while retaining exact transcription matching
+as a conservative fallback. Valid calls reuse the existing bounded
+`end_phrase` media-cleanup path without tool output or a continuation response;
+mentions, quotations, translations, malformed calls, duplicates, and stale
+events remain safe. The accepted live attempt captured one clear farewell,
+called the tool once, stopped media about 19 ms later, reopened the wake
+microphone about 97 ms after teardown, returned to `wake_owned`, and produced
+no audible GPT reply or idle-timeout substitution. Final recovery passes with
+334 project tests. Coding evidence is in
+`.agent-harness/runs/F065-fast-coding.md`, live evidence is in
+`.agent-harness/runs/F065-live-acceptance.md`, and approval is recorded as
+`EVAL_PASS: F065` in
+`.agent-harness/runs/20260724T024610Z-F065-evaluation-pass.md`.
 
 ## Known Issues
 

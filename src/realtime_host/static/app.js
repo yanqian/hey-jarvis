@@ -86,8 +86,18 @@ function sendSessionUpdate(){
   const turnDetection=sessionConfig.server_vad?{type:"server_vad",threshold:sessionConfig.server_vad_threshold,prefix_padding_ms:300,silence_duration_ms:500,create_response:true,interrupt_response:true}:null;
   const input={turn_detection:turnDetection};
   if(sessionConfig.input_transcription)input.transcription={model:sessionConfig.transcription_model};
-  const tools=[{type:"function",name:"calculator",description:"Safely evaluate one arithmetic expression. Use only for arithmetic.",parameters:{type:"object",additionalProperties:false,properties:{expression:{type:"string",description:"Arithmetic expression using numbers, parentheses, +, -, *, /, //, %, or **."}},required:["expression"]}}];
-  dc.send(JSON.stringify({type:"session.update",session:{type:"realtime",model:sessionConfig.model,output_modalities:["audio"],audio:{input,output:{voice:sessionConfig.voice}},tools,tool_choice:"auto"}}));
+  const tools=[
+    {type:"function",name:"calculator",description:"Safely evaluate one arithmetic expression. Use only for arithmetic.",parameters:{type:"object",additionalProperties:false,properties:{expression:{type:"string",description:"Arithmetic expression using numbers, parentheses, +, -, *, /, //, %, or **."}},required:["expression"]}},
+    {type:"function",name:"end_conversation",description:"End the current voice session only when the user clearly and unambiguously wants to leave, stop, say goodbye, or end this conversation. Do not use when the user merely mentions, quotes, translates, or asks you to say a farewell phrase.",parameters:{type:"object",additionalProperties:false,properties:{}}},
+  ];
+  const instructions="If the user clearly and unambiguously wants to end the current conversation, call end_conversation with {} and do not provide a spoken or substantive response. Do not call it when farewell words are merely mentioned, quoted, translated, or requested as content.";
+  dc.send(JSON.stringify({type:"session.update",session:{type:"realtime",model:sessionConfig.model,instructions,output_modalities:["audio"],audio:{input,output:{voice:sessionConfig.voice}},tools,tool_choice:"auto"}}));
+}
+
+async function forwardToolCall(item){
+  const result=await hostEvent("tool_call",{call_id:item.call_id,name:item.name,arguments:item.arguments});
+  if(result.status==="stopping"){await stop("end_phrase");return true;}
+  return false;
 }
 
 async function handleServerEvent(event){
@@ -102,9 +112,9 @@ async function handleServerEvent(event){
   if(event.type==="response.done"){
     flushInputLevels();assistantSpeaking=false;
     await hostEvent("response_done",{reason:String(event.response?.status||"unknown")});
-    for(const item of event.response?.output||[])if(item.type==="function_call")await hostEvent("tool_call",{call_id:item.call_id,name:item.name,arguments:item.arguments});
+    for(const item of event.response?.output||[])if(item.type==="function_call"&&await forwardToolCall(item))return;
   }
-  if(event.type==="response.function_call_arguments.done")await hostEvent("tool_call",{call_id:event.call_id,name:event.name,arguments:event.arguments});
+  if(event.type==="response.function_call_arguments.done")await forwardToolCall(event);
   if(event.type==="conversation.item.input_audio_transcription.completed"){
     const transcript=typeof event.transcript==="string"&&event.transcript.length<=200?event.transcript:null;
     const result=await hostEvent("transcription",{item_id:event.item_id,transcript});

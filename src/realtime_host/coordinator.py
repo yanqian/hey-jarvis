@@ -381,8 +381,36 @@ class HandoffCoordinator:
             raise HandoffError("Realtime tool call identity was invalid")
         if call_id in self._handled_tool_calls:
             self._record("host_tool_call_duplicate", session_id=session_id)
-            return "accepted"
+            return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
         self._handled_tool_calls.add(call_id)
+        if name == "end_conversation":
+            if self._state != HandoffState.HOST_ACTIVE:
+                self._record(
+                    "host_end_conversation_tool_ignored",
+                    session_id=session_id,
+                    reason="late_event",
+                )
+                return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
+            try:
+                payload = (
+                    json.loads(arguments)
+                    if isinstance(arguments, str)
+                    and len(arguments) <= MAX_TOOL_ARGUMENT_CHARS
+                    else None
+                )
+            except json.JSONDecodeError:
+                payload = None
+            if payload != {}:
+                self._record(
+                    "host_end_conversation_tool_ignored",
+                    session_id=session_id,
+                    reason="invalid_arguments",
+                )
+                return "accepted"
+            self._record("host_end_conversation_tool", session_id=session_id)
+            self._last_activity_at = self._clock()
+            self.request_stop("end_phrase")
+            return "stopping"
         output = _calculator_output(name, arguments)
         self._enqueue("tool_result", session_id, call_id=call_id, output=output)
         self._record("host_tool_call", session_id=session_id, result="completed")

@@ -1379,6 +1379,36 @@
       "depends_on": [
         "F062"
       ]
+    },
+    {
+      "id": "F065",
+      "title": "Make Realtime farewell closure robust",
+      "description": "Route an unambiguous spoken farewell through a constrained Realtime end_conversation tool and the existing bounded cleanup path, preserving exact-transcription fallback and privacy.",
+      "acceptance": [
+        "The Realtime session advertises exactly the existing calculator plus one strict end_conversation function and instructs the model to call the end tool, without a substantive reply, only when the user unambiguously wants to end the current conversation; ordinary conversation and mentions of farewell words remain ordinary turns.",
+        "Python validates an active same-session end_conversation call with an empty argument object, de-duplicates it, records only sanitized outcome metadata, requests the existing end_phrase stop exactly once, and never executes arbitrary code or emits a tool result; malformed, unknown, duplicate, and stale calls fail safely without weakening calculator behavior.",
+        "The browser reacts to the coordinator stopping result from either function-call event form by running the existing media teardown, while exact completed-transcription end phrases remain a compatible fallback and semantic closure still works when optional input transcription is disabled.",
+        "One newly authorized built-in-microphone/speaker run closes promptly after a clear human farewell with host_end_conversation_tool, host_stopped, wake_microphone_reopened, final wake_owned, no idle-timeout substitution, no substantive farewell reply, and no transcript/audio/credential/tool-argument content in durable evidence.",
+        "Focused coordinator/browser/controller/documentation tests, calculator and exact-end-phrase regressions, Realtime fake smoke, full unittest discovery, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing model, voice, VAD, output volume, wake, barge-in, or RT001-RT004 behavior."
+      ],
+      "evals": [
+        {
+          "scenario": "Realtime farewell closure",
+          "required_evidence": [
+            "deterministic",
+            "live_human"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F055",
+        "F064"
+      ]
     }
   ]
 }

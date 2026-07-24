@@ -52,14 +52,21 @@ for conservative exact end-phrase control, not for conversation meaning. See
 the [official completed-transcription event reference](https://developers.openai.com/api/reference/resources/realtime/server-events#conversation.item.input_audio_transcription.completed)
 for current behavior and pricing semantics.
 
-Realtime advertises exactly one local function: `calculator`. Completed function
-arguments are correlated to their active call, bounded and de-duplicated in
-Python, and executed through the same existing `safe_calculator` used by the
-pipeline. The host returns one `function_call_output` and asks the same Realtime
-conversation to continue speaking the answer. Weather, FX, stocks, provider
-credentials, shell access, arbitrary routing, and pipeline chat-history mutation
-are intentionally outside this MVP tool boundary. Malformed or unsafe expressions
-receive a bounded calculator error and are never executed with `eval`.
+Realtime advertises exactly two local functions: `calculator` and
+`end_conversation`. Completed function arguments are correlated to their active
+call, bounded and de-duplicated in Python. Calculator calls execute through the
+same existing `safe_calculator` used by the pipeline; the host returns one
+`function_call_output` and asks the same Realtime conversation to continue
+speaking the answer. A clear, unambiguous request to leave or say goodbye calls
+`end_conversation` with an empty object, produces no tool output or substantive
+spoken reply, and enters the existing bounded media-cleanup path. This semantic
+close does not depend on the rough-guide transcription; exact configured
+completed-transcription phrases remain a conservative fallback. Mentions,
+quotations, translations, or requests to say farewell are not close commands.
+Weather, FX, stocks, provider credentials, shell access, arbitrary routing, and
+pipeline chat-history mutation are intentionally outside this MVP tool boundary.
+Malformed or unsafe calculator expressions receive a bounded error and are never
+executed with `eval`; malformed end calls fail closed without ending the session.
 This follows the [official Realtime function-calling flow](https://developers.openai.com/api/docs/guides/realtime-conversations#function-calling): configure session tools, return a correlated `function_call_output`, then request the continuation response.
 
 ```text
