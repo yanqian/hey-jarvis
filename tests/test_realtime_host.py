@@ -366,6 +366,15 @@ class RealtimeHostTests(unittest.TestCase):
         for text in (
             'name:"calculator"',
             'name:"end_conversation"',
+            "# Language",
+            "language primarily used in the user's current utterance",
+            "concise, natural Simplified Chinese",
+            "For English input, answer in English",
+            "current user utterance overrides prior turns",
+            "English tool definitions, and English tool outputs",
+            "mixed or ambiguous input",
+            "translation, spelling, pronunciation, language practice",
+            "surrounding explanation in the language of the current request",
             "clearly and unambiguously wants to end",
             "do not provide a spoken or substantive response",
             "async function forwardToolCall",
@@ -378,6 +387,7 @@ class RealtimeHostTests(unittest.TestCase):
             self.assertIn(text, javascript)
         for forbidden_tool in ('name:"weather"', 'name:"stock"', 'name:"fx"'):
             self.assertNotIn(forbidden_tool, javascript)
+        self.assertNotIn("transcript decides", javascript)
         for forbidden in ("response.cancel", "conversation.item.truncate", "output_audio_buffer.clear"):
             self.assertNotIn(forbidden, javascript)
         self.assertNotIn("OPENAI_API_KEY", javascript)

@@ -69,6 +69,19 @@ Malformed or unsafe calculator expressions receive a bounded error and are never
 executed with `eval`; malformed end calls fail closed without ending the session.
 This follows the [official Realtime function-calling flow](https://developers.openai.com/api/docs/guides/realtime-conversations#function-calling): configure session tools, return a correlated `function_call_output`, then request the continuation response.
 
+Realtime response language follows the user's current audio turn rather than
+the separate optional input transcription. Mandarin Chinese receives concise,
+natural Simplified Chinese and English receives English, including when those
+languages alternate inside one continuous session. The current user turn takes
+precedence over earlier conversation, English developer/tool wording, and
+English calculator output. Mixed-language input follows the language of the
+main request. Explicit translation, spelling, pronunciation, language-practice,
+or whole-response language requests may use the requested target language;
+unless the user requests the whole response in that language, surrounding
+explanation stays in the language of the current request. This follows
+OpenAI's [Realtime language-constraint guidance](https://developers.openai.com/api/docs/guides/realtime-models-prompting#language-constraint)
+and does not change the pipeline F058 language policy.
+
 ```text
 BACKEND=pipeline
 REALTIME_MODEL=gpt-realtime-2.1

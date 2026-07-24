@@ -1250,3 +1250,88 @@ farewell recognition, coordinator stop authorization, browser cleanup, and its
 tests jointly implement one independently verifiable close behavior. General
 semantic intent routing, fuzzy ASR matching, and broader tool expansion have
 different false-positive and security boundaries and remain excluded.
+
+### Realtime Current-Turn Response Language
+
+Goal: make Realtime answer each turn in the language primarily used by the
+user's current utterance, so Mandarin Chinese receives concise natural
+Simplified Chinese, English receives English, and language can switch correctly
+between consecutive turns in one continuous session.
+
+Included scope: a structured Realtime session language policy; current-turn
+language precedence over prior conversation, English system/tool wording, and
+English tool output; concise Simplified Chinese for Mandarin Chinese input;
+English for English input; mixed-language and explicit
+translation/spelling/pronunciation exceptions; preservation of the F065
+farewell policy; deterministic browser-contract and documentation tests; one
+newly authorized bilingual live-human acceptance session; full recovery and
+evaluator-gated evidence.
+
+Excluded scope: changing the Realtime model or voice; using optional input
+transcription as the language router; retaining user or assistant transcript
+text; language identification in Python; supporting a configurable fixed
+language mode; translating every answer; changing pipeline F058 behavior;
+changing calculator semantics, farewell semantics, VAD, output volume, wake,
+barge-in, RT001-RT004, or adding new tools.
+
+Core flows: after wake and Realtime connection, a user asks a normal question
+primarily in Mandarin Chinese and receives a concise spoken Simplified Chinese
+answer. In the same continuous session, the user asks a normal English question
+and receives an English answer despite the prior Chinese turn. A later Chinese
+turn switches back to Chinese. If the current request explicitly asks for an
+English translation, spelling, pronunciation, or language-learning content,
+the requested English may appear while surrounding explanation follows the
+current request language unless the user explicitly asks for the whole response
+in another language. A clear farewell still calls `end_conversation` without a
+substantive reply.
+
+Constraints: language selection must be based on the Realtime model's
+understanding of the current audio turn, not the asynchronous rough-guide
+transcription; prior turns, English developer instructions, English function
+descriptions, and English calculator output must not force the next reply into
+English; ambiguous mixed-language input follows the language of the main
+request; Chinese output uses natural Simplified Chinese; the API key stays in
+Python; committed evidence excludes raw/base64 audio, transcript or answer text,
+tool arguments/results, credentials, SDP, provider payloads, and ephemeral
+secrets; automated tests use no network, microphone, OpenAI, cost, or wall-clock
+sleep.
+
+Ambiguities or assumptions: “Chinese input” means a current utterance whose
+main conversational request is Mandarin Chinese, even if it contains English
+names or terms. An explicit target-language request overrides same-language
+answering only for the requested content or for the whole answer when the user
+clearly asks for that. The existing `marin` voice is retained and assumed
+capable of the accepted Chinese and English speech. Audible language correctness
+cannot be proven from privacy-preserving lifecycle logs alone, so final external
+behavior requires human confirmation; durable evidence records only turn order,
+response completion, session continuity, cleanup, and the human's bounded
+Chinese/English verdict.
+
+Required capabilities: the current Realtime `session.update.instructions`
+surface; official Realtime prompting guidance for structured language
+constraints and code-switching; the existing WebRTC session, tools, F065 close
+path, built-in microphone/speaker, usable OpenAI credential and network; fresh
+explicit microphone/OpenAI/cost authorization; deterministic static host and
+documentation tests; final project recovery; and a separate cold-start
+Evaluator Agent.
+
+Implementation paths: `src/realtime_host/static/app.js`, focused Realtime host
+and documentation tests under `tests/`, `README.md`, `MANUAL_TESTING.md`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: static assertions for a structured current-turn language
+policy, Simplified Chinese, English, prior-turn independence, tool-output
+independence, mixed/translation exceptions, and preserved farewell rules;
+calculator, F065, controller, RT001-RT004, and Realtime fake-smoke regressions;
+JavaScript syntax; full unittest discovery; final `./init.sh`; one newly
+authorized built-in-device continuous session where a human confirms a Chinese
+answer followed by an English answer and clean farewell recovery without
+transcript/answer retention; fast coding evidence; and separate evaluator
+approval.
+
+Decomposition decision: F066 is one focused prompt-policy correction with one
+shared implementation and verification surface. Fixed-language configuration,
+automatic language telemetry, transcript retention, translation mode, and
+additional language-specific product policies would be independently
+verifiable features and remain excluded.

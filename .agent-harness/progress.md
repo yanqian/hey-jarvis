@@ -114,9 +114,24 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F063 - Add automatic RT002 two-turn fixture-replay eval.
+F066 - Match Realtime replies to the current user language.
 
-F063 has been completed through evaluator-gated fast work, authorized built-in-device fixture replay, corrective live investigation, and separate cold-start evaluator approval. Same-device acoustic turn replay was honestly rejected after browser AEC removed it, and streaming buffer replay was rejected after natural fixture pauses created multiple VAD turns and cancelled responses. The accepted runner keeps acoustic wake and the real processed microphone session, but submits each verified private turn as one official atomic `input_audio` conversation item through the WebRTC data channel, requires the first response to complete before submitting the second, and retains no content in reports. The final authorized run passed with one session, two ordered fixture submissions, two completed responses, bounded stop, and restored wake ownership. Focused tests pass with 65 tests, full discovery and final recovery pass with 323 project tests. Coding evidence is in `.agent-harness/runs/F063-fast-coding.md`, and approval is recorded as `EVAL_PASS: F063` in `.agent-harness/runs/20260723T135129Z-F063-evaluation-pass.md`.
+F066 has been completed through evaluator-gated fast work, newly authorized
+built-in-device live-human acceptance, and separate cold-start evaluator
+approval. Realtime now receives a structured current-turn language policy:
+Mandarin Chinese maps to concise natural Simplified Chinese, English maps to
+English, and the current user turn overrides prior conversation plus English
+developer, tool-definition, and tool-output text. Explicit translation,
+spelling, pronunciation, language-practice, mixed-language, and requested
+whole-response-language cases remain bounded exceptions. The policy preserves
+both existing tools and F065 farewell/no-reply behavior. In one continuous
+accepted session, the human confirmed a Chinese first answer, an English second
+answer, and no reply after farewell, followed by clean wake recovery. Final
+recovery passes with 335 project tests. Coding evidence is in
+`.agent-harness/runs/F066-fast-coding.md`, live evidence is in
+`.agent-harness/runs/F066-live-acceptance.md`, and approval is recorded as
+`EVAL_PASS: F066` in
+`.agent-harness/runs/20260724T040000Z-F066-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -180,11 +195,15 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress.
+No feature is currently selected.
 
 ## Next Feature
 
-No next feature is currently planned.
+No later feature is currently planned. A distinct live observation from F066
+shows that the first user speech began about 407 ms before `host_connected`
+during a roughly 3.15-second wake-to-connect interval. Diagnose whether the
+reported delayed wake is wake recognition, browser handoff, or Realtime
+connection readiness before planning a corrective feature.
 
 ## Recently Completed
 

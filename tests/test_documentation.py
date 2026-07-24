@@ -125,6 +125,23 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("does not depend on the rough-guide transcription", readme)
         self.assertIn("M065", MANUAL_TESTING.read_text(encoding="utf-8"))
 
+    def test_realtime_current_turn_language_policy_is_documented(self):
+        readme = README.read_text(encoding="utf-8")
+        manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+        for phrase in (
+            "current audio turn",
+            "Mandarin Chinese receives",
+            "English receives English",
+            "English developer/tool wording",
+            "Mixed-language input",
+            "translation, spelling, pronunciation",
+            "Realtime language-constraint guidance",
+            "does not change the pipeline F058 language policy",
+        ):
+            self.assertIn(phrase, readme)
+        self.assertIn("M066", manual_testing)
+        self.assertIn("same session identity", manual_testing)
+
     def test_stable_knowledge_policy_and_manual_boundary_are_documented(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")

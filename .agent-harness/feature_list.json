@@ -1409,6 +1409,36 @@
         "F055",
         "F064"
       ]
+    },
+    {
+      "id": "F066",
+      "title": "Match Realtime replies to the current user language",
+      "description": "Add a structured Realtime language policy so each response follows the current user utterance rather than defaulting to English or inheriting an earlier turn.",
+      "acceptance": [
+        "Realtime session instructions require every ordinary response to follow the language primarily used in the current user utterance: Mandarin Chinese receives concise natural Simplified Chinese, English receives English, and current-turn language overrides prior turns, English developer/tool wording, and English tool output.",
+        "Mixed-language and explicit translation, spelling, pronunciation, or language-learning requests may include requested target-language content while surrounding explanation follows the current request language unless the user explicitly requests the whole response in another language; ambiguous input follows the main request instead of defaulting to English.",
+        "The language policy uses the Realtime model's current audio understanding rather than optional input transcription, preserves the F065 end_conversation no-reply rules and both existing tools, and does not change model, voice, VAD, output volume, wake, barge-in, pipeline F058, or RT001-RT004 behavior.",
+        "One newly authorized built-in-microphone/speaker continuous session receives a human-confirmed Chinese answer to a Chinese question followed by a human-confirmed English answer to an English question, then closes through the existing farewell path with wake recovery; durable evidence retains no transcript, answer, audio, credential, or tool content.",
+        "Focused browser-contract/documentation tests, JavaScript syntax, calculator and F065 regressions, Realtime fake smoke, full unittest discovery, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass."
+      ],
+      "evals": [
+        {
+          "scenario": "Realtime current-turn bilingual response",
+          "required_evidence": [
+            "deterministic",
+            "live_human"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F058",
+        "F065"
+      ]
     }
   ]
 }

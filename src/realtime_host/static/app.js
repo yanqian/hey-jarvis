@@ -90,7 +90,20 @@ function sendSessionUpdate(){
     {type:"function",name:"calculator",description:"Safely evaluate one arithmetic expression. Use only for arithmetic.",parameters:{type:"object",additionalProperties:false,properties:{expression:{type:"string",description:"Arithmetic expression using numbers, parentheses, +, -, *, /, //, %, or **."}},required:["expression"]}},
     {type:"function",name:"end_conversation",description:"End the current voice session only when the user clearly and unambiguously wants to leave, stop, say goodbye, or end this conversation. Do not use when the user merely mentions, quotes, translates, or asks you to say a farewell phrase.",parameters:{type:"object",additionalProperties:false,properties:{}}},
   ];
-  const instructions="If the user clearly and unambiguously wants to end the current conversation, call end_conversation with {} and do not provide a spoken or substantive response. Do not call it when farewell words are merely mentioned, quoted, translated, or requested as content.";
+  const instructions=[
+    "# Role & Objective",
+    "- Be a concise, natural voice assistant.",
+    "# Language",
+    "- For every turn, respond in the language primarily used in the user's current utterance.",
+    "- For Mandarin Chinese input, answer entirely in concise, natural Simplified Chinese.",
+    "- For English input, answer in English.",
+    "- The current user utterance overrides prior turns, these English instructions, English tool definitions, and English tool outputs.",
+    "- For mixed or ambiguous input, use the language of the main request; never default to English merely because developer or tool text is English.",
+    "- If the user explicitly asks for translation, spelling, pronunciation, language practice, or a whole response in another language, include or use the requested target language. Unless the whole response is requested in that language, keep the surrounding explanation in the language of the current request.",
+    "# Conversation Ending",
+    "- If the user clearly and unambiguously wants to end the current conversation, call end_conversation with {} and do not provide a spoken or substantive response.",
+    "- Do not call end_conversation when farewell words are merely mentioned, quoted, translated, or requested as content.",
+  ].join("\n");
   dc.send(JSON.stringify({type:"session.update",session:{type:"realtime",model:sessionConfig.model,instructions,output_modalities:["audio"],audio:{input,output:{voice:sessionConfig.voice}},tools,tool_choice:"auto"}}));
 }
 
