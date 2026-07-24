@@ -4,6 +4,23 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F071 has been completed through evaluator-gated fast work and separate
+cold-start evaluator approval. The 909-line
+`README.md` is now a 151-line project landing page with backend choice, quick
+start, common commands, privacy/safety boundaries, and a task-oriented
+documentation map. `DEPLOYMENT.md` is focused on install/prepare/verify/run and
+update operations; complete configuration, pipeline behavior, Realtime
+operation/evaluations, and troubleshooting now have clear owners under
+`docs/`. Documentation contracts enforce the README size boundary, every
+`.env.example` key, CLI discoverability, Realtime/privacy/eval contracts,
+developer-reference boundaries, and local Markdown links. `MANUAL_TESTING.md`,
+root `SPEC.md`, runtime source, spikes, and internal project history were not
+rewritten. Focused documentation tests and final recovery verification pass
+with 341 project tests. Coding evidence is recorded in
+`.agent-harness/runs/F071-fast-coding.md`, and approval is recorded as
+`EVAL_PASS: F071` in
+`.agent-harness/runs/20260724T095252Z-F071-evaluation-pass.md`.
+
 F001 created the project-owned Python skeleton and updated root `./init.sh` into a project recovery contract. The recovery check now verifies the harness, required project files, Python compilation, unit tests, and a dependency-free dry-run smoke path.
 
 F002 has been implemented and evaluator-approved. The code now includes dependency-free configuration loading, typed validation, runtime diagnostics, CLI diagnostics output, documented `.env.example` settings, and focused unit tests.
@@ -213,8 +230,7 @@ No feature is currently selected.
 
 ## Next Feature
 
-No later feature is selected. Any remaining latency optimization or numerical
-readiness SLO should be planned only after F070's normal-path RT001 result.
+No later feature is selected.
 
 ## Recently Completed
 

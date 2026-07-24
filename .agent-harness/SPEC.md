@@ -1661,3 +1661,70 @@ normal-path removal and one-shot F060 preservation are two sides of the same
 conditional diagnostic boundary and share the same host-command, browser, and
 regression surface. Prewarming/reuse, numerical latency gates, and unrelated
 WebRTC optimizations remain separate features.
+
+### Project Documentation Information Architecture
+
+Goal: make the repository understandable from a short, readable README while
+keeping operational detail discoverable in focused project documentation.
+
+Included scope: reduce `README.md` to a project overview, backend choice, quick
+start, common commands, concise safety/status notes, and a documentation map;
+separate detailed configuration, Realtime operation, and troubleshooting into
+clearly named project-owned documents; tighten `DEPLOYMENT.md` around install,
+prepare, verify, run, and update flows; repair links and documentation contract
+tests so detailed facts are verified in their owning documents rather than
+forced into the README.
+
+Excluded scope: rewriting `.agent-harness/`, `runs/`, root `SPEC.md`, feature
+history, evaluator evidence, internal spike notes, source code, runtime
+behavior, configuration defaults, CLI behavior, deployment support, or the
+detailed manual acceptance catalog in `MANUAL_TESTING.md`.
+
+Core flows: a new reader opens the README and can understand what Hey Jarvis is,
+choose pipeline or Realtime, complete the shortest supported setup, run the
+assistant, and follow one link for deeper help. An operator can find every
+supported environment setting, Realtime privacy/lifecycle/evaluation detail,
+and troubleshooting command in one clearly owned document without searching a
+900-line README. A developer can still reach manual testing and durable project
+specification material, but development history no longer dominates the
+project landing page.
+
+Constraints: preserve the accepted Python 3.11/3.12 macOS MVP boundaries,
+pipeline-default and Realtime-opt-in behavior, CLI commands, environment keys,
+privacy/cost warnings, external-provider caveats, manual acceptance contracts,
+and relative-link validity. Do not duplicate exhaustive content across the
+README and focused documents. Keep the README at no more than 220 lines and
+prefer links over embedded implementation history.
+
+Ambiguities or assumptions: “project-related” means user and operator
+documentation for understanding, installing, configuring, running, and
+troubleshooting the product. “Development process can wait” means
+`MANUAL_TESTING.md`, root `SPEC.md`, harness state, runs, spikes, and internal
+host notes remain materially unchanged this round except for navigation or link
+repair. English remains the repository documentation language because all
+current project documents are English; localization is a separate future
+decision.
+
+Required capabilities: local Markdown editing, existing CLI/config sources,
+documentation contract tests, link inspection, full unit tests, final
+`./init.sh`, fast coding evidence, and a separate cold-start Evaluator Agent.
+No network, credential, microphone, speaker, browser, live OpenAI call, or
+provider call is required.
+
+Implementation paths: `README.md`, `DEPLOYMENT.md`, new focused files under
+`docs/`, `tests/test_documentation.py`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: README line-count and required-section assertions;
+documentation ownership tests for CLI modes, all `.env.example` keys,
+Realtime lifecycle/privacy/evaluation contracts, troubleshooting guidance, and
+post-MVP boundaries; relative Markdown link validation across the project
+documentation set; focused documentation tests; full unittest discovery; final
+`./init.sh`; fast coding evidence; and separate cold-start evaluator approval.
+
+Decomposition decision: F071 is intentionally one feature because README
+reduction, focused document extraction, and contract-test ownership changes are
+one inseparable information-architecture correction with a shared Markdown
+verification surface. Rewriting developer-process history or changing product
+behavior would have separate audiences and verification boundaries and remains
+out of scope.

@@ -1557,6 +1557,34 @@
         "F060",
         "F069"
       ]
+    },
+    {
+      "id": "F071",
+      "title": "Restructure project documentation around a concise README",
+      "description": "Replace the 900-line project landing page with a concise README and move operational detail into clearly owned project documents without changing runtime behavior.",
+      "acceptance": [
+        "README.md is no more than 220 lines and lets a new reader understand the project, choose pipeline or Realtime, complete quick setup, run the assistant, find common commands, and navigate to focused documentation without absorbing feature history or exhaustive configuration detail.",
+        "Focused project documents have clear non-overlapping ownership for deployment, complete configuration reference, Realtime lifecycle/privacy/evaluation operation, and troubleshooting, with working relative links and no material change to accepted defaults, CLI commands, privacy/cost boundaries, or provider caveats.",
+        "MANUAL_TESTING.md, root SPEC.md, harness state/history, runs, spikes, and internal host documentation remain outside the rewrite except for necessary navigation or link repair, and the documentation map distinguishes user/operator material from developer reference.",
+        "Documentation contract tests validate the concise README boundary, all .env.example keys and CLI modes in their owning documents, Realtime and troubleshooting contracts outside the landing page, post-MVP boundaries, and local relative Markdown links so future features do not force exhaustive details back into README.md.",
+        "Focused documentation tests, full unittest discovery, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without network, credentials, microphone, speaker, browser, live OpenAI, provider calls, or runtime source changes."
+      ],
+      "evals": [
+        {
+          "scenario": "Project documentation navigation and ownership",
+          "required_evidence": [
+            "offline"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F070"
+      ]
     }
   ]
 }

@@ -1,102 +1,22 @@
 # Deployment
 
-Hey Jarvis is deployed as a local macOS Python process. It is not a server
-deployment: the runtime needs the local microphone, the local speaker path
-through `afplay`, OpenAI credentials, and the openWakeWord Hey Jarvis TFLite model
-files on the same machine that launches the assistant.
+Hey Jarvis runs as a local macOS Python process. It is not a server deployment
+or packaged application: the microphone, speaker, wake model, credentials, and
+runtime all live on the Mac that launches it.
 
-## Supported Target
+## Supported target
 
-- macOS with microphone access for the launching terminal or agent surface.
-- Python 3.11 or Python 3.12.
-- `afplay` available on `PATH`.
-- Network access during setup for Python packages and wake-word model downloads.
-- A valid `OPENAI_API_KEY` for real transcription, chat, and text-to-speech.
+- macOS with microphone access for the launching terminal or agent surface
+- Python 3.11 or Python 3.12
+- `afplay` available on `PATH`
+- network access for package/model downloads and real API calls
+- a valid `OPENAI_API_KEY`
 
-## Realtime WebRTC MVP
+Python 3.14 compatibility is not established for all audio and ML dependencies.
+On Apple Silicon, use the default TFLite wake path rather than ONNX.
 
-The pipeline backend remains the deployable default. Realtime is an explicit
-opt-in with `BACKEND=realtime` or `python -m src.main --backend realtime`; its
-supported defaults are model `gpt-realtime-2.1` and voice `marin`. On the first
-run of each launched Chrome app host, click **Arm hands-free audio** and grant
-Chrome microphone permission. That arm persists across wake/session cycles only
-for the current host lifetime; relaunching the host, revoking permission, or
-changing its Chrome profile can require another click or permission grant.
-
-`REALTIME_OUTPUT_VOLUME=0.1` controls direct browser playback gain without
-Python audio processing. The tested built-in-speaker path needed this reduction
-to prevent repeatable assistant self-echo from triggering server VAD, while
-deliberate recorded interruption still cancelled in at most 118 ms. Increase it
-only with repeated M057 no-headphones tests; `1.0` reproduced false interruption
-on the tested Mac.
-
-`REALTIME_SERVER_VAD_THRESHOLD=0.8` raises the server-side activation threshold
-for the quiet speakerphone profile. Higher values reject more residual room echo
-but can miss quiet users, so deployment acceptance must test both normal turns
-and deliberate interruption at the intended distance.
-
-While waiting for `Hey Jarvis`, Python alone owns the microphone and sends no
-pre-wake PCM, transcript, or wake clip to OpenAI. On wake it closes that capture
-before Chrome obtains the microphone. The WebRTC session then sends microphone
-audio to Realtime and plays returned audio directly through the built-in
-speaker. Idle timeout, maximum duration, an exact configured end phrase, the
-loopback explicit-stop endpoint, transport failure, or Ctrl-C all use the same
-bounded close-before-wake-restore path. Server VAD owns interruption; this MVP
-does not send manual audio-truncation commands.
-
-Realtime exposes only the existing safe local `calculator`; pipeline weather,
-FX, stocks, shell access, and other tools are not advertised. Realtime audio and
-optional transcription incur API costs for the selected models. Consult current
-OpenAI pricing before long sessions. Default reports are bounded and exclude
-keys, ephemeral credentials, raw/base64 audio, audio deltas, tool content, and
-transcript text. `REALTIME_DEBUG=1` provides bounded local lifecycle detail for
-troubleshooting, not a production telemetry mode.
-
-This is a developer-run MVP. Code signing, notarization, a bundled Chrome host,
-launch-at-login, automatic updating, and a distributable macOS `.app` are
-explicitly deferred rather than deployment requirements.
-
-The active wake-word path is openWakeWord's built-in Hey Jarvis model with TFLite:
-
-```text
-WAKE_BACKEND=openwakeword
-WAKE_MODEL=hey_jarvis
-WAKE_INFERENCE_FRAMEWORK=tflite
-WAKE_PHRASE=hey jarvis
-WAKE_THRESHOLD=0.5
-WAKE_ACKNOWLEDGEMENT_ENABLED=1
-WAKE_ACKNOWLEDGEMENT_TEXT=在呢
-WAKE_ACKNOWLEDGEMENT_AUDIO_PATH=var/ack.mp3
-WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS=0.35
-POST_PLAYBACK_WAKE_COOLDOWN_SECONDS=1.0
-POST_PLAYBACK_QUIET_SECONDS=0.5
-POST_PLAYBACK_QUIET_RMS=500
-POST_PLAYBACK_MAX_SUPPRESSION_SECONDS=6.0
-WAKE_CONFIRMATION_FRAMES=2
-ARMED_NO_SPEECH_TIMEOUT_SECONDS=2.0
-ARMED_VOICE_RMS=750
-ARMED_MIN_RMS=750
-ARMED_SNR_MULTIPLIER=2.5
-ARMED_VOICE_WINDOW_SECONDS=0.30
-ARMED_VOICE_REQUIRED_RATIO=0.75
-ARMED_CLIP_REJECT_PEAK=32000
-ARMED_PRE_ROLL_SECONDS=0.50
-MIN_VALID_SPEECH_SECONDS=0.50
-MIN_TRANSCRIPT_LENGTH=2
-CANCEL_PHRASES=取消,没事,不用了,算了,stop,cancel,never mind
-```
-
-Manual acceptance cases are tracked in [MANUAL_TESTING.md](MANUAL_TESTING.md).
-For acknowledgement overlap testing, begin the question near the end of the
-configured acknowledgement, currently `嗯`,
-and continue speaking after playback completes. The synchronized path retains a
-bounded playback tail but requires post-playback speech and a real noise-floor
-sample before recording starts. Speaking the whole question before the acknowledgement
-finishes requires acoustic echo cancellation and is outside the current MVP.
-
-On macOS ARM64, do not deploy with `WAKE_INFERENCE_FRAMEWORK=onnx`; the project
-intentionally uses TFLite there because local debugging found ONNX wake-word
-scores collapsed near zero while TFLite produced usable scores.
+The required runtime packages are `sounddevice`, `numpy`, `scipy`, `openai`,
+`openwakeword`, `ai-edge-litert`, and `python-dotenv`.
 
 ## Install
 
@@ -110,267 +30,136 @@ pip install -r requirements.txt
 test -f .env || cp .env.example .env
 ```
 
-Edit `.env` and replace the placeholder key:
+Edit `.env`:
 
 ```text
 OPENAI_API_KEY=sk-...
 ```
 
-The default OpenAI speech settings preserve the normal generated voice:
+The checked-in defaults and every supported key are described in
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
-```text
-TTS_MODEL=gpt-4o-mini-tts
-TTS_VOICE=alloy
-TTS_INSTRUCTIONS=
-TTS_SPEED=1.0
-```
-
-Use `TTS_INSTRUCTIONS` for OpenAI.fm-style vibe text such as `Speak warmly,
-quickly, and with dry humor`; the assistant sends that value as speech API
-instructions rather than using a separate OpenAI.fm vibe parameter. `TTS_SPEED`
-controls generated-audio speed and must be from `0.25` through `4.0`.
-
-Structured local tools are enabled by default:
-
-```text
-ENABLE_TOOLS=1
-TOOL_ROUTER_DEBUG=0
-TOOL_ANSWER_NATURALIZATION=1
-WEATHER_PROVIDER=open-meteo
-FX_PROVIDER=frankfurter
-STOCK_PROVIDER=finnhub
-TOOL_HTTP_TIMEOUT_SECONDS=5
-DEFAULT_LOCATION=Singapore
-DEFAULT_BASE_CURRENCY=USD
-FINNHUB_API_KEY=
-```
-
-`ENABLE_TOOLS` routes local time and simple calculator requests before chat
-generation. Weather requests use Open-Meteo when `WEATHER_PROVIDER=open-meteo`.
-FX requests use Frankfurter reference rates when `FX_PROVIDER=frankfurter`.
-Stock requests use Finnhub when `STOCK_PROVIDER=finnhub` and a real
-`FINNHUB_API_KEY` is configured.
-`TOOL_ROUTER_DEBUG=1` logs route, tool, params, and rule reason during the voice
-loop.
-`TOOL_ANSWER_NATURALIZATION=1` sends only successful Open-Meteo weather,
-Frankfurter FX, and Finnhub stock `ToolResult` values through a separate OpenAI
-wording pass that must preserve numbers, units, timestamps, sources, caveats,
-and advice disclaimers. Raw provider data remains authoritative; failures, missing
-credentials, realtime refusals, calculator/local-time answers, empty
-naturalization output, and recoverable OpenAI errors keep the deterministic raw
-answer and do not fall back to chat speculation. Text debug reports the raw
-answer and `naturalization_status` without calling OpenAI or printing secrets.
-
-`WEATHER_PROVIDER=open-meteo` resolves city names through Open-Meteo geocoding
-and fetches current, today, or tomorrow weather from the Open-Meteo forecast
-endpoint. `TOOL_HTTP_TIMEOUT_SECONDS` is the shared JSON request timeout.
-`DEFAULT_LOCATION=Singapore` is used when the user omits a weather location.
-`DEFAULT_BASE_CURRENCY=USD` is used when an FX request omits the base currency;
-when the quote is omitted, the configured default base is used as the quote
-unless that would match the base, in which case SGD is used. Frankfurter FX
-answers are reference rates, not bank cash rates or executable trade quotes.
-`FINNHUB_API_KEY` is required for Finnhub stock quotes. Diagnostics report
-configured or missing without printing the value. Stock quote answers include
-current price, change, percent change, day high and low, open, previous close,
-the Finnhub quote timestamp, plus caveats that market data may be delayed and
-the result is not trading advice.
-
-Wake acknowledgement playback is enabled by default. The assistant plays the
-prepared `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` file after `Hey Jarvis`, drains
-microphone residue for `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS`, enters `ARMED`,
-and records only after a recent window contains enough speech-like chunks above
-the adaptive threshold `max(ARMED_MIN_RMS, noise_floor *
-ARMED_SNR_MULTIPLIER)`. ARMED rejects overflowed and clipped chunks, preserves
-`ARMED_PRE_ROLL_SECONDS` of recent audio before recording, and logs
-`armed_summary` or `armed_trigger` with RMS, peak, overflow, noise-floor,
-threshold, voiced-window, and pre-roll context. If no speech arrives within
-`ARMED_NO_SPEECH_TIMEOUT_SECONDS`, or the transcript is empty, filler, too
-short, or a configured `CANCEL_PHRASES` entry, the assistant returns to
-`WAIT_WAKE` without chat/tool routing, answer TTS, playback, or chat-history
-changes. Cancel matching also accepts conservative short noisy suffixes such
-as `没事了`, `没事不用了`, `没事 谢谢`, `没事 后面有声音`, `取消吧`, and
-`算了算了`, plus colloquial spoken variants such as `不用啦`, `不用不用`,
-`不用不用了`, `不要了`, `没事儿`, and `没事没事儿`, while command-like
-continuations such as `不用了帮我查天气`, `没事的话帮我查天气`,
-`取消我明天的闹钟`, `不要取消我明天的闹钟`, or `cancel my alarm tomorrow`
-continue to chat/tool routing. Transcript-cancel logs include the normalized
-transcript and `match_mode`; short non-cancel transcripts log safe
-`match_decision=not_cancelled` diagnostic context.
-After any local cancellation, including no speech after acknowledgement or a
-cancel transcript such as `算了算了`, the assistant suppresses wake detection
-with the same cooldown and observed-quiet settings used after answer playback.
-The cancellation path logs the reason, discarded chunk counts, quiet-gate
-status, and maximum suppressed wake score before it becomes wake-ready again.
-Normal wake handling reuses the local acknowledgement file and does not call
-TTS on every wake event.
-
-Question recording stops on `SILENCE_SECONDS` of recent-window audio mostly
-below `RECORDING_SILENCE_RMS`, default `750`, or on the `MAX_RECORD_SECONDS`
-safety cap. This keeps normal 4-5 second utterances from waiting for the full
-20 second maximum when the room has steady low or moderate background noise,
-while speech-like chunks still extend recording. Recording logs preserve
-`stopped_by=silence` and `stopped_by=max_duration` without logging raw audio.
-
-If the TFLite runtime is missing after installing requirements, run the same
-install command again from the active virtual environment and confirm
-`ai-edge-litert` is installed on macOS:
+Optional WebRTC VAD support is disabled by default. Install its compatible
+dependency set only when you intend to enable it:
 
 ```bash
-python -m pip show ai-edge-litert
+python -m pip install -r requirements-vad.txt
 ```
 
-## Prepare Wake-Word Models
+## Prepare
 
-Download the configured openWakeWord TFLite model files before starting
-microphone capture:
+Download the configured openWakeWord Hey Jarvis TFLite model and feature
+models:
 
 ```bash
 python -m src.main --prepare-wake-word
 ```
 
-This prepares the Hey Jarvis model plus the required feature models. Re-run the
-command after changing `WAKE_MODEL` or `WAKE_INFERENCE_FRAMEWORK`.
-
-## Prepare Wake Acknowledgement
-
-Generate the configured local acknowledgement audio before starting the real
-assistant:
+Generate the local wake acknowledgement (`var/ack.mp3` by default):
 
 ```bash
 python -m src.main --prepare-acknowledgement
 ```
 
-This writes `WAKE_ACKNOWLEDGEMENT_TEXT`, default `在呢`, to
-`WAKE_ACKNOWLEDGEMENT_AUDIO_PATH`, default `var/ack.mp3`, through the configured
-OpenAI TTS boundary.
+Repeat these commands after changing the relevant model/framework or
+acknowledgement text/path settings.
 
 ## Verify
 
-Run the project recovery check first. This does not require microphone access,
-speakers, or live OpenAI calls:
+First run the dependency-free repository recovery contract:
 
 ```bash
 ./init.sh
 ```
 
-For the smallest dependency-free application smoke path:
-
-```bash
-python -m src.main --dry-run
-```
-
-Then verify the local runtime configuration:
+Then check the real machine without starting the assistant:
 
 ```bash
 python -m src.main --diagnose
 ```
 
-Fix every `[ERROR]` before starting the real assistant. Common deployment
-blockers are missing `OPENAI_API_KEY`, missing `ai-edge-litert`, missing
-wake-word model files, missing `wake_acknowledgement_audio`, or microphone
-permission not yet granted to the launching app.
+Diagnostics check dependencies, the OpenAI key without printing it, `afplay`,
+wake-word model files, acknowledgement audio, configured VAD, and Realtime host
+readiness.
 
-For an end-to-end state-machine smoke test without hardware or OpenAI:
+Useful non-live checks:
 
 ```bash
+python -m src.main --dry-run
 python -m src.main --fake-backend
+python -m src.realtime.fake_smoke
+python -m src.main --text "2 + 2"
 ```
 
-For local structured tool routing without microphone, wake-word detection, TTS,
-playback, OpenAI, or external network access:
+## Grant microphone permission
 
-```bash
-python -m src.main --text "现在几点"
-python -m src.main --text "100加20是多少"
-python -m src.main --text "今天有什么新闻"
-```
-
-For a manual Open-Meteo weather smoke with live network access, run:
-
-```bash
-python -m src.main --text "明天天气怎么样"
-python -m src.main --text "weather in Tokyo today"
-```
-
-For a manual Frankfurter FX smoke with live network access, run:
-
-```bash
-python -m src.main --text "100 USD to SGD"
-python -m src.main --text "100美元兑人民币汇率是多少"
-```
-
-For a manual Finnhub stock smoke with live network access and
-`FINNHUB_API_KEY` set, run:
-
-```bash
-python -m src.main --text "AAPL stock price"
-python -m src.main --text "苹果股价多少"
-```
-
-Automated tests mock the shared JSON HTTP boundary and must not call live
-weather, FX, or stock services.
-
-## Microphone Permission
-
-Grant microphone access to the exact app that launches Hey Jarvis:
+Open:
 
 ```text
-System Settings -> Privacy & Security -> Microphone
+System Settings → Privacy & Security → Microphone
 ```
 
-Enable Terminal, iTerm, Codex, or whichever app runs `python -m src.main`, then
-restart that app before testing live audio. macOS permission changes often do
-not apply to already-running terminal sessions.
+Enable the terminal or agent surface that runs Hey Jarvis, then restart that
+app. Realtime also needs Chrome microphone permission for its local app-mode
+host.
 
-## Wake-Word Acceptance Test
+## Run the pipeline
 
-Before running the full assistant, test live wake-word scoring without OpenAI or
-playback:
-
-```bash
-python -m src.main --wake-debug --wake-debug-output tmp/wake-debug.wav
-```
-
-Say `Hey Jarvis` clearly near the microphone. Stop the command with `Ctrl-C`, then
-replay the captured file through the same scorer:
-
-```bash
-python -m src.main --wake-file tmp/wake-debug.wav
-```
-
-Healthy output should show non-zero `rms` and `peak` values, `framework=tflite`,
-and wake scores that can cross `WAKE_THRESHOLD` when the phrase is spoken
-clearly. If levels move but scores stay low, lower `WAKE_THRESHOLD` cautiously
-or improve microphone placement before changing code.
-
-## Run
-
-Start the real assistant:
+The pipeline remains the default:
 
 ```bash
 python -m src.main
 ```
 
-For the accepted MVP demo, say:
+Say “Hey Jarvis”, wait for the local acknowledgement, then speak. The assistant
+records to `tmp/input.wav`, transcribes, routes or answers, writes
+`tmp/output.mp3`, plays it with `afplay`, and returns to wake listening.
 
-```text
-Hey Jarvis
+For pipeline behavior and safe tool boundaries, see
+[docs/PIPELINE.md](docs/PIPELINE.md).
+
+## Run Realtime
+
+Realtime WebRTC is opt-in:
+
+```bash
+python -m src.main --backend realtime
 ```
 
-After the acknowledgement plays, ask:
+Click **Arm hands-free audio** once per launched Chrome host. Python owns the
+microphone before wake; after confirmed wake and acknowledgement it closes its
+capture before Chrome opens WebRTC media. Follow-up turns and interruption then
+stay inside the same session until an end phrase/tool, timeout, explicit stop,
+transport error, or Ctrl+C.
 
-```text
-what is two plus two?
+Realtime is billable and remains a developer MVP. Read
+[docs/REALTIME.md](docs/REALTIME.md) before changing volume, VAD, privacy, or
+live evaluation settings.
+
+## Wake acceptance
+
+Inspect wake scoring without calling OpenAI or playing audio:
+
+```bash
+python -m src.main --wake-debug
+python -m src.main --wake-debug --wake-debug-output tmp/wake-debug.wav
+python -m src.main --wake-file tmp/wake-debug.wav
 ```
 
-The assistant should drain acknowledgement audio residue, record the question to
-`tmp/input.wav` after `ARMED` detects speech, transcribe it, ask the configured
-chat model or structured tool route, write speech to `tmp/output.mp3`, play it
-with `afplay`, and return to `WAIT_WAKE`.
+The output reports frame count, RMS, peak, overflow, score, threshold, maximum
+observed score, and detected frames. `tmp/input.wav` remains reserved for normal
+question recording unless explicitly selected as the debug output.
 
-Stop the process with `Ctrl-C`.
+Lower-level model comparison is available through:
 
-## Update Or Redeploy
+```bash
+python scripts/debug_oww_file.py tmp/wake-debug.wav hey_jarvis tflite
+```
+
+Detailed real-device acceptance belongs in
+[MANUAL_TESTING.md](MANUAL_TESTING.md).
+
+## Update or redeploy
 
 After pulling new code:
 
@@ -383,80 +172,17 @@ python -m src.main --prepare-acknowledgement
 python -m src.main --diagnose
 ```
 
-Only start the real assistant after recovery and diagnostics pass.
+Review `.env.example` for new settings. Do not overwrite an existing `.env`
+because it contains local credentials and tuning.
 
-## Runtime Files
+## Local runtime files
 
-- `.env`: local secrets and runtime settings. Do not commit it.
-- `.env.example`: documented deployable defaults.
-- `tmp/input.wav`: latest normal question recording.
-- `tmp/output.mp3`: latest synthesized answer.
-- `var/ack.mp3`: prepared wake acknowledgement audio.
-- `tmp/wake-debug.wav`: optional wake-debug capture when requested.
+- `.env` — local configuration and secrets; do not commit.
+- `var/ack.mp3` — generated wake acknowledgement.
+- `tmp/input.wav` — most recent pipeline question recording.
+- `tmp/output.mp3` — most recent pipeline synthesized answer.
+- `tmp/realtime-fixtures/` — private local Realtime fixtures.
+- `tmp/realtime-evals/` — local sanitized evaluation evidence.
 
-## Troubleshooting
-
-- Realtime host never starts after wake: confirm the Chrome app host is still
-  open and armed, then run `python -m src.main --backend realtime --diagnose`.
-- Chrome asks for another click or shows no microphone indicator: re-arm after a
-  host relaunch and grant permission to Chrome; permission is not inherited from
-  Terminal or Codex.
-- Speaker audio interrupts itself: confirm Chrome reports echo cancellation,
-  noise suppression, 48 kHz mono capture, and avoid covering the Mac microphone
-  or speaker. Record the sanitized `/api/report`; do not add manual truncation.
-- Realtime usage is unexpectedly high: reduce idle/max-duration limits, close
-  sessions with an end phrase, and verify the host returns to local wake mode.
-
-- `OPENAI_API_KEY is required`: set a real key in `.env`.
-- `OpenAI transcription returned empty text`: the recorded question did not
-  contain usable speech. The assistant logs the recoverable error and returns to
-  `WAIT_WAKE`; try again closer to the microphone or reduce background noise.
-- `LiteRT/TFLite runtime is not importable`: activate `.venv`, run
-  `pip install -r requirements.txt`, then confirm `python -m pip show
-  ai-edge-litert`.
-- `dependency:webrtcvad` reports an error: only when using
-  `VAD_BACKEND=webrtc`, run `python -m pip install -r requirements-vad.txt`
-  and repeat `python -m src.main --diagnose`.
-- `wake_word_models` reports missing files: run `python -m src.main
-  --prepare-wake-word`, then run `python -m src.main --diagnose` again.
-- `wake_acknowledgement_audio` reports a missing file: set `OPENAI_API_KEY`,
-  run `python -m src.main --prepare-acknowledgement`, then run `python -m
-  src.main --diagnose` again.
-- `WAKE_INFERENCE_FRAMEWORK=onnx` fails on macOS ARM64: keep
-  `WAKE_INFERENCE_FRAMEWORK=tflite`.
-- `rms` and `peak` stay near zero during `--wake-debug`: grant microphone
-  permission, choose the correct input device, and restart the launching app.
-- `overflow=true`: close CPU-heavy processes and make sure wake-word models were
-  prepared before listening.
-- Playback fails: run `python -m src.main --diagnose` and confirm `afplay` is
-  available.
-- `FINNHUB_API_KEY` is reported as missing: set a real Finnhub key in `.env`
-  before asking stock quote questions. Diagnostics and text debug never print
-  the key value.
-- Stock quote requests for unknown symbols, zero current prices, provider
-  failures, or malformed Finnhub responses return structured tool errors and do
-  not fall back to chat speculation.
-- Playback finishes and immediately wakes again: keep
-  `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` enabled, keep
-  `POST_PLAYBACK_QUIET_SECONDS` enabled, keep `WAKE_CONFIRMATION_FRAMES` at `2`
-  or higher, and increase the cooldown or quiet window if speaker echo still
-  bleeds into the microphone.
-- Wake acknowledgement plays but no question is intended: keep
-  `ARMED_NO_SPEECH_TIMEOUT_SECONDS` enabled so the assistant cancels locally
-  before recording, transcription, answer generation, or TTS playback.
-- Wake acknowledgement plays, no question is spoken, but recording starts and
-  runs to `MAX_RECORD_SECONDS`: this is not expected. The healthy path should
-  log `armed_summary ... result=no_speech_timeout`. A log pattern such as
-  `armed_trigger after=0.32s ... noise_floor=0.0 ... result=recording_started`
-  followed by `stopped_by=max_duration` and `empty_transcript` means ARMED
-  misclassified acknowledgement residue or background noise as speech before it
-  had a useful noise-floor baseline. Record the `armed_trigger`, recording, and
-  cancellation lines for follow-up.
-- The first syllable of a question is missing after acknowledgement: confirm
-  the question continues beyond playback completion and inspect `playback
-  handoff`, `noise_seed_count`, `quarantined_overlap_chunks`, and
-  `noise_floor_has_samples`. Overflowed drains use the conservative fallback.
-- Wake acknowledgement repeats after a local cancellation: keep
-  `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` and `POST_PLAYBACK_QUIET_SECONDS`
-  enabled. Cancellation should log post-cancellation suppression and should not
-  enter another acknowledgement cycle until fresh wake audio arrives after quiet.
+For symptoms and recovery steps, use
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
