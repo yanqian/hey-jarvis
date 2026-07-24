@@ -28,6 +28,12 @@ TIMING = {
     "peer_setup_ms": 2,
     "microphone_reporting_ms": 1,
     "audio_analysis_setup_ms": 0,
+    "input_level_cleanup_ms": 0,
+    "audio_context_creation_ms": 0,
+    "analyser_setup_ms": 0,
+    "media_stream_source_creation_ms": 0,
+    "source_connection_ms": 0,
+    "monitor_startup_ms": 0,
     "peer_connection_setup_ms": 0,
     "offer_creation_ms": 1,
     "local_description_ms": 0,
@@ -86,7 +92,7 @@ class RT001ContractTests(unittest.TestCase):
     def test_scenario_matches_authoritative_no_human_matrix(self):
         scenario = load_scenario()
         self.assertEqual(scenario["id"], "RT001")
-        self.assertEqual(scenario["version"], 3)
+        self.assertEqual(scenario["version"], 4)
         self.assertEqual(scenario["human_actions"], [])
         self.assertEqual(scenario["evidence"]["required"], ["offline", "live_host"])
         self.assertNotIn("response", json.dumps(scenario["oracles"]))
@@ -180,6 +186,21 @@ class RT001OracleTests(unittest.TestCase):
                 "peer-mismatch",
                 lambda timing: timing.__setitem__("offer_creation_ms", 20),
                 "peer setup subphases did not match",
+            ),
+            (
+                "audio-analysis-missing",
+                lambda timing: timing.pop("audio_context_creation_ms"),
+                "missing browser fields",
+            ),
+            (
+                "audio-analysis-negative",
+                lambda timing: timing.__setitem__("audio_context_creation_ms", -1),
+                "audio_context_creation_ms was invalid",
+            ),
+            (
+                "audio-analysis-mismatch",
+                lambda timing: timing.__setitem__("audio_context_creation_ms", 20),
+                "audio analysis subphases did not match",
             ),
         ):
             with self.subTest(name=name):
@@ -290,6 +311,12 @@ class FakeRT001Host:
                 "peer_setup_ms": 1,
                 "microphone_reporting_ms": 0,
                 "audio_analysis_setup_ms": 0,
+                "input_level_cleanup_ms": 0,
+                "audio_context_creation_ms": 0,
+                "analyser_setup_ms": 0,
+                "media_stream_source_creation_ms": 0,
+                "source_connection_ms": 0,
+                "monitor_startup_ms": 0,
                 "peer_connection_setup_ms": 0,
                 "offer_creation_ms": 1,
                 "local_description_ms": 0,

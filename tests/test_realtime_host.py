@@ -366,6 +366,12 @@ class RealtimeHostTests(unittest.TestCase):
             "peer_setup_ms",
             "microphone_reporting_ms",
             "audio_analysis_setup_ms",
+            "input_level_cleanup_ms",
+            "audio_context_creation_ms",
+            "analyser_setup_ms",
+            "media_stream_source_creation_ms",
+            "source_connection_ms",
+            "monitor_startup_ms",
             "peer_connection_setup_ms",
             "offer_creation_ms",
             "local_description_ms",
@@ -504,6 +510,12 @@ class RealtimeHostTests(unittest.TestCase):
             "peer_setup_ms": 20,
             "microphone_reporting_ms": 2,
             "audio_analysis_setup_ms": 1,
+            "input_level_cleanup_ms": 0,
+            "audio_context_creation_ms": 1,
+            "analyser_setup_ms": 0,
+            "media_stream_source_creation_ms": 0,
+            "source_connection_ms": 0,
+            "monitor_startup_ms": 0,
             "peer_connection_setup_ms": 4,
             "offer_creation_ms": 5,
             "local_description_ms": 8,
@@ -537,6 +549,7 @@ class RealtimeHostTests(unittest.TestCase):
             ({**timing, "token_ms": True}, "integer"),
             ({**timing, "total_browser_ready_ms": 1}, "match"),
             ({**timing, "local_description_ms": 40}, "subphases"),
+            ({**timing, "audio_context_creation_ms": 40}, "Audio analysis"),
         )
         for detail, expected in invalid:
             with self.subTest(expected=expected):

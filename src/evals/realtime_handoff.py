@@ -9,14 +9,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.evals.realtime_common import (
-    HANDOFF_PHASE_TIMING_FIELDS,
     HANDOFF_TIMING_FIELDS,
-    PEER_SETUP_TIMING_FIELDS,
     PROJECT_ROOT,
     RealtimeRunFailure,
     RealtimeRunnerBase,
     RealtimeScenarioError,
     sanitize_report,
+    validate_handoff_timing_event,
     validate_scenario_contract,
 )
 
@@ -187,25 +186,7 @@ def _timing_breakdown(events: list[object], session_id: str) -> dict[str, int]:
             raise RealtimeScenarioError(f"RT001 timing requires exactly one {event_type}")
         by_type[event_type] = matches[0]
     browser = by_type["host_handoff_timing"]
-    missing = [field for field in HANDOFF_TIMING_FIELDS if field not in browser]
-    if missing:
-        raise RealtimeScenarioError(
-            f"RT001 timing is missing browser fields: {', '.join(sorted(missing))}"
-        )
-    browser_values: dict[str, int] = {}
-    for field in HANDOFF_TIMING_FIELDS:
-        value = browser.get(field)
-        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 60_000:
-            raise RealtimeScenarioError(f"RT001 timing field {field} was invalid")
-        browser_values[field] = value
-    phase_total = sum(browser_values[field] for field in HANDOFF_PHASE_TIMING_FIELDS)
-    if abs(phase_total - browser_values["total_browser_ready_ms"]) > len(
-        HANDOFF_PHASE_TIMING_FIELDS
-    ):
-        raise RealtimeScenarioError("RT001 browser timing phases did not match the total")
-    peer_total = sum(browser_values[field] for field in PEER_SETUP_TIMING_FIELDS)
-    if abs(peer_total - browser_values["peer_setup_ms"]) > len(PEER_SETUP_TIMING_FIELDS):
-        raise RealtimeScenarioError("RT001 peer setup subphases did not match the aggregate")
+    browser_values = validate_handoff_timing_event(browser, context="RT001")
 
     def elapsed(start: str, end: str) -> int:
         value = int(by_type[end]["at_ms"]) - int(by_type[start]["at_ms"])

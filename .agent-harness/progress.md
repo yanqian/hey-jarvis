@@ -114,21 +114,22 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F068 - Decompose Realtime peer and SDP setup latency.
+F069 - Attribute Realtime Web Audio cold-start latency.
 
-F068 has been completed through evaluator-gated fast work, one newly authorized
-automatic RT001 version 3 live-host run, and separate cold-start evaluator
-approval. The retained `4389 ms` peer/SDP aggregate decomposed into `2 ms`
-microphone reporting, `4379 ms` input-level audio-analysis setup, `5 ms`
-PeerConnection setup, `1 ms` offer creation, and `2 ms` local-description
-setup. The nested values reconcile exactly without being counted again in the
-browser-ready total; exclusive ownership, cleanup, and final wake recovery
-passed. This is diagnostic evidence, not an SLO or stable percentile, and no
-runtime ordering or tuning changed. Final recovery passes with 337 project
-tests. Coding evidence is in `.agent-harness/runs/F068-fast-coding.md`, live
-evidence is in `.agent-harness/runs/F068-live-rt001.md`, and approval is
-recorded as `EVAL_PASS: F068` in
-`.agent-harness/runs/20260724T081320Z-F068-evaluation-pass.md`.
+F069 has been completed through evaluator-gated fast work, one newly authorized
+automatic RT004 version 2 two-session live-host run, and separate cold-start
+evaluator approval. `new AudioContext()` accounted for effectively the entire
+input-level analysis delay: `4490 ms` in session A and `2831 ms` in session B.
+The `1660 ms` improvement supports a partial same-page warm-up effect, but the
+recurring `2831 ms` weakens a one-time cold-start explanation. Both distinct
+sessions connected, cleaned up, and restored final wake ownership. This is
+diagnostic evidence, not an SLO or stable percentile, and no runtime operation
+was moved, deferred, prewarmed, reused, disabled, or retuned. Final recovery
+passes with 338 project tests. Coding evidence is in
+`.agent-harness/runs/F069-fast-coding.md`, live evidence is in
+`.agent-harness/runs/F069-live-rt004.md`, and approval is recorded as
+`EVAL_PASS: F069` in
+`.agent-harness/runs/20260724T083039Z-F069-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -196,8 +197,9 @@ No feature is currently selected.
 
 ## Next Feature
 
-No later feature is selected. The F068 live measurement will identify which
-peer/SDP subphase, if any, should become a separately planned optimization.
+No later feature is selected. F069 evidence will determine whether a later
+optimization should prewarm/reuse the Web Audio graph or simply move optional
+input-level diagnostics out of the connection-critical path.
 
 ## Recently Completed
 

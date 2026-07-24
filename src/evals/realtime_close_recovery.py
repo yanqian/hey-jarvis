@@ -9,11 +9,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.evals.realtime_common import (
+    AUDIO_ANALYSIS_TIMING_FIELDS,
     PROJECT_ROOT,
     RealtimeRunFailure,
     RealtimeRunnerBase,
     RealtimeScenarioError,
     sanitize_report,
+    validate_handoff_timing_event,
     validate_scenario_contract,
 )
 
@@ -24,6 +26,7 @@ CYCLE_TYPES = (
     "wake_microphone_closed",
     "host_microphone_requested",
     "host_microphone_acquired",
+    "host_handoff_timing",
     "host_connected",
     "host_stopped",
     "wake_microphone_reopened",
@@ -123,16 +126,29 @@ def evaluate_observation(
 
     expected_a = _expected_cycle(session_a)
     expected_b = _expected_cycle(session_b)
-    _require_exact_prefix(active_a, expected_a[:4], "session A active")
+    _require_exact_prefix(active_a, expected_a[:5], "session A active")
     _require_exact_prefix(between, expected_a, "first cleanup")
-    _require_exact_prefix(active_b, (*expected_a, *expected_b[:4]), "session B active")
+    _require_exact_prefix(active_b, (*expected_a, *expected_b[:5]), "session B active")
     _require_exact_prefix(final, (*expected_a, *expected_b), "final cleanup")
+    final_events = final.get("events")
+    assert isinstance(final_events, list)
+    timing_a = _session_timing(final_events, session_a)
+    timing_b = _session_timing(final_events, session_b)
     return {
         "result": "passed",
         "session_count": 2,
         "distinct_session_ids": True,
         "media_cleanup_cycles": 2,
         "recovered_to_wake": True,
+        "timing_ms": {
+            "session_a": timing_a,
+            "session_b": timing_b,
+            "audio_analysis_first_minus_second_ms": (
+                timing_a["audio_analysis_setup_ms"]
+                - timing_b["audio_analysis_setup_ms"]
+            ),
+            "web_audio_subphases": sorted(AUDIO_ANALYSIS_TIMING_FIELDS),
+        },
     }
 
 
@@ -141,6 +157,21 @@ def _expected_cycle(session_id: str) -> tuple[tuple[str, str | None], ...]:
         (event_type, None if event_type == "wake_microphone_closed" else session_id)
         for event_type in CYCLE_TYPES
     )
+
+
+def _session_timing(events: list[object], session_id: str) -> dict[str, int]:
+    matches = [
+        event
+        for event in events
+        if isinstance(event, dict)
+        and event.get("type") == "host_handoff_timing"
+        and event.get("session_id") == session_id
+    ]
+    if len(matches) != 1:
+        raise RealtimeScenarioError(
+            "RT004 requires exactly one handoff timing report for each session"
+        )
+    return validate_handoff_timing_event(matches[0], context="RT004")
 
 
 def _require_exact_prefix(

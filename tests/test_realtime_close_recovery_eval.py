@@ -22,6 +22,30 @@ SESSION_A = "session-rt004-a"
 SESSION_B = "session-rt004-b"
 
 
+def timing(audio_context_ms: int):
+    peer_setup_ms = audio_context_ms + 1
+    return {
+        "command_to_token_ms": 0,
+        "token_ms": 1,
+        "microphone_ms": 1,
+        "peer_setup_ms": peer_setup_ms,
+        "microphone_reporting_ms": 0,
+        "audio_analysis_setup_ms": audio_context_ms,
+        "input_level_cleanup_ms": 0,
+        "audio_context_creation_ms": audio_context_ms,
+        "analyser_setup_ms": 0,
+        "media_stream_source_creation_ms": 0,
+        "source_connection_ms": 0,
+        "monitor_startup_ms": 0,
+        "peer_connection_setup_ms": 1,
+        "offer_creation_ms": 0,
+        "local_description_ms": 0,
+        "negotiation_ms": 1,
+        "session_configuration_ms": 1,
+        "total_browser_ready_ms": audio_context_ms + 5,
+    }
+
+
 def event(at_ms: int, kind: str, session_id: str | None = None, **detail: object):
     value = {"at_ms": at_ms, "type": kind, **detail}
     if session_id is not None:
@@ -30,13 +54,15 @@ def event(at_ms: int, kind: str, session_id: str | None = None, **detail: object
 
 
 def cycle(start: int, session_id: str):
+    audio_context_ms = 20 if session_id == SESSION_A else 2
     return [
         event(start, "wake_microphone_closed", reason="handoff"),
         event(start + 10, "host_microphone_requested", session_id),
         event(start + 20, "host_microphone_acquired", session_id),
-        event(start + 30, "host_connected", session_id),
-        event(start + 40, "host_stopped", session_id, reason="explicit"),
-        event(start + 50, "wake_microphone_reopened", session_id),
+        event(start + 30, "host_handoff_timing", session_id, **timing(audio_context_ms)),
+        event(start + 40, "host_connected", session_id),
+        event(start + 50, "host_stopped", session_id, reason="explicit"),
+        event(start + 60, "wake_microphone_reopened", session_id),
     ]
 
 
@@ -45,12 +71,12 @@ def passing_observation():
     second = cycle(80, SESSION_B)
     return build_observation(
         session_ids=(SESSION_A, SESSION_B),
-        active_a={"state": "host_active", "wake_microphone_open": False, "events": first[:4]},
+        active_a={"state": "host_active", "wake_microphone_open": False, "events": first[:5]},
         between={"state": "wake_owned", "wake_microphone_open": True, "events": first},
         active_b={
             "state": "host_active",
             "wake_microphone_open": False,
-            "events": [*first, *second[:4]],
+            "events": [*first, *second[:5]],
         },
         final={
             "state": "wake_owned",
@@ -75,6 +101,41 @@ class RT004OracleTests(unittest.TestCase):
         self.assertEqual(result["session_count"], 2)
         self.assertTrue(result["distinct_session_ids"])
         self.assertEqual(result["media_cleanup_cycles"], 2)
+        self.assertEqual(result["timing_ms"]["session_a"]["audio_context_creation_ms"], 20)
+        self.assertEqual(result["timing_ms"]["session_b"]["audio_context_creation_ms"], 2)
+        self.assertEqual(result["timing_ms"]["audio_analysis_first_minus_second_ms"], 18)
+
+    def test_missing_duplicate_or_inconsistent_session_timing_fails(self):
+        missing = passing_observation()
+        missing["final"]["events"] = [
+            item
+            for item in missing["final"]["events"]
+            if not (
+                item["type"] == "host_handoff_timing"
+                and item.get("session_id") == SESSION_B
+            )
+        ]
+        self.assert_failure(missing, "missing")
+
+        duplicate = passing_observation()
+        timing_event = next(
+            item
+            for item in duplicate["final"]["events"]
+            if item["type"] == "host_handoff_timing"
+            and item.get("session_id") == SESSION_B
+        )
+        duplicate["final"]["events"].insert(-2, deepcopy(timing_event))
+        self.assert_failure(duplicate, "duplicated")
+
+        inconsistent = passing_observation()
+        timing_event = next(
+            item
+            for item in inconsistent["final"]["events"]
+            if item["type"] == "host_handoff_timing"
+            and item.get("session_id") == SESSION_B
+        )
+        timing_event["audio_context_creation_ms"] = 200
+        self.assert_failure(inconsistent, "audio analysis subphases")
 
     def test_reused_or_stale_session_identity_fails(self):
         reused = passing_observation()
@@ -157,6 +218,11 @@ class FakeRT004Host:
         self.add("host_microphone_requested", session_id)
         self.add("host_microphone_acquired", session_id)
         if self.play_calls == 1 or self.connect_second:
+            self.add(
+                "host_handoff_timing",
+                session_id,
+                **timing(20 if self.play_calls == 1 else 2),
+            )
             self.add("host_connected", session_id)
             self.state = "host_active"
 
@@ -204,7 +270,7 @@ class RT004RunnerTests(unittest.TestCase):
         self.assertEqual(host.stop_calls, 2)
         self.assertEqual(evidence["result"]["session_count"], 2)
         encoded = json.dumps(evidence)
-        for forbidden in ("private-wake", "transcript", "audio", "api_key"):
+        for forbidden in ("private-wake", '"transcript":', '"audio":', '"api_key":'):
             self.assertNotIn(forbidden, encoded)
 
     def test_second_connection_failure_and_reused_identity_fail_precisely(self):

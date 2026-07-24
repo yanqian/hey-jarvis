@@ -32,10 +32,21 @@ PEER_SETUP_TIMING_FIELDS = frozenset(
         "local_description_ms",
     }
 )
+AUDIO_ANALYSIS_TIMING_FIELDS = frozenset(
+    {
+        "input_level_cleanup_ms",
+        "audio_context_creation_ms",
+        "analyser_setup_ms",
+        "media_stream_source_creation_ms",
+        "source_connection_ms",
+        "monitor_startup_ms",
+    }
+)
 HANDOFF_TIMING_FIELDS = frozenset(
     {
         *HANDOFF_PHASE_TIMING_FIELDS,
         *PEER_SETUP_TIMING_FIELDS,
+        *AUDIO_ANALYSIS_TIMING_FIELDS,
         "total_browser_ready_ms",
     }
 )
@@ -78,6 +89,43 @@ class RealtimeRunFailure(RealtimeScenarioError):
     def __init__(self, message: str, evidence: dict[str, object]) -> None:
         super().__init__(message)
         self.evidence = evidence
+
+
+def validate_handoff_timing_event(
+    event: dict[str, object],
+    *,
+    context: str,
+) -> dict[str, int]:
+    missing = [field for field in HANDOFF_TIMING_FIELDS if field not in event]
+    if missing:
+        raise RealtimeScenarioError(
+            f"{context} timing is missing browser fields: {', '.join(sorted(missing))}"
+        )
+    values: dict[str, int] = {}
+    for field in HANDOFF_TIMING_FIELDS:
+        value = event.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 60_000:
+            raise RealtimeScenarioError(f"{context} timing field {field} was invalid")
+        values[field] = value
+    phase_total = sum(values[field] for field in HANDOFF_PHASE_TIMING_FIELDS)
+    if abs(phase_total - values["total_browser_ready_ms"]) > len(
+        HANDOFF_PHASE_TIMING_FIELDS
+    ):
+        raise RealtimeScenarioError(f"{context} browser timing phases did not match the total")
+    peer_total = sum(values[field] for field in PEER_SETUP_TIMING_FIELDS)
+    if abs(peer_total - values["peer_setup_ms"]) > len(PEER_SETUP_TIMING_FIELDS):
+        raise RealtimeScenarioError(
+            f"{context} peer setup subphases did not match the aggregate"
+        )
+    audio_analysis_total = sum(values[field] for field in AUDIO_ANALYSIS_TIMING_FIELDS)
+    if (
+        abs(audio_analysis_total - values["audio_analysis_setup_ms"])
+        > len(AUDIO_ANALYSIS_TIMING_FIELDS)
+    ):
+        raise RealtimeScenarioError(
+            f"{context} audio analysis subphases did not match the aggregate"
+        )
+    return values
 
 
 def load_schema(path: Path = DEFAULT_SCHEMA_PATH) -> dict[str, object]:

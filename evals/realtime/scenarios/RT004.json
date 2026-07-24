@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "RT004",
-  "version": 1,
+  "version": 2,
   "title": "Explicit close, media cleanup, and distinct next wake",
   "goal": "Prove that explicit close restores Python wake ownership and the same saved wake can establish a distinct second Realtime session before final cleanup.",
   "preconditions": [
@@ -14,6 +14,7 @@
     "wake_microphone_closed",
     "host_microphone_requested",
     "host_microphone_acquired",
+    "host_handoff_timing",
     "host_connected",
     "host_stopped",
     "wake_microphone_reopened"
@@ -40,7 +41,25 @@
       "type",
       "at_ms",
       "session_id",
-      "reason"
+      "reason",
+      "command_to_token_ms",
+      "token_ms",
+      "microphone_ms",
+      "peer_setup_ms",
+      "microphone_reporting_ms",
+      "audio_analysis_setup_ms",
+      "input_level_cleanup_ms",
+      "audio_context_creation_ms",
+      "analyser_setup_ms",
+      "media_stream_source_creation_ms",
+      "source_connection_ms",
+      "monitor_startup_ms",
+      "peer_connection_setup_ms",
+      "offer_creation_ms",
+      "local_description_ms",
+      "negotiation_ms",
+      "session_configuration_ms",
+      "total_browser_ready_ms"
     ],
     "forbidden_fields": [
       "audio",

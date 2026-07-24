@@ -1496,3 +1496,91 @@ single browser implementation and RT001 verification surface. Token/ACK
 parallelization, PeerConnection optimization, readiness cues, and latency SLOs
 remain separate future features because they change runtime behavior or product
 semantics.
+
+### Realtime Web Audio Cold-Start Attribution
+
+Goal: determine which synchronous operation inside `startInputLevels(stream)`
+accounts for F068's observed `4379 ms` audio-analysis setup time, and compare
+the first and second Realtime sessions in one armed Chrome page to assess
+whether the delay is consistent with a page/audio-stack cold start or recurs
+whenever the analysis graph is rebuilt.
+
+Included scope: rounded monotonic browser subphase durations for prior
+input-level cleanup, `AudioContext` construction, analyser construction and
+configuration, `createMediaStreamSource`, source-to-analyser connection, and
+remaining monitor startup; retention of the F068
+`audio_analysis_setup_ms` aggregate; nested consistency validation; RT001
+timing/evidence evolution; RT004 two-session timing comparison in one armed
+page; focused privacy, browser-contract, coordinator, oracle, documentation,
+and regression tests; and one freshly authorized automatic RT004 live-host run.
+
+Excluded scope: moving, deferring, prewarming, reusing, or removing the Web
+Audio graph; keeping an `AudioContext` open across sessions; changing the
+Realtime/WebRTC operation order; changing ICE, token, microphone,
+acknowledgement, wake, model, voice, VAD, output volume, timeouts, media
+cleanup, session, or user-turn behavior; declaring a stable latency SLO or
+universal browser root cause; or retaining audio, transcripts, answers,
+credentials, SDP, ICE details, network addresses, provider payloads, request
+identities, high-frequency samples, or raw performance traces.
+
+Core flows: during each unchanged Realtime start, the browser records
+contiguous boundaries around every synchronous operation in
+`startInputLevels(stream)` and includes the resulting nested values in the
+existing single active-session timing report. Python validates that these
+values are complete, bounded, and reconcile to `audio_analysis_setup_ms`
+without double-counting them in `peer_setup_ms` or the top-level browser-ready
+total. RT001 exposes the finer breakdown. RT004 automatically creates session
+A, stops and restores wake ownership, then creates session B in the same armed
+Chrome page and returns both sanitized timing breakdowns for comparison before
+final cleanup.
+
+Constraints: use `performance.now()` and rounded non-negative integer
+milliseconds; preserve exactly one batched timing report per active session;
+all new fields are allowlisted and bounded by the existing timing limit; nested
+values reconcile within rounding tolerance; the first/second-session
+comparison is diagnostic evidence rather than a pass/fail performance
+threshold; the implementation must not change when audio analysis,
+PeerConnection creation, offer creation, negotiation, or readiness occurs;
+committed evidence remains lifecycle/timing metadata only.
+
+Ambiguities or assumptions: “cold start” is treated as a hypothesis, not an
+implementation fact. A much slower first session than second session in the
+same page supports page/audio-stack warm-up; comparable delays weaken that
+hypothesis and suggest per-construction cost. One two-session run is still not
+a stable percentile baseline. `AudioContext.resume()` is invoked without
+awaiting its returned promise today, so this feature measures only the
+synchronous cost of initiating resume plus the remaining buffer/timer setup;
+asynchronous resume completion is not claimed. Cleanup includes any
+synchronous work performed by the existing `stopInputLevels()` call.
+
+Required capabilities: F068 timing contract, RT001 and RT004 automatic runners,
+browser `performance.now()`, deterministic static and Python tests, private
+wake fixture, armed Chrome host, built-in microphone, usable OpenAI credential
+and network, fresh explicit microphone/OpenAI/cost authorization for a
+two-session live verification, final project recovery, fast coding evidence,
+and a separate cold-start Evaluator Agent.
+
+Implementation paths: `src/realtime_host/static/app.js`,
+`src/realtime_host/coordinator.py`, `src/evals/realtime_common.py`,
+`src/evals/realtime_handoff.py`, `src/evals/realtime_close_recovery.py`,
+`evals/realtime/scenarios/RT001.json`,
+`evals/realtime/scenarios/RT004.json`, focused tests under `tests/`,
+`README.md`, `MANUAL_TESTING.md`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: static browser assertions for every internal Web Audio
+boundary and unchanged operation order; coordinator and shared sanitizer
+allowlist, integer/range, incomplete, aggregate-mismatch, duplicate,
+stale-session, and privacy tests; RT001 valid fine-grained breakdown plus
+precise malformed failures; RT004 exactly two distinct same-page sessions with
+one valid timing report each and preserved cleanup/recovery oracles; RT002 and
+RT003 regressions; JavaScript syntax; Realtime fake smoke; full unittest
+discovery; final `./init.sh`; one freshly authorized automatic RT004 live run
+whose sanitized evidence compares session A and B; fast coding evidence; and
+separate evaluator approval.
+
+Decomposition decision: F069 is one measurement-only capability because the
+internal timing fields and two-session comparison answer the same cold-start
+hypothesis through one browser/eval verification surface. Any change that
+moves, reuses, prewarms, or conditionally disables input-level analysis will be
+a later independently verifiable optimization feature based on F069 evidence.

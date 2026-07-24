@@ -49,13 +49,20 @@ function stopInputLevels(){
   if(levelContext){levelContext.close().catch(()=>{});levelContext=null;}
   levelAnalyser=null;levelSamples=[];assistantSpeaking=false;
 }
-function startInputLevels(mediaStream){
+function startInputLevels(mediaStream,timing){
   stopInputLevels();
+  timing.inputLevelsCleaned=performance.now();
   const AudioContextClass=window.AudioContext||window.webkitAudioContext;
-  if(!AudioContextClass)return;
-  levelContext=new AudioContextClass();levelAnalyser=levelContext.createAnalyser();
+  if(!AudioContextClass){
+    timing.audioContextCreated=timing.analyserReady=timing.mediaStreamSourceCreated=timing.sourceConnected=timing.audioAnalysisReady=performance.now();
+    return;
+  }
+  levelContext=new AudioContextClass();timing.audioContextCreated=performance.now();
+  levelAnalyser=levelContext.createAnalyser();
   levelAnalyser.fftSize=1024;levelAnalyser.smoothingTimeConstant=0;
-  levelSource=levelContext.createMediaStreamSource(mediaStream);levelSource.connect(levelAnalyser);
+  timing.analyserReady=performance.now();
+  levelSource=levelContext.createMediaStreamSource(mediaStream);timing.mediaStreamSourceCreated=performance.now();
+  levelSource.connect(levelAnalyser);timing.sourceConnected=performance.now();
   levelContext.resume().catch(()=>{});
   const samples=new Float32Array(levelAnalyser.fftSize);
   levelTimer=setInterval(()=>{
@@ -68,6 +75,7 @@ function startInputLevels(mediaStream){
     levelSamples.push({phase,rms:Math.sqrt(sumSquares/samples.length),peak});
     if(levelSamples.length>=INPUT_LEVEL_WINDOW_SAMPLES)flushInputLevels();
   },INPUT_LEVEL_SAMPLE_INTERVAL_MS);
+  timing.audioAnalysisReady=performance.now();
 }
 
 async function arm(){
@@ -118,6 +126,12 @@ function handoffTimingSummary(readyAt){
     peer_setup_ms:elapsedMs(timing.microphoneAcquired,timing.negotiationStarted),
     microphone_reporting_ms:elapsedMs(timing.microphoneAcquired,timing.microphoneReported),
     audio_analysis_setup_ms:elapsedMs(timing.microphoneReported,timing.audioAnalysisReady),
+    input_level_cleanup_ms:elapsedMs(timing.microphoneReported,timing.inputLevelsCleaned),
+    audio_context_creation_ms:elapsedMs(timing.inputLevelsCleaned,timing.audioContextCreated),
+    analyser_setup_ms:elapsedMs(timing.audioContextCreated,timing.analyserReady),
+    media_stream_source_creation_ms:elapsedMs(timing.analyserReady,timing.mediaStreamSourceCreated),
+    source_connection_ms:elapsedMs(timing.mediaStreamSourceCreated,timing.sourceConnected),
+    monitor_startup_ms:elapsedMs(timing.sourceConnected,timing.audioAnalysisReady),
     peer_connection_setup_ms:elapsedMs(timing.audioAnalysisReady,timing.peerConnectionReady),
     offer_creation_ms:elapsedMs(timing.peerConnectionReady,timing.offerCreated),
     local_description_ms:elapsedMs(timing.offerCreated,timing.negotiationStarted),
@@ -175,8 +189,7 @@ async function start(command){
   const track=stream.getAudioTracks()[0],settings=track.getSettings();renderSettings(settings);
   await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
   handoffTiming.microphoneReported=performance.now();
-  startInputLevels(stream);
-  handoffTiming.audioAnalysisReady=performance.now();
+  startInputLevels(stream,handoffTiming);
   pc=new RTCPeerConnection();
   pc.ontrack=event=>{$("remoteAudio").srcObject=event.streams[0];log("remote_audio_track")};
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};

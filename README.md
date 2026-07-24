@@ -212,14 +212,18 @@ python -m src.evals.realtime_handoff live
 RT001 needs no fresh human speech: it replays the saved wake, proves the Python
 wake microphone closes before browser microphone request/acquisition and
 `host_connected`, explicitly stops the session, and proves wake ownership is
-restored. Version 3 also reports rounded millisecond attribution for confirmed
+restored. Version 4 also reports rounded millisecond attribution for confirmed
 wake, local acknowledgement, handoff dispatch, ephemeral-token acquisition,
 browser microphone acquisition, peer/SDP setup, WebRTC negotiation, and
 Realtime session configuration. Peer/SDP setup is further decomposed into
 microphone reporting, audio-analysis setup, PeerConnection setup, offer
 creation, and local-description setup. The peer subphases reconcile to the
-aggregate but are not counted again in the browser-ready total. These values
-are diagnostic measurements, not a latency pass/fail threshold or a stable
+aggregate but are not counted again in the browser-ready total.
+Audio-analysis setup is further split around prior monitor cleanup,
+`AudioContext` construction, analyser setup, media-stream-source creation,
+source connection, and remaining monitor startup. These nested values reconcile
+to the audio-analysis aggregate without being counted twice. These values are
+diagnostic measurements, not a latency pass/fail threshold or a stable
 percentile baseline. The command
 still opens the real microphone, connects to OpenAI, and can incur Realtime
 charges, so each live-host run requires explicit authorization. It writes only
@@ -265,11 +269,16 @@ python -m src.evals.realtime_close_recovery live
 python -m src.evals.realtime_close_recovery offline path/to/observation.json
 ```
 
+RT004 version 2 also requires one complete handoff timing report for each
+session and returns their sanitized Web Audio subphase breakdowns plus the
+first-minus-second audio-analysis duration. This supports a same-page
+cold-start comparison without turning latency into a pass/fail oracle.
 Routine RT004 runs require no fresh speech and do not ask or judge a user
 question. The live-host command still opens the built-in microphone, connects
 to OpenAI twice, and may incur Realtime charges, so every execution requires
 fresh explicit microphone/OpenAI/cost authorization. Evidence contains only
-bounded lifecycle metadata; private wake audio and content remain Git-ignored.
+bounded lifecycle and timing metadata; private wake audio and content remain
+Git-ignored.
 
 `RT003` covers deliberate near-end interruption during a long answer. Its
 versioned contract is

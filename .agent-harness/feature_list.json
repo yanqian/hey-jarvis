@@ -1498,6 +1498,35 @@
       "depends_on": [
         "F067"
       ]
+    },
+    {
+      "id": "F069",
+      "title": "Attribute Realtime Web Audio cold-start latency",
+      "description": "Split input-level audio-analysis setup into synchronous Web Audio operations and compare two consecutive sessions in one armed Chrome page without changing runtime behavior.",
+      "acceptance": [
+        "The browser retains audio_analysis_setup_ms and adds rounded non-negative integer durations for prior input-level cleanup, AudioContext construction, analyser construction/configuration, MediaStreamSource creation, source connection, and remaining monitor startup at explicit unchanged code boundaries.",
+        "The coordinator and shared sanitizer require the complete bounded internal Web Audio timing set, reconcile it to audio_analysis_setup_ms within rounding tolerance, preserve peer_setup_ms and top-level total checks without double-counting, reject malformed, missing, negative, excessive, duplicate, stale, or inconsistent values, and retain no private audio, transcript, answer, credential, SDP, ICE, address, request, provider, or high-frequency sample data.",
+        "RT001 exposes the finer Web Audio breakdown while preserving all F068 timing and ownership oracles, and RT004 evolves to require one valid timing report for each of two distinct consecutive sessions in the same armed page and return a sanitized session-A/session-B comparison while preserving both cleanup cycles and final wake recovery.",
+        "One freshly authorized automatic built-in-device RT004 live-host run produces two honest internal Web Audio breakdowns, supports or weakens the cold-start hypothesis without claiming a stable percentile baseline, and restores wake ownership after both sessions.",
+        "Focused browser/coordinator/RT001/RT004/privacy/documentation tests, RT002-RT003 regressions, JavaScript syntax, Realtime fake smoke, full unittest discovery, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without moving, deferring, prewarming, reusing, removing, or retuning any Realtime operation."
+      ],
+      "evals": [
+        {
+          "scenario": "RT004 same-page Web Audio cold-start comparison",
+          "required_evidence": [
+            "offline",
+            "live_host"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F068"
+      ]
     }
   ]
 }

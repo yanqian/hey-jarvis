@@ -49,10 +49,21 @@ PEER_SETUP_TIMING_FIELDS = frozenset(
         "local_description_ms",
     }
 )
+AUDIO_ANALYSIS_TIMING_FIELDS = frozenset(
+    {
+        "input_level_cleanup_ms",
+        "audio_context_creation_ms",
+        "analyser_setup_ms",
+        "media_stream_source_creation_ms",
+        "source_connection_ms",
+        "monitor_startup_ms",
+    }
+)
 HANDOFF_TIMING_FIELDS = frozenset(
     {
         *HANDOFF_PHASE_TIMING_FIELDS,
         *PEER_SETUP_TIMING_FIELDS,
+        *AUDIO_ANALYSIS_TIMING_FIELDS,
         "total_browser_ready_ms",
     }
 )
@@ -538,6 +549,12 @@ def _sanitize_handoff_timing(detail: dict[str, object]) -> dict[str, int]:
     peer_total = sum(safe[field] for field in PEER_SETUP_TIMING_FIELDS)
     if abs(peer_total - safe["peer_setup_ms"]) > len(PEER_SETUP_TIMING_FIELDS):
         raise HandoffError("Peer setup timing subphases did not match the aggregate")
+    audio_analysis_total = sum(safe[field] for field in AUDIO_ANALYSIS_TIMING_FIELDS)
+    if (
+        abs(audio_analysis_total - safe["audio_analysis_setup_ms"])
+        > len(AUDIO_ANALYSIS_TIMING_FIELDS)
+    ):
+        raise HandoffError("Audio analysis timing subphases did not match the aggregate")
     return safe
 
 
