@@ -212,9 +212,14 @@ python -m src.evals.realtime_handoff live
 RT001 needs no fresh human speech: it replays the saved wake, proves the Python
 wake microphone closes before browser microphone request/acquisition and
 `host_connected`, explicitly stops the session, and proves wake ownership is
-restored. The command still opens the real microphone, connects to OpenAI, and
-can incur Realtime charges, so each live-host run requires explicit
-authorization. It writes only bounded lifecycle metadata to
+restored. Version 2 also reports rounded millisecond attribution for confirmed
+wake, local acknowledgement, handoff dispatch, ephemeral-token acquisition,
+browser microphone acquisition, peer/SDP setup, WebRTC negotiation, and
+Realtime session configuration. These values are diagnostic measurements, not
+a latency pass/fail threshold or a stable percentile baseline. The command
+still opens the real microphone, connects to OpenAI, and can incur Realtime
+charges, so each live-host run requires explicit authorization. It writes only
+bounded lifecycle and timing metadata to
 `tmp/realtime-evals/RT001-evidence.json`; audio, transcripts, credentials, SDP,
 provider bodies, and tool content are excluded. The same oracle can evaluate a
 saved sanitized observation with no live resources:

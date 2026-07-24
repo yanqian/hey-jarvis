@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.evals.realtime_common import (
+    HANDOFF_TIMING_FIELDS,
     PROJECT_ROOT,
     RealtimeRunFailure,
     RealtimeRunnerBase,
@@ -21,9 +22,14 @@ from src.evals.realtime_common import (
 DEFAULT_SCENARIO_PATH = PROJECT_ROOT / "evals" / "realtime" / "scenarios" / "RT001.json"
 DEFAULT_EVIDENCE_PATH = PROJECT_ROOT / "tmp" / "realtime-evals" / "RT001-evidence.json"
 ORDERED_EVENTS = (
+    "wake_confirmed",
     "wake_microphone_closed",
+    "ack_started",
+    "ack_completed",
+    "handoff_queued",
     "host_microphone_requested",
     "host_microphone_acquired",
+    "host_handoff_timing",
     "host_connected",
     "host_stopped",
     "wake_microphone_reopened",
@@ -109,7 +115,17 @@ def evaluate_observation(
     session_lifecycle = {
         event.get("session_id")
         for event in events
-        if isinstance(event, dict) and event.get("type") in ORDERED_EVENTS[1:]
+        if isinstance(event, dict)
+        and event.get("type")
+        in {
+            "handoff_queued",
+            "host_microphone_requested",
+            "host_microphone_acquired",
+            "host_handoff_timing",
+            "host_connected",
+            "host_stopped",
+            "wake_microphone_reopened",
+        }
     }
     if session_lifecycle != {session_id}:
         raise RealtimeScenarioError("RT001 observed stale or wrong-session lifecycle events")
@@ -118,25 +134,91 @@ def evaluate_observation(
         raise RealtimeScenarioError("RT001 active snapshot has no event list")
     _require_ordered_lifecycle(
         active_events,
-        ORDERED_EVENTS[:4],
+        ORDERED_EVENTS[:-2],
         session_id,
         snapshot="active",
     )
     active_sessions = {
         event.get("session_id")
         for event in active_events
-        if isinstance(event, dict) and event.get("type") in ORDERED_EVENTS[1:4]
+        if isinstance(event, dict)
+        and event.get("type")
+        in {
+            "handoff_queued",
+            "host_microphone_requested",
+            "host_microphone_acquired",
+            "host_handoff_timing",
+            "host_connected",
+        }
     }
     if active_sessions != {session_id}:
         raise RealtimeScenarioError(
             "RT001 active snapshot observed stale or wrong-session lifecycle events"
         )
+    timing = _timing_breakdown(events, session_id)
     return {
         "result": "passed",
         "session_id": session_id,
         "exclusive_handoff": True,
         "connected": True,
         "recovered_to_wake": True,
+        "timing_ms": timing,
+    }
+
+
+def _timing_breakdown(events: list[object], session_id: str) -> dict[str, int]:
+    by_type: dict[str, dict[str, object]] = {}
+    required = ORDERED_EVENTS[:9]
+    for event_type in required:
+        matches = [
+            event
+            for event in events
+            if isinstance(event, dict)
+            and event.get("type") == event_type
+            and (
+                event_type
+                in {"wake_confirmed", "wake_microphone_closed", "ack_started", "ack_completed"}
+                or event.get("session_id") == session_id
+            )
+        ]
+        if len(matches) != 1:
+            raise RealtimeScenarioError(f"RT001 timing requires exactly one {event_type}")
+        by_type[event_type] = matches[0]
+    browser = by_type["host_handoff_timing"]
+    missing = [field for field in HANDOFF_TIMING_FIELDS if field not in browser]
+    if missing:
+        raise RealtimeScenarioError(
+            f"RT001 timing is missing browser fields: {', '.join(sorted(missing))}"
+        )
+    browser_values: dict[str, int] = {}
+    for field in HANDOFF_TIMING_FIELDS:
+        value = browser.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 60_000:
+            raise RealtimeScenarioError(f"RT001 timing field {field} was invalid")
+        browser_values[field] = value
+    phase_total = sum(
+        value for field, value in browser_values.items() if field != "total_browser_ready_ms"
+    )
+    if abs(phase_total - browser_values["total_browser_ready_ms"]) > len(HANDOFF_TIMING_FIELDS):
+        raise RealtimeScenarioError("RT001 browser timing phases did not match the total")
+
+    def elapsed(start: str, end: str) -> int:
+        value = int(by_type[end]["at_ms"]) - int(by_type[start]["at_ms"])
+        if value < 0 or value > 60_000:
+            raise RealtimeScenarioError(f"RT001 timing interval {start} to {end} was invalid")
+        return value
+
+    handoff_to_ready = elapsed("handoff_queued", "host_connected")
+    if browser_values["total_browser_ready_ms"] > handoff_to_ready:
+        raise RealtimeScenarioError("RT001 browser timing exceeded coordinator handoff-to-ready time")
+    return {
+        "wake_to_ack_start_ms": elapsed("wake_confirmed", "ack_started"),
+        "acknowledgement_ms": elapsed("ack_started", "ack_completed"),
+        "ack_to_handoff_ms": elapsed("ack_completed", "handoff_queued"),
+        "handoff_dispatch_ms": handoff_to_ready - browser_values["total_browser_ready_ms"],
+        "handoff_to_ready_ms": handoff_to_ready,
+        "wake_to_ready_ms": elapsed("wake_confirmed", "host_connected"),
+        **browser_values,
     }
 
 
@@ -155,7 +237,8 @@ def _require_ordered_lifecycle(
             if isinstance(event, dict)
             and event.get("type") == event_type
             and (
-                event_type == "wake_microphone_closed"
+                event_type
+                in {"wake_confirmed", "wake_microphone_closed", "ack_started", "ack_completed"}
                 or event.get("session_id") == session_id
             )
         ]

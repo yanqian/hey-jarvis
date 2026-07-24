@@ -21,6 +21,15 @@ from src.evals.realtime_handoff import (
 
 
 SESSION = "session-rt001"
+TIMING = {
+    "command_to_token_ms": 1,
+    "token_ms": 2,
+    "microphone_ms": 3,
+    "peer_setup_ms": 2,
+    "negotiation_ms": 5,
+    "session_configuration_ms": 2,
+    "total_browser_ready_ms": 15,
+}
 
 
 def event(at_ms: int, event_type: str, session_id: str | None = SESSION, **detail: object):
@@ -32,9 +41,14 @@ def event(at_ms: int, event_type: str, session_id: str | None = SESSION, **detai
 
 def reports() -> tuple[dict[str, object], dict[str, object]]:
     active_events = [
-        event(10, "wake_microphone_closed", None, reason="handoff"),
-        event(20, "host_microphone_requested"),
-        event(30, "host_microphone_acquired"),
+        event(10, "wake_confirmed", None),
+        event(11, "wake_microphone_closed", None, reason="handoff"),
+        event(12, "ack_started", None),
+        event(22, "ack_completed", None),
+        event(23, "handoff_queued"),
+        event(24, "host_microphone_requested"),
+        event(25, "host_microphone_acquired"),
+        event(39, "host_handoff_timing", **TIMING),
         event(40, "host_connected"),
     ]
     active = {
@@ -67,7 +81,7 @@ class RT001ContractTests(unittest.TestCase):
     def test_scenario_matches_authoritative_no_human_matrix(self):
         scenario = load_scenario()
         self.assertEqual(scenario["id"], "RT001")
-        self.assertEqual(scenario["version"], 1)
+        self.assertEqual(scenario["version"], 2)
         self.assertEqual(scenario["human_actions"], [])
         self.assertEqual(scenario["evidence"]["required"], ["offline", "live_host"])
         self.assertNotIn("response", json.dumps(scenario["oracles"]))
@@ -126,6 +140,37 @@ class RT001OracleTests(unittest.TestCase):
         self.assertTrue(result["exclusive_handoff"])
         self.assertTrue(result["connected"])
         self.assertTrue(result["recovered_to_wake"])
+        self.assertEqual(result["timing_ms"]["acknowledgement_ms"], 10)
+        self.assertEqual(result["timing_ms"]["handoff_dispatch_ms"], 2)
+        self.assertEqual(result["timing_ms"]["wake_to_ready_ms"], 30)
+
+    def test_timing_fields_fail_closed_without_weakening_lifecycle(self):
+        for name, mutate, expected in (
+            (
+                "missing",
+                lambda timing: timing.pop("token_ms"),
+                "missing browser fields",
+            ),
+            (
+                "negative",
+                lambda timing: timing.__setitem__("token_ms", -1),
+                "token_ms was invalid",
+            ),
+            (
+                "mismatch",
+                lambda timing: timing.__setitem__("total_browser_ready_ms", 1),
+                "did not match",
+            ),
+        ):
+            with self.subTest(name=name):
+                observation = passing_observation()
+                timing = next(
+                    item
+                    for item in observation["final_report"]["events"]
+                    if item["type"] == "host_handoff_timing"
+                )
+                mutate(timing)
+                self.assert_failure(observation, expected)
 
     def test_missing_duplicated_and_misordered_events_fail_precisely(self):
         for name, mutate, expected in (
@@ -138,7 +183,7 @@ class RT001OracleTests(unittest.TestCase):
             ),
             (
                 "duplicate",
-                lambda events: events.insert(3, deepcopy(events[2])),
+                lambda events: events.insert(7, deepcopy(events[6])),
                 "duplicated host_microphone_acquired",
             ),
             (
@@ -156,7 +201,7 @@ class RT001OracleTests(unittest.TestCase):
 
     def test_stale_wrong_session_and_cleanup_defect_fail(self):
         stale = passing_observation()
-        stale["final_report"]["events"][3]["session_id"] = "session-stale"
+        stale["final_report"]["events"][8]["session_id"] = "session-stale"
         self.assert_failure(stale, "missing host_connected")
 
         extra = passing_observation()
@@ -178,12 +223,12 @@ class RT001OracleTests(unittest.TestCase):
 
     def test_active_snapshot_rejects_wrong_session_and_duplicate_connection(self):
         wrong = passing_observation()
-        wrong["active_report"]["events"][3]["session_id"] = "session-stale"
+        wrong["active_report"]["events"][8]["session_id"] = "session-stale"
         self.assert_failure(wrong, "active snapshot is missing host_connected")
 
         duplicated = passing_observation()
         duplicated["active_report"]["events"].append(
-            deepcopy(duplicated["active_report"]["events"][3])
+            deepcopy(duplicated["active_report"]["events"][8])
         )
         self.assert_failure(duplicated, "active snapshot duplicated host_connected")
 
@@ -208,10 +253,24 @@ class FakeRT001Host:
         self.play_calls += 1
         self.state = "host_starting"
         self.mic_open = False
+        self.add("wake_confirmed", None)
         self.add("wake_microphone_closed", None, reason="handoff")
+        self.add("ack_started", None)
+        self.add("ack_completed", None)
+        self.add("handoff_queued")
         self.add("host_microphone_requested")
         self.add("host_microphone_acquired")
         if self.connect:
+            self.add("host_handoff_timing", **{
+                **TIMING,
+                "total_browser_ready_ms": 5,
+                "command_to_token_ms": 0,
+                "token_ms": 1,
+                "microphone_ms": 1,
+                "peer_setup_ms": 1,
+                "negotiation_ms": 1,
+                "session_configuration_ms": 1,
+            })
             self.add("host_connected")
             self.state = "host_active"
 

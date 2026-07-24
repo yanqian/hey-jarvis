@@ -114,24 +114,25 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F066 - Match Realtime replies to the current user language.
+F067 - Attribute Realtime wake-to-ready latency.
 
-F066 has been completed through evaluator-gated fast work, newly authorized
-built-in-device live-human acceptance, and separate cold-start evaluator
-approval. Realtime now receives a structured current-turn language policy:
-Mandarin Chinese maps to concise natural Simplified Chinese, English maps to
-English, and the current user turn overrides prior conversation plus English
-developer, tool-definition, and tool-output text. Explicit translation,
-spelling, pronunciation, language-practice, mixed-language, and requested
-whole-response-language cases remain bounded exceptions. The policy preserves
-both existing tools and F065 farewell/no-reply behavior. In one continuous
-accepted session, the human confirmed a Chinese first answer, an English second
-answer, and no reply after farewell, followed by clean wake recovery. Final
-recovery passes with 335 project tests. Coding evidence is in
-`.agent-harness/runs/F066-fast-coding.md`, live evidence is in
-`.agent-harness/runs/F066-live-acceptance.md`, and approval is recorded as
-`EVAL_PASS: F066` in
-`.agent-harness/runs/20260724T040000Z-F066-evaluation-pass.md`.
+F067 has been completed through evaluator-gated fast work, one newly authorized
+automatic RT001 live-host run, and separate cold-start evaluator approval.
+Python and browser timing now attribute confirmed wake, local acknowledgement,
+handoff dispatch, ephemeral-token acquisition, microphone acquisition,
+peer/SDP setup, WebRTC negotiation, and session configuration without changing
+their ordering or tuning. RT001 version 2 preserves exclusive microphone
+ownership and cleanup oracles while returning a privacy-bounded breakdown with
+no latency threshold. The accepted sample measured `8711 ms`
+confirmed-wake-to-ready: `1375 ms` acknowledgement and `7217 ms`
+handoff-to-ready, including `1034 ms` token, `115 ms` microphone, `3053 ms`
+peer/SDP, `1905 ms` negotiation, and `1056 ms` session configuration. This is
+diagnostic evidence, not an SLO or stable percentile. Final recovery passes
+with 337 project tests. Coding evidence is in
+`.agent-harness/runs/F067-fast-coding.md`, live evidence is in
+`.agent-harness/runs/F067-live-rt001.md`, and approval is recorded as
+`EVAL_PASS: F067` in
+`.agent-harness/runs/20260724T075326Z-F067-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -199,11 +200,10 @@ No feature is currently selected.
 
 ## Next Feature
 
-No later feature is currently planned. A distinct live observation from F066
-shows that the first user speech began about 407 ms before `host_connected`
-during a roughly 3.15-second wake-to-connect interval. Diagnose whether the
-reported delayed wake is wake recognition, browser handoff, or Realtime
-connection readiness before planning a corrective feature.
+No later feature is currently planned. If lower Realtime wake-to-ready latency
+is selected next, plan it as a separate optimization feature against F067's
+measured dominant peer/SDP and negotiation phases, with token/ACK overlap as a
+separate ordering and echo-risk decision.
 
 ## Recently Completed
 

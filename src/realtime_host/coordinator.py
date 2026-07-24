@@ -26,8 +26,21 @@ MAX_TOOL_ARGUMENT_CHARS = 512
 MAX_CALCULATOR_EXPRESSION_CHARS = 200
 MAX_INPUT_LEVEL_SAMPLE_COUNT = 10
 MAX_FIXTURE_AUDIO_BYTES = 384_000
+MAX_HANDOFF_TIMING_MS = 60_000
 FIXTURE_AUDIO_NAMES = frozenset({"turn-1", "turn-2"})
 INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
+LOCAL_TIMING_MARKERS = frozenset({"wake_confirmed", "ack_started", "ack_completed"})
+HANDOFF_TIMING_FIELDS = frozenset(
+    {
+        "command_to_token_ms",
+        "token_ms",
+        "microphone_ms",
+        "peer_setup_ms",
+        "negotiation_ms",
+        "session_configuration_ms",
+        "total_browser_ready_ms",
+    }
+)
 NEGOTIATION_DIAGNOSTIC_FIELDS = frozenset(
     {
         "errorType",
@@ -134,6 +147,7 @@ class HandoffCoordinator:
         self._session_configured = False
         self._connected_at: float | None = None
         self._last_activity_at: float | None = None
+        self._handoff_timing_received = False
         self._next_command_id = 1
         self._commands: list[HostCommand] = []
         self._evidence: list[dict[str, object]] = []
@@ -184,6 +198,14 @@ class HandoffCoordinator:
                 self._wake_lease.close()
                 self._record("wake_microphone_closed", reason="pre_capture_acknowledgement")
 
+    def record_local_timing_marker(self, marker: str) -> None:
+        """Record one privacy-safe local wake/ack boundary."""
+
+        with self._lock:
+            if marker not in LOCAL_TIMING_MARKERS:
+                raise HandoffError("Local timing marker was invalid")
+            self._record(marker)
+
     def restore_wake_microphone(self, reason: str) -> None:
         with self._lock:
             if self._state == HandoffState.WAKE_OWNED and self._session_id is None and not self._wake_lease.is_open:
@@ -221,9 +243,11 @@ class HandoffCoordinator:
             self._session_configured = False
             self._connected_at = None
             self._last_activity_at = self._clock()
+            self._handoff_timing_received = False
             self._seen_transcription_items.clear()
             self._handled_tool_calls.clear()
             self._state = HandoffState.HOST_STARTING
+            self._record("handoff_queued", session_id=session_id)
             self._enqueue("start", session_id)
             return session_id
 
@@ -300,6 +324,11 @@ class HandoffCoordinator:
                 return self._handle_tool_call(session_id, detail)
             if event_type == "input_level":
                 safe_detail = _sanitize_input_level(detail)
+            elif event_type == "handoff_timing":
+                if self._handoff_timing_received:
+                    raise HandoffError("Handoff timing was already reported")
+                safe_detail = _sanitize_handoff_timing(detail)
+                self._handoff_timing_received = True
             elif event_type == "error" and detail.get("reason") == "webrtc_negotiation_failed":
                 safe_detail = _sanitize_negotiation_error(detail)
             else:
@@ -448,6 +477,7 @@ class HandoffCoordinator:
         self._session_configured = False
         self._connected_at = None
         self._last_activity_at = None
+        self._handoff_timing_received = False
         self._seen_transcription_items.clear()
         self._handled_tool_calls.clear()
         if not self._wake_lease.is_open:
@@ -474,6 +504,23 @@ class HandoffCoordinator:
         entry = {"at_ms": round(self._clock() * 1000), "type": event_type, **safe_detail}
         self._evidence.append(entry)
         self._evidence = self._evidence[-MAX_EVIDENCE_EVENTS:]
+
+
+def _sanitize_handoff_timing(detail: dict[str, object]) -> dict[str, int]:
+    if set(detail) != HANDOFF_TIMING_FIELDS:
+        raise HandoffError("Handoff timing fields were incomplete or unsupported")
+    safe: dict[str, int] = {}
+    for field in HANDOFF_TIMING_FIELDS:
+        value = detail.get(field)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise HandoffError("Handoff timing values must be integer milliseconds")
+        if value < 0 or value > MAX_HANDOFF_TIMING_MS:
+            raise HandoffError("Handoff timing value was outside the allowed range")
+        safe[field] = value
+    phase_total = sum(safe[field] for field in HANDOFF_TIMING_FIELDS if field != "total_browser_ready_ms")
+    if abs(phase_total - safe["total_browser_ready_ms"]) > len(HANDOFF_TIMING_FIELDS):
+        raise HandoffError("Handoff timing phases did not match the total")
+    return safe
 
 
 def _sanitize_input_level(detail: dict[str, object]) -> dict[str, object]:

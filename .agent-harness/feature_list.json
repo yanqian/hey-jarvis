@@ -1439,6 +1439,36 @@
         "F058",
         "F065"
       ]
+    },
+    {
+      "id": "F067",
+      "title": "Attribute Realtime wake-to-ready latency",
+      "description": "Add privacy-bounded phase timing and extend RT001 to show where confirmed-wake-to-connected time is spent without changing or optimizing the Realtime path.",
+      "acceptance": [
+        "Python records rounded monotonic markers for confirmed wake, local acknowledgement start/completion, and handoff queueing, while the browser emits exactly one active-session timing summary at session.updated covering command receipt, token acquisition, microphone acquisition, peer/SDP setup, WebRTC negotiation, session configuration, and total browser readiness.",
+        "The coordinator accepts only allowlisted finite non-negative integer millisecond fields within a conservative bound for the active session, rejects malformed, incomplete, duplicate, or stale timing reports, and retains no audio, transcript, answer, request identity, provider payload, SDP, credential, token, or high-frequency sample data.",
+        "RT001 evolves to require the complete timing surface, preserve its existing exclusive microphone ownership/connection/cleanup oracles, and return a sanitized end-to-end and phase breakdown without imposing or weakening a latency pass/fail threshold.",
+        "One newly authorized automatic built-in-device RT001 live-host run produces an honest sanitized phase breakdown and restores wake ownership; the result is diagnostic evidence for planning a later optimization rather than proof of a stable percentile baseline.",
+        "Focused controller/coordinator/browser/RT001/privacy/documentation tests, RT002-RT004 and Realtime fake-smoke regressions, JavaScript syntax, full unittest discovery, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing runtime ordering, model, voice, VAD, output volume, acknowledgement, wake tuning, timeouts, or user-turn behavior."
+      ],
+      "evals": [
+        {
+          "scenario": "RT001 wake-to-ready latency attribution",
+          "required_evidence": [
+            "offline",
+            "live_host"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F062",
+        "F066"
+      ]
     }
   ]
 }

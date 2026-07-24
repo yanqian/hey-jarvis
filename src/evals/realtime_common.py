@@ -13,12 +13,28 @@ from typing import Callable
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "evals" / "realtime" / "scenario.schema.json"
 DEFAULT_FIXTURE_ROOT = PROJECT_ROOT / "tmp" / "realtime-fixtures"
-SAFE_EVENT_FIELDS = frozenset({"type", "at_ms", "session_id", "reason"})
+HANDOFF_TIMING_FIELDS = frozenset(
+    {
+        "command_to_token_ms",
+        "token_ms",
+        "microphone_ms",
+        "peer_setup_ms",
+        "negotiation_ms",
+        "session_configuration_ms",
+        "total_browser_ready_ms",
+    }
+)
+SAFE_EVENT_FIELDS = frozenset({"type", "at_ms", "session_id", "reason", *HANDOFF_TIMING_FIELDS})
 SAFE_EVENT_TYPES = frozenset(
     {
+        "wake_confirmed",
         "wake_microphone_closed",
+        "ack_started",
+        "ack_completed",
+        "handoff_queued",
         "host_microphone_requested",
         "host_microphone_acquired",
+        "host_handoff_timing",
         "host_connected",
         "host_fixture_submitted",
         "host_response_created",
@@ -140,6 +156,11 @@ def sanitize_report(report: dict[str, object]) -> dict[str, object]:
             safe["reason"] = reason
         elif "reason" in event:
             safe["reason"] = "redacted"
+        if event.get("type") == "host_handoff_timing":
+            for field in HANDOFF_TIMING_FIELDS:
+                value = event.get(field)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    safe[field] = value
         safe_events.append(safe)
     state = report.get("state")
     return {

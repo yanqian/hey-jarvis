@@ -93,6 +93,7 @@ class RealtimeControllerTests(unittest.TestCase):
         def play_ack() -> None:
             self.assertFalse(lease.is_open)
             acknowledgements.append("played")
+            clock.advance(0.35)
 
         def sleep(seconds: float) -> None:
             nonlocal active_polls
@@ -130,6 +131,17 @@ class RealtimeControllerTests(unittest.TestCase):
         self.assertTrue(result.recovered_to_wake)
         self.assertTrue(lease.is_open)
         self.assertEqual(detector.reset_calls, 1)
+        events = coordinator.report()["events"]
+        types = [event["type"] for event in events]
+        for before, after in (
+            ("wake_confirmed", "wake_microphone_closed"),
+            ("wake_microphone_closed", "ack_started"),
+            ("ack_started", "ack_completed"),
+            ("ack_completed", "handoff_queued"),
+        ):
+            self.assertLess(types.index(before), types.index(after))
+        markers = {event["type"]: event["at_ms"] for event in events}
+        self.assertEqual(markers["ack_completed"] - markers["ack_started"], 350)
 
     def test_max_duration_wins_despite_continuing_activity(self):
         clock, _lease, coordinator, detector = build_runtime()

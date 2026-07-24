@@ -358,6 +358,15 @@ class RealtimeHostTests(unittest.TestCase):
             'type:"input_audio"',
             'hostEvent("fixture_submitted")',
             'command.type==="fixture_audio"',
+            "handoffTimingSummary",
+            'hostEvent("handoff_timing"',
+            "command_to_token_ms",
+            "token_ms",
+            "microphone_ms",
+            "peer_setup_ms",
+            "negotiation_ms",
+            "session_configuration_ms",
+            "total_browser_ready_ms",
         ):
             self.assertIn(text, javascript)
         self.assertNotIn("JSON.stringify(payload)", javascript.split("async function negotiationFailure", 1)[1].split("function flushInputLevels", 1)[0])
@@ -475,6 +484,56 @@ class RealtimeHostTests(unittest.TestCase):
         for detail in invalid_details:
             with self.subTest(detail=detail), self.assertRaisesRegex(HandoffError, "Input-level"):
                 coordinator.host_event("input_level", session_id, **detail)
+
+    def test_handoff_timing_is_complete_bounded_private_and_single_shot(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        coordinator.record_local_timing_marker("wake_confirmed")
+        coordinator.record_local_timing_marker("ack_started")
+        coordinator.record_local_timing_marker("ack_completed")
+        session_id = coordinator.begin_handoff()
+        timing = {
+            "command_to_token_ms": 4,
+            "token_ms": 200,
+            "microphone_ms": 300,
+            "peer_setup_ms": 20,
+            "negotiation_ms": 900,
+            "session_configuration_ms": 100,
+            "total_browser_ready_ms": 1524,
+        }
+        coordinator.host_event(
+            "handoff_timing",
+            session_id,
+            **timing,
+        )
+        recorded = next(
+            event
+            for event in coordinator.report()["events"]
+            if event["type"] == "host_handoff_timing"
+        )
+        self.assertEqual({field: recorded[field] for field in timing}, timing)
+        report_text = json.dumps(coordinator.report())
+        self.assertNotIn('"transcript":', report_text)
+        self.assertNotIn('"token":', report_text)
+        with self.assertRaisesRegex(HandoffError, "already reported"):
+            coordinator.host_event("handoff_timing", session_id, **timing)
+        with self.assertRaisesRegex(HandoffError, "Local timing marker"):
+            coordinator.record_local_timing_marker("private_marker")
+
+        invalid = (
+            ({key: value for key, value in timing.items() if key != "token_ms"}, "incomplete"),
+            ({**timing, "transcript": "private", "token": "secret"}, "unsupported"),
+            ({**timing, "token_ms": -1}, "outside"),
+            ({**timing, "token_ms": True}, "integer"),
+            ({**timing, "total_browser_ready_ms": 1}, "match"),
+        )
+        for detail, expected in invalid:
+            with self.subTest(expected=expected):
+                other, _other_lease = self.build_coordinator()
+                other.host_event("armed")
+                other_session = other.begin_handoff()
+                with self.assertRaisesRegex(HandoffError, expected):
+                    other.host_event("handoff_timing", other_session, **detail)
 
     def test_negotiation_error_retains_only_strict_safe_metadata(self):
         coordinator, _lease = self.build_coordinator()

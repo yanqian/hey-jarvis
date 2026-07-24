@@ -3,7 +3,7 @@
 const AUDIO_CONSTRAINTS={echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1};
 const REMOTE_AUDIO_VOLUME=0.1;
 const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
-let armed=false,lastCommand=0,pc=null,dc=null,stream=null,sessionId=null,sessionConfig=null,events=[];
+let armed=false,lastCommand=0,pc=null,dc=null,stream=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null;
 let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
@@ -107,6 +107,24 @@ function sendSessionUpdate(){
   dc.send(JSON.stringify({type:"session.update",session:{type:"realtime",model:sessionConfig.model,instructions,output_modalities:["audio"],audio:{input,output:{voice:sessionConfig.voice}},tools,tool_choice:"auto"}}));
 }
 
+function elapsedMs(start,end){return Math.max(0,Math.round(end-start));}
+function handoffTimingSummary(readyAt){
+  const timing=handoffTiming;
+  if(!timing)throw new Error("handoff timing is unavailable");
+  const summary={
+    command_to_token_ms:elapsedMs(timing.commandReceived,timing.tokenStarted),
+    token_ms:elapsedMs(timing.tokenStarted,timing.tokenAcquired),
+    microphone_ms:elapsedMs(timing.microphoneStarted,timing.microphoneAcquired),
+    peer_setup_ms:elapsedMs(timing.microphoneAcquired,timing.negotiationStarted),
+    negotiation_ms:elapsedMs(timing.negotiationStarted,timing.negotiationCompleted),
+    session_configuration_ms:elapsedMs(timing.negotiationCompleted,readyAt),
+    total_browser_ready_ms:elapsedMs(timing.commandReceived,readyAt),
+  };
+  const phases=Object.entries(summary).filter(([key])=>key!=="total_browser_ready_ms");
+  summary.total_browser_ready_ms=phases.reduce((total,[,value])=>total+value,0);
+  return summary;
+}
+
 async function forwardToolCall(item){
   const result=await hostEvent("tool_call",{call_id:item.call_id,name:item.name,arguments:item.arguments});
   if(result.status==="stopping"){await stop("end_phrase");return true;}
@@ -118,7 +136,7 @@ async function handleServerEvent(event){
   if(!tracked.includes(event.type))return;
   log(event.type,{status:event.response?.status});
   if(event.type==="session.created"){await hostEvent("session_created");sendSessionUpdate();}
-  if(event.type==="session.updated"){await hostEvent("connected");$("status").textContent="Live · follow-up speech stays in this session";}
+  if(event.type==="session.updated"){const readyAt=performance.now();await hostEvent("handoff_timing",handoffTimingSummary(readyAt));await hostEvent("connected");$("status").textContent="Live · follow-up speech stays in this session";}
   if(event.type==="input_audio_buffer.speech_started")await hostEvent("speech_started");
   if(event.type==="input_audio_buffer.speech_stopped")await hostEvent("speech_stopped");
   if(event.type==="response.created"){flushInputLevels();assistantSpeaking=true;await hostEvent("response_created");}
@@ -139,12 +157,16 @@ async function handleServerEvent(event){
 
 async function start(command){
   if(!armed||pc)throw new Error("host is not ready for start");
+  handoffTiming={commandReceived:performance.now()};
   sessionId=command.session_id;$("status").textContent="Python released wake microphone · connecting";
   await hostEvent("microphone_requested");
+  handoffTiming.tokenStarted=performance.now();
   const token=await fetch("/token",{method:"POST"}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.message||data.error);return data;});
+  handoffTiming.tokenAcquired=performance.now();handoffTiming.microphoneStarted=handoffTiming.tokenAcquired;
   sessionConfig=token.session;
   $("remoteAudio").volume=Number.isFinite(sessionConfig.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;
   stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
+  handoffTiming.microphoneAcquired=performance.now();
   const track=stream.getAudioTracks()[0],settings=track.getSettings();renderSettings(settings);
   await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
   startInputLevels(stream);
@@ -155,10 +177,11 @@ async function start(command){
   dc=pc.createDataChannel("oai-events");
   dc.onmessage=event=>{let data;try{data=JSON.parse(event.data)}catch{return}handleServerEvent(data).catch(()=>{});};
   dc.onclose=()=>{if(sessionId)stop("data_channel_closed").catch(()=>{});};
-  const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+  const offer=await pc.createOffer();await pc.setLocalDescription(offer);handoffTiming.negotiationStarted=performance.now();
   const answer=await fetch("https://api.openai.com/v1/realtime/calls",{method:"POST",body:offer.sdp,headers:{Authorization:`Bearer ${token.value}`,"Content-Type":"application/sdp"}});
   if(!answer.ok)throw await negotiationFailure(answer);
   await pc.setRemoteDescription({type:"answer",sdp:await answer.text()});
+  handoffTiming.negotiationCompleted=performance.now();
   await hostEvent("transport_connected");
   $("status").textContent="Connecting · waiting for session.created";$("long").disabled=false;$("stop").disabled=false;log("transport_connected");
 }
@@ -168,7 +191,7 @@ async function stop(reason="command"){
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}
-  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;sessionConfig=null;
+  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;sessionConfig=null;handoffTiming=null;
   $("long").disabled=true;$("stop").disabled=true;log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
   $("status").textContent="Armed · Python wake microphone restored";

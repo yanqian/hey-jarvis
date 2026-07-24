@@ -1335,3 +1335,83 @@ shared implementation and verification surface. Fixed-language configuration,
 automatic language telemetry, transcript retention, translation mode, and
 additional language-specific product policies would be independently
 verifiable features and remain excluded.
+
+### Realtime Wake-to-Ready Latency Attribution
+
+Goal: determine where time is spent between a confirmed local wake and a fully
+configured Realtime session, so later optimization targets measured bottlenecks
+instead of guessing or conflating connection readiness with wake recognition.
+
+Included scope: privacy-bounded monotonic timing markers for confirmed wake,
+local acknowledgement start/end, handoff command queueing, browser command
+receipt, ephemeral-token acquisition, browser microphone acquisition, peer/SDP
+setup, OpenAI WebRTC negotiation, and Realtime session configuration; a
+per-session timing summary; RT001 scenario/evidence evolution that validates and
+reports the phase breakdown; deterministic sanitizer/oracle/browser/controller
+tests; documentation; and one newly authorized automatic RT001 live-host run.
+
+Excluded scope: changing operation ordering; parallelizing token and microphone
+work; prewarming credentials or WebRTC; changing acknowledgement playback;
+adding a ready sound; changing wake thresholds, confirmation frames, model,
+voice, VAD, output volume, API timeouts, or user-turn handling; imposing a
+latency pass/fail threshold before a representative baseline exists; retaining
+audio, transcript, response text, provider bodies, SDP, credentials, or
+high-frequency timing samples.
+
+Core flows: after two-frame local wake confirmation, Python records a bounded
+`wake_confirmed` marker, records acknowledgement start and completion, and
+queues the existing handoff. The browser timestamps its existing sequential
+start path locally and, once `session.updated` proves readiness, emits one
+bounded timing summary covering command receipt, token fetch, microphone
+acquisition, peer setup, SDP negotiation, and session configuration. RT001
+combines those values with coordinator timestamps, validates non-negative
+bounded durations and required phase completeness, then saves a sanitized
+breakdown alongside its existing exclusive-ownership and recovery verdict.
+
+Constraints: timing uses monotonic clocks and rounded integer milliseconds;
+browser durations are reported as one bounded allowlisted summary to minimize
+measurement perturbation; no wall-clock correlation, request identity,
+provider payload, token, transcript, raw/base64 audio, or SDP is retained;
+exactly one timing summary is accepted for the active session; malformed,
+negative, non-finite, oversized, duplicate, stale-session, or incomplete
+timings fail closed; existing RT001 ownership/cleanup oracles remain mandatory;
+the feature observes but does not optimize or establish a performance SLO.
+
+Ambiguities or assumptions: “wake-to-ready” begins when the configured
+consecutive wake detections are satisfied, not when the human begins speaking
+the wake phrase, because the latter would require retaining or inferring private
+audio. “Ready” means the browser has received `session.updated` for the active
+Realtime session, matching the current `host_connected` transition. Browser
+phase measurements share one `performance.now()` clock, while end-to-end Python
+markers use the coordinator monotonic clock; only durations, not absolute
+cross-clock timestamps, are combined. One live run identifies the current
+dominant phase but is not treated as a stable percentile baseline.
+
+Required capabilities: existing controller/coordinator lifecycle evidence,
+browser `performance.now()`, RT001 automatic saved-wake live-host runner,
+private wake fixture, armed Chrome host, usable OpenAI credential and network,
+fresh explicit microphone/OpenAI/cost authorization for live verification,
+deterministic offline tests, final project recovery, fast coding evidence, and
+a separate cold-start Evaluator Agent.
+
+Implementation paths: `src/realtime/controller.py`,
+`src/realtime_host/coordinator.py`, `src/realtime_host/static/app.js`,
+`src/evals/realtime_common.py`, `src/evals/realtime_handoff.py`,
+`evals/realtime/scenarios/RT001.json`, focused tests under `tests/`,
+`README.md`, `MANUAL_TESTING.md`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: deterministic controller ordering and duration tests;
+coordinator timing allowlist, bounds, duplicate, stale-session, and privacy
+tests; static browser-contract assertions for one batched timing report and all
+required phase boundaries; RT001 scenario/oracle pass plus precise failure for
+missing, negative, excessive, malformed, duplicate, or inconsistent timings;
+existing RT001 ownership/recovery and RT002-RT004 regressions; JavaScript
+syntax; Realtime fake smoke; full unittest discovery; final `./init.sh`; one
+newly authorized automatic RT001 run whose sanitized evidence produces a phase
+breakdown; fast coding evidence; and separate evaluator approval.
+
+Decomposition decision: F067 is one measurement-only capability with one
+shared purpose and verification surface. Any latency optimization, readiness
+cue, acknowledgement semantic change, or numerical SLO depends on the measured
+result and must be planned as a later independently verifiable feature.
