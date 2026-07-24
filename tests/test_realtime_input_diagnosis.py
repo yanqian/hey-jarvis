@@ -301,6 +301,8 @@ class FakeDiagnosticHost:
         self.emit_levels = emit_levels
         self.fail_start = fail_start
         self.stop_calls = 0
+        self.diagnostic_enable_calls = 0
+        self.actions: list[str] = []
 
     def add(self, event_type: str, **detail: object) -> None:
         self.at_ms += 100
@@ -314,6 +316,7 @@ class FakeDiagnosticHost:
         )
 
     def play(self, _path: Path) -> None:
+        self.actions.append("play")
         if self.fail_start:
             self.add(
                 "host_error",
@@ -356,6 +359,10 @@ class FakeDiagnosticHost:
                 "wake_microphone_open": self.mic_open,
                 "events": deepcopy(self.events),
             }
+        if url.endswith("/api/input-level-diagnostics"):
+            self.diagnostic_enable_calls += 1
+            self.actions.append("diagnostic_enable")
+            return {"status": "armed_for_next_handoff"}
         if url.endswith("/api/long-answer"):
             self.add("host_response_created")
             return {"ok": True}
@@ -389,6 +396,8 @@ class AssistedDiagnosticRunnerTests(unittest.TestCase):
             evidence = runner.run()
         self.assertEqual(evidence["feature_id"], "F060")
         self.assertEqual(evidence["result"]["category"], "server_vad_sensitivity")
+        self.assertEqual(host.diagnostic_enable_calls, 1)
+        self.assertEqual(host.actions[:2], ["diagnostic_enable", "play"])
         self.assertEqual(host.stop_calls, 1)
         self.assertTrue(evidence["result"]["support"]["cleanup_restored"])
         encoded = json.dumps(evidence)

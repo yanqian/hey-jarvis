@@ -92,10 +92,11 @@ class RT001ContractTests(unittest.TestCase):
     def test_scenario_matches_authoritative_no_human_matrix(self):
         scenario = load_scenario()
         self.assertEqual(scenario["id"], "RT001")
-        self.assertEqual(scenario["version"], 4)
+        self.assertEqual(scenario["version"], 5)
         self.assertEqual(scenario["human_actions"], [])
         self.assertEqual(scenario["evidence"]["required"], ["offline", "live_host"])
         self.assertNotIn("response", json.dumps(scenario["oracles"]))
+        self.assertIs(scenario["oracles"]["input_level_analysis_enabled"], False)
 
     def test_generic_schema_validation_fails_closed(self):
         scenario = load_scenario()
@@ -212,6 +213,23 @@ class RT001OracleTests(unittest.TestCase):
                 )
                 mutate(timing)
                 self.assert_failure(observation, expected)
+
+    def test_normal_path_rejects_a_valid_but_enabled_audio_analyser(self):
+        observation = passing_observation()
+        timing = next(
+            item
+            for item in observation["final_report"]["events"]
+            if item["type"] == "host_handoff_timing"
+        )
+        timing.update(
+            {
+                "audio_analysis_setup_ms": 1,
+                "audio_context_creation_ms": 1,
+                "peer_setup_ms": 3,
+                "total_browser_ready_ms": 16,
+            }
+        )
+        self.assert_failure(observation, "unexpectedly enabled input-level")
 
     def test_missing_duplicated_and_misordered_events_fail_precisely(self):
         for name, mutate, expected in (

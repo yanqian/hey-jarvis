@@ -212,7 +212,7 @@ python -m src.evals.realtime_handoff live
 RT001 needs no fresh human speech: it replays the saved wake, proves the Python
 wake microphone closes before browser microphone request/acquisition and
 `host_connected`, explicitly stops the session, and proves wake ownership is
-restored. Version 4 also reports rounded millisecond attribution for confirmed
+restored. Version 5 also reports rounded millisecond attribution for confirmed
 wake, local acknowledgement, handoff dispatch, ephemeral-token acquisition,
 browser microphone acquisition, peer/SDP setup, WebRTC negotiation, and
 Realtime session configuration. Peer/SDP setup is further decomposed into
@@ -222,7 +222,10 @@ aggregate but are not counted again in the browser-ready total.
 Audio-analysis setup is further split around prior monitor cleanup,
 `AudioContext` construction, analyser setup, media-stream-source creation,
 source connection, and remaining monitor startup. These nested values reconcile
-to the audio-analysis aggregate without being counted twice. These values are
+to the audio-analysis aggregate without being counted twice. On the normal
+Realtime path the optional input-level analyser is disabled, so the
+audio-analysis aggregate and all six nested fields are zero; F060 explicitly
+enables the measured analyser branch for one diagnostic session. These values are
 diagnostic measurements, not a latency pass/fail threshold or a stable
 percentile baseline. The command
 still opens the real microphone, connects to OpenAI, and can incur Realtime
@@ -333,6 +336,9 @@ arrays or waveform: it sends only bounded 500 ms normalized, rounded RMS/peak
 windows labeled `no_remote_playback` or `remote_playback`. The result is one of
 `capture_path`, `server_vad_sensitivity`, `full_duplex_attenuation`,
 `event_orchestration`, or `inconclusive`, with supporting summary metrics.
+Ordinary Realtime sessions do not start this Web Audio input-level analyser.
+The F060 command explicitly enables it for exactly its next wake-triggered
+session, after which the host returns to the normal analyser-free path.
 
 F060 is diagnostic evidence, not automatic tuning and not an RT003 pass. It
 does not change `REALTIME_SERVER_VAD_THRESHOLD`, `REALTIME_OUTPUT_VOLUME`,

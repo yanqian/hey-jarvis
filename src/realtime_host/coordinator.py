@@ -174,6 +174,7 @@ class HandoffCoordinator:
         self._connected_at: float | None = None
         self._last_activity_at: float | None = None
         self._handoff_timing_received = False
+        self._input_level_diagnostics_next = False
         self._next_command_id = 1
         self._commands: list[HostCommand] = []
         self._evidence: list[dict[str, object]] = []
@@ -251,6 +252,19 @@ class HandoffCoordinator:
             self._armed = True
             self._record("host_armed")
 
+    def request_input_level_diagnostics(self) -> None:
+        """Enable bounded input-level monitoring for exactly the next handoff."""
+
+        with self._lock:
+            if not self._armed:
+                raise HandoffError("WebRTC host must be armed before input-level diagnosis")
+            if self._state != HandoffState.WAKE_OWNED or self._session_id is not None:
+                raise HandoffError(
+                    "Input-level diagnosis can only be enabled while wake owns the microphone"
+                )
+            self._input_level_diagnostics_next = True
+            self._record("input_level_diagnostics_armed")
+
     def begin_handoff(self) -> str:
         with self._lock:
             if not self._armed:
@@ -273,8 +287,13 @@ class HandoffCoordinator:
             self._seen_transcription_items.clear()
             self._handled_tool_calls.clear()
             self._state = HandoffState.HOST_STARTING
+            input_level_diagnostics = self._input_level_diagnostics_next
+            self._input_level_diagnostics_next = False
             self._record("handoff_queued", session_id=session_id)
-            self._enqueue("start", session_id)
+            if input_level_diagnostics:
+                self._enqueue("start", session_id, input_level_diagnostics=True)
+            else:
+                self._enqueue("start", session_id)
             return session_id
 
     def request_stop(self, reason: str = "requested") -> None:

@@ -1527,6 +1527,36 @@
       "depends_on": [
         "F068"
       ]
+    },
+    {
+      "id": "F070",
+      "title": "Keep Realtime input-level diagnostics off the normal critical path",
+      "description": "Skip the optional Web Audio input-level analyser for ordinary Realtime sessions while preserving it as an explicit one-shot capability for F060 diagnosis.",
+      "acceptance": [
+        "Ordinary Realtime handoffs do not create, resume, connect, sample, or retain an input-level AudioContext/analyser, while WebRTC microphone capture, AEC constraints, PeerConnection setup, negotiation, session behavior, interruption, and cleanup remain unchanged.",
+        "An armed wake-owned host accepts an explicit request to enable input-level monitoring for exactly the next handoff, carries only a literal boolean true on that start command, consumes the request even if startup later fails, rejects invalid-state requests, and defaults every later session back to disabled.",
+        "The F060 live runner enables the one-shot mode before wake fixture playback and retains its existing bounded normalized input-level summaries, privacy allowlist, classifier, failure cleanup, and no-product-tuning boundary; ordinary RT001-RT004 workflows never enable it.",
+        "F069's complete timing contract remains valid: ordinary sessions report zero for audio_analysis_setup_ms and every nested input-level subphase, explicit diagnostic sessions retain the measured breakdown, and existing aggregate, ordering, duplicate, stale-session, malformed, and privacy checks remain strict.",
+        "Focused coordinator/server/browser/F060/timing/documentation tests, RT001-RT004 and Realtime fake-smoke regressions, JavaScript syntax, full unittest discovery, final ./init.sh, one freshly authorized normal-path RT001 live run showing skipped analysis plus final wake recovery, fast coding evidence, and separate cold-start evaluator approval pass without adding a latency SLO or changing product audio tuning."
+      ],
+      "evals": [
+        {
+          "scenario": "RT001 normal path without optional input-level analysis",
+          "required_evidence": [
+            "offline",
+            "live_host"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F060",
+        "F069"
+      ]
     }
   ]
 }

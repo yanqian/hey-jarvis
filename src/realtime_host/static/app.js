@@ -77,6 +77,11 @@ function startInputLevels(mediaStream,timing){
   },INPUT_LEVEL_SAMPLE_INTERVAL_MS);
   timing.audioAnalysisReady=performance.now();
 }
+function skipInputLevels(timing){
+  const skippedAt=timing.microphoneReported;
+  timing.inputLevelsCleaned=timing.audioContextCreated=timing.analyserReady=skippedAt;
+  timing.mediaStreamSourceCreated=timing.sourceConnected=timing.audioAnalysisReady=skippedAt;
+}
 
 async function arm(){
   try{
@@ -189,7 +194,8 @@ async function start(command){
   const track=stream.getAudioTracks()[0],settings=track.getSettings();renderSettings(settings);
   await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
   handoffTiming.microphoneReported=performance.now();
-  startInputLevels(stream,handoffTiming);
+  if(command.input_level_diagnostics===true)startInputLevels(stream,handoffTiming);
+  else skipInputLevels(handoffTiming);
   pc=new RTCPeerConnection();
   pc.ontrack=event=>{$("remoteAudio").srcObject=event.streams[0];log("remote_audio_track")};
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};

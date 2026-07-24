@@ -1584,3 +1584,80 @@ internal timing fields and two-session comparison answer the same cold-start
 hypothesis through one browser/eval verification surface. Any change that
 moves, reuses, prewarms, or conditionally disables input-level analysis will be
 a later independently verifiable optimization feature based on F069 evidence.
+
+### Realtime On-Demand Input-Level Diagnostics
+
+Goal: remove the optional browser input-level analyser from the normal
+Realtime connection-critical path while preserving F060's explicitly requested
+near-end diagnostic capability.
+
+Included scope: make input-level monitoring disabled for ordinary Realtime
+handoffs; add a bounded host API that arms monitoring for exactly the next
+handoff; have the F060 live runner request that one-shot mode before playing its
+wake fixture; carry the boolean only on the resulting start command; preserve
+the complete F069 timing schema with zero-valued audio-analysis subphases when
+monitoring is skipped; and update focused tests and operator documentation.
+
+Excluded scope: prewarming or reusing `AudioContext`, changing WebRTC,
+PeerConnection, token, microphone, acknowledgement, wake, ICE, AEC, noise
+suppression, automatic gain control, VAD, output volume, model, voice, session,
+timeout, interruption, cleanup, or user-turn behavior; changing F060's
+classifier or privacy contract; adding a latency SLO; or enabling diagnostics
+through an ambient global setting that can silently affect later sessions.
+
+Core flows: an ordinary wake creates a start command without input-level
+diagnostics, the browser records all analysis timing boundaries at one instant
+without creating an `AudioContext`, and the remaining WebRTC setup proceeds
+unchanged. Before an F060 live run, the runner requests one-shot diagnostics
+while the host is armed and wake-owned; the next start command carries the
+explicit flag, the browser runs the existing bounded analyser, and cleanup
+closes it as before. The one-shot request is consumed by that handoff, including
+when startup later fails, so subsequent sessions return to the normal path.
+
+Constraints: the enable request is accepted only while the armed coordinator
+is `wake_owned`; the browser treats only the literal boolean `true` as enabled;
+default and malformed or absent command detail fail safe to disabled; no
+diagnostic mode or high-frequency level sample is retained beyond existing
+bounded lifecycle evidence; F069 aggregate and nested timing validation remains
+strict; zero values mean a deliberately skipped optional phase rather than
+missing evidence; and committed evidence excludes audio, transcripts, answers,
+credentials, SDP, ICE details, addresses, request identities, provider bodies,
+or raw performance traces.
+
+Ambiguities or assumptions: F060 is the only current workflow that requires
+continuous input-level summaries. RT003 uses server VAD events and does not
+need the analyser. A fresh RT001 live result can demonstrate removal from the
+normal critical path, while deterministic browser/coordinator/F060 tests are
+sufficient to preserve the opt-in diagnostic branch without spending another
+live diagnostic session unless a later regression requires it. One RT001 run is
+diagnostic evidence and does not establish a stable latency percentile.
+
+Required capabilities: F069 timing contracts, the existing loopback host API
+and F060 runner, deterministic browser/coordinator/runner tests, JavaScript
+syntax verification, private wake fixture, armed Chrome host, built-in
+microphone, usable OpenAI credential and network, fresh explicit
+microphone/OpenAI/cost authorization for final RT001 live verification, final
+project recovery, fast coding evidence, and a separate cold-start Evaluator
+Agent.
+
+Implementation paths: `src/realtime_host/coordinator.py`,
+`src/realtime_host/server.py`, `src/realtime_host/static/app.js`,
+`src/evals/realtime_input_diagnosis.py`, focused tests under `tests/`,
+`README.md`, `MANUAL_TESTING.md`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: coordinator state, one-shot consumption, command
+allowlist, and cross-session reset tests; server endpoint tests; browser static
+and JavaScript syntax checks proving ordinary starts skip `AudioContext` while
+explicit starts retain the existing analyser; F060 runner ordering and cleanup
+tests; F069 timing consistency plus RT001-RT004 and privacy regressions;
+Realtime fake smoke; full unittest discovery; final `./init.sh`; one freshly
+authorized automatic RT001 normal-path live run with zero audio-analysis
+timings and final wake recovery; fast coding evidence; and separate evaluator
+approval.
+
+Decomposition decision: F070 is one coherent optimization because the
+normal-path removal and one-shot F060 preservation are two sides of the same
+conditional diagnostic boundary and share the same host-command, browser, and
+regression surface. Prewarming/reuse, numerical latency gates, and unrelated
+WebRTC optimizations remain separate features.

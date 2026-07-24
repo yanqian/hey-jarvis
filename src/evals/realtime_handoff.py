@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.evals.realtime_common import (
+    AUDIO_ANALYSIS_TIMING_FIELDS,
     HANDOFF_TIMING_FIELDS,
     PROJECT_ROOT,
     RealtimeRunFailure,
@@ -54,6 +55,7 @@ def validate_scenario(scenario: dict[str, object]) -> None:
     expected = {
         "connected_state": "host_active",
         "wake_microphone_open_during_host": False,
+        "input_level_analysis_enabled": False,
         "final_state": "wake_owned",
         "wake_microphone_open": True,
     }
@@ -157,6 +159,13 @@ def evaluate_observation(
             "RT001 active snapshot observed stale or wrong-session lifecycle events"
         )
     timing = _timing_breakdown(events, session_id)
+    if oracles["input_level_analysis_enabled"] is False and (
+        timing["audio_analysis_setup_ms"] != 0
+        or any(timing[field] != 0 for field in AUDIO_ANALYSIS_TIMING_FIELDS)
+    ):
+        raise RealtimeScenarioError(
+            "RT001 normal path unexpectedly enabled input-level audio analysis"
+        )
     return {
         "result": "passed",
         "session_id": session_id,

@@ -387,6 +387,11 @@ class AssistedInputDiagnosisRunner:
                 ),
                 default=-1,
             )
+            stage = "diagnostic_enable"
+            self.request(
+                f"{self.base_url}/api/input-level-diagnostics",
+                method="POST",
+            )
             stage = "session_start"
             self.play(self.wake_fixture)
             active = self._wait(

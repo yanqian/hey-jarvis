@@ -180,6 +180,10 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/simulate-wake":
                 self._json(HTTPStatus.OK, {"session_id": self.server.coordinator.begin_handoff()})
                 return
+            if path == "/api/input-level-diagnostics":
+                self.server.coordinator.request_input_level_diagnostics()
+                self._json(HTTPStatus.OK, {"status": "armed_for_next_handoff"})
+                return
             if path == "/api/stop":
                 self.server.coordinator.request_stop()
                 self._json(HTTPStatus.OK, {"status": "stopping"})

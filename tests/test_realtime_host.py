@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import unittest
+from http import HTTPStatus
+from types import SimpleNamespace
 
 from src.realtime_host.coordinator import (
     MAX_TOOL_ARGUMENT_CHARS,
@@ -89,6 +91,45 @@ class RealtimeHostTests(unittest.TestCase):
             coordinator.host_event("connected", session_id, host_id="host-stale")
         coordinator.host_event("connected", session_id, host_id="host-current")
         self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
+    def test_input_level_diagnostics_are_explicit_one_shot_and_state_bounded(self):
+        coordinator, lease = self.build_coordinator()
+        with self.assertRaisesRegex(HandoffError, "armed"):
+            coordinator.request_input_level_diagnostics()
+        coordinator.host_event("armed")
+        coordinator.request_input_level_diagnostics()
+        first_session = coordinator.begin_handoff()
+        first_start = coordinator.command_after(0)
+        self.assertIs(first_start["input_level_diagnostics"], True)
+        self.assertFalse(lease.is_open)
+        with self.assertRaisesRegex(HandoffError, "wake owns"):
+            coordinator.request_input_level_diagnostics()
+        coordinator.host_event("error", first_session, reason="test")
+        stop_command = coordinator.command_after(first_start["command_id"])
+        coordinator.host_event("stopped", first_session, reason="test")
+
+        second_session = coordinator.begin_handoff()
+        second_start = coordinator.command_after(stop_command["command_id"])
+        self.assertEqual(second_start["session_id"], second_session)
+        self.assertNotIn("input_level_diagnostics", second_start)
+
+    def test_input_level_diagnostics_endpoint_arms_the_next_handoff(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        responses: list[tuple[HTTPStatus, dict[str, object]]] = []
+        handler = object.__new__(server.HostRequestHandler)
+        handler.path = "/api/input-level-diagnostics"
+        handler.server = SimpleNamespace(coordinator=coordinator)
+        handler._json = lambda status, payload: responses.append((status, dict(payload)))
+
+        handler.do_POST()
+
+        self.assertEqual(
+            responses,
+            [(HTTPStatus.OK, {"status": "armed_for_next_handoff"})],
+        )
+        coordinator.begin_handoff()
+        self.assertIs(coordinator.command_after(0)["input_level_diagnostics"], True)
 
     def test_real_wake_lease_can_wait_until_browser_arm_warmup_finishes(self):
         lease = FakeLease()
@@ -349,6 +390,9 @@ class RealtimeHostTests(unittest.TestCase):
             'hostEvent("input_level"',
             "INPUT_LEVEL_WINDOW_SAMPLES=5",
             "stopInputLevels()",
+            "function skipInputLevels(timing)",
+            "if(command.input_level_diagnostics===true)startInputLevels(stream,handoffTiming)",
+            "else skipInputLevels(handoffTiming)",
             "webrtc_negotiation_failed",
             'response.headers.get("x-request-id")',
             'response.headers.get("retry-after")',
@@ -380,6 +424,7 @@ class RealtimeHostTests(unittest.TestCase):
             "total_browser_ready_ms",
         ):
             self.assertIn(text, javascript)
+        self.assertEqual(javascript.count("new AudioContextClass()"), 1)
         self.assertNotIn("JSON.stringify(payload)", javascript.split("async function negotiationFailure", 1)[1].split("function flushInputLevels", 1)[0])
         for text in ('type:"server_vad"', "create_response:true", "interrupt_response:true", 'event.type==="session.updated"'):
             self.assertIn(text, javascript)

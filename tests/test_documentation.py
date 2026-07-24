@@ -17,6 +17,8 @@ class DocumentationTests(unittest.TestCase):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
         readme_words = " ".join(readme.split())
+        manual_words = " ".join(manual_testing.split())
+        readme_words = " ".join(readme.split())
 
         self.assertIn("python -m src.evals.realtime_handoff live", readme)
         self.assertIn("needs no fresh human speech", readme)
@@ -65,6 +67,8 @@ class DocumentationTests(unittest.TestCase):
     def test_realtime_input_level_diagnosis_is_documented_without_tuning_claims(self):
         readme = README.read_text(encoding="utf-8")
         manual_testing = MANUAL_TESTING.read_text(encoding="utf-8")
+        readme_words = " ".join(readme.split())
+        manual_words = " ".join(manual_testing.split())
 
         self.assertIn("python -m src.evals.realtime_input_diagnosis live", readme)
         self.assertIn("no_remote_playback", readme)
@@ -76,6 +80,8 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("strict diagnostic allowlist", readme)
         self.assertIn("`error.type` and `error.code`", readme)
         self.assertIn("never retains the full provider response body", readme)
+        self.assertIn("for exactly its next wake-triggered session", readme_words)
+        self.assertIn("ordinary sessions leave that optional Web Audio analyser off", manual_words)
         self.assertIn("M060", manual_testing)
         self.assertIn("does not retain audio/transcripts", manual_testing)
 
@@ -88,12 +94,14 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("ready_to_play", readme)
         self.assertIn("monotonic elapsed durations", readme)
         self.assertIn("do not log assistant answer text", readme)
-        self.assertIn("Version 4", readme)
+        self.assertIn("Version 5", readme)
         self.assertIn("PeerConnection setup", readme)
         self.assertIn("AudioContext", readme)
+        self.assertIn("all six nested fields are zero", readme)
+        self.assertIn("all six nested fields are zero", manual_testing)
         self.assertIn("not counted again", readme)
         self.assertIn("M058", manual_testing)
-        self.assertIn("Version 4", manual_testing)
+        self.assertIn("Version 5", manual_testing)
         self.assertIn("without being counted twice", readme)
         self.assertIn("中国为什么参与朝鲜战争", manual_testing)
         self.assertIn("人脸识别的英文怎么读", manual_testing)

@@ -114,6 +114,24 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
+F070 - Keep Realtime input-level diagnostics off the normal critical path.
+
+F070 has been completed through evaluator-gated fast work, a newly authorized
+automatic RT001 version 5 live-host run, and separate cold-start evaluator
+approval. Ordinary Realtime starts now skip the optional input-level
+`AudioContext` graph, while F060 explicitly arms it for exactly one diagnostic
+handoff. The accepted live run connected with
+`audio_analysis_setup_ms=0`, all six nested analysis timings at zero,
+`peer_setup_ms=5`, ordered cleanup, and restored
+`wake_microphone_open=true`. RT001 now rejects non-zero analysis timing on the
+normal path. Final recovery passes with 341 project tests. Coding evidence is
+in `.agent-harness/runs/F070-fast-coding.md`, live evidence is in
+`.agent-harness/runs/F070-live-rt001.md`, and approval is recorded as
+`EVAL_PASS: F070` in
+`.agent-harness/runs/20260724T085543Z-F070-evaluation-pass.md`.
+
+## Recent Completed Feature History
+
 F069 - Attribute Realtime Web Audio cold-start latency.
 
 F069 has been completed through evaluator-gated fast work, one newly authorized
@@ -130,8 +148,6 @@ passes with 338 project tests. Coding evidence is in
 `.agent-harness/runs/F069-live-rt004.md`, and approval is recorded as
 `EVAL_PASS: F069` in
 `.agent-harness/runs/20260724T083039Z-F069-evaluation-pass.md`.
-
-## Recent Completed Feature History
 
 F059 - Add a spec-driven assisted Realtime barge-in eval.
 
@@ -197,9 +213,8 @@ No feature is currently selected.
 
 ## Next Feature
 
-No later feature is selected. F069 evidence will determine whether a later
-optimization should prewarm/reuse the Web Audio graph or simply move optional
-input-level diagnostics out of the connection-critical path.
+No later feature is selected. Any remaining latency optimization or numerical
+readiness SLO should be planned only after F070's normal-path RT001 result.
 
 ## Recently Completed
 
