@@ -1415,3 +1415,84 @@ Decomposition decision: F067 is one measurement-only capability with one
 shared purpose and verification surface. Any latency optimization, readiness
 cue, acknowledgement semantic change, or numerical SLO depends on the measured
 result and must be planned as a later independently verifiable feature.
+
+### Realtime Peer/SDP Latency Decomposition
+
+Goal: split F067's largest measured `peer_setup_ms` bucket into actionable
+browser subphases, so a later optimization can distinguish local reporting and
+audio-analysis overhead from RTCPeerConnection construction, offer creation,
+and local-description/ICE work.
+
+Included scope: five rounded monotonic browser subphase durations for
+microphone settings/reporting, input-level analysis setup, PeerConnection plus
+track/data-channel setup, `createOffer`, and `setLocalDescription`; retention of
+the F067 aggregate `peer_setup_ms`; nested aggregate consistency validation;
+RT001 version/evidence evolution; focused privacy, browser-contract,
+coordinator, oracle, documentation, and regression tests; and one newly
+authorized automatic RT001 live-host run.
+
+Excluded scope: changing WebRTC operation ordering; parallelizing token,
+microphone, acknowledgement, offer, or negotiation work; prewarming or reusing
+PeerConnections; changing ICE configuration or trickle behavior; removing
+input-level diagnostics; changing acknowledgement, wake, model, voice, VAD,
+output volume, timeout, session, or user-turn behavior; adding a performance
+threshold; or retaining browser traces, SDP, candidates, network addresses,
+credentials, provider bodies, audio, transcripts, or answers.
+
+Core flows: the browser preserves F067's existing start sequence and records
+local boundaries immediately after microphone acquisition, settings/reporting,
+input analyzer setup, PeerConnection/track/data-channel construction,
+`createOffer`, and `setLocalDescription`. At `session.updated`, the same single
+batched timing report includes the five subphase durations plus the existing
+aggregate. Python validates that the subphases are bounded and sum to
+`peer_setup_ms` within rounding tolerance. RT001 returns both the backward-
+compatible aggregate and the finer breakdown while retaining all ownership,
+connection, cleanup, and total-timing consistency checks.
+
+Constraints: use `performance.now()` and rounded non-negative integer
+milliseconds; preserve exactly one batched active-session timing report;
+subphase values are allowlisted and bounded by the existing conservative
+maximum; their sum must match `peer_setup_ms` within rounding tolerance;
+top-level total validation must not double-count nested subphases; committed
+evidence excludes SDP, ICE candidates, IP/network details, request identity,
+provider payload, token, transcript, raw/base64 audio, and answer content; the
+feature observes only and establishes neither an SLO nor an optimization claim.
+
+Ambiguities or assumptions: “microphone reporting” includes rendering capture
+settings and the awaited loopback `host_microphone_acquired` event; “audio
+analysis setup” covers synchronous analyzer construction while asynchronous
+AudioContext resume may continue outside that boundary; “PeerConnection setup”
+covers constructor, event handlers, track addition, and data-channel creation;
+`setLocalDescription` may include browser-controlled ICE work. These names
+describe code boundaries rather than claiming an underlying browser/network
+root cause. One live run is diagnostic, not a stable percentile baseline.
+
+Required capabilities: F067 timing contract and RT001 v2 runner, browser
+`performance.now()`, deterministic static and Python tests, private wake
+fixture, armed Chrome host, built-in microphone, usable OpenAI credential and
+network, fresh explicit microphone/OpenAI/cost authorization for final live
+verification, final project recovery, fast coding evidence, and a separate
+cold-start Evaluator Agent.
+
+Implementation paths: `src/realtime_host/static/app.js`,
+`src/realtime_host/coordinator.py`, `src/evals/realtime_common.py`,
+`src/evals/realtime_handoff.py`, `evals/realtime/scenarios/RT001.json`, focused
+tests under `tests/`, `README.md`, `MANUAL_TESTING.md`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: static browser assertions for all five boundaries and
+unchanged ordering; coordinator allowlist, integer/range, incomplete,
+aggregate-mismatch, duplicate, stale-session, and privacy tests; RT001 valid
+breakdown plus missing, negative, excessive, malformed, or inconsistent
+subphase failures; preservation of F067 top-level total validation and RT001
+ownership/recovery; RT002-RT004 and Realtime fake-smoke regressions; JavaScript
+syntax; full unittest discovery; final `./init.sh`; one newly authorized
+automatic RT001 run with sanitized subphase evidence and final wake recovery;
+fast coding evidence; and separate evaluator approval.
+
+Decomposition decision: F068 is one deeper measurement-only capability with a
+single browser implementation and RT001 verification surface. Token/ACK
+parallelization, PeerConnection optimization, readiness cues, and latency SLOs
+remain separate future features because they change runtime behavior or product
+semantics.

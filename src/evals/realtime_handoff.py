@@ -9,7 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.evals.realtime_common import (
+    HANDOFF_PHASE_TIMING_FIELDS,
     HANDOFF_TIMING_FIELDS,
+    PEER_SETUP_TIMING_FIELDS,
     PROJECT_ROOT,
     RealtimeRunFailure,
     RealtimeRunnerBase,
@@ -196,11 +198,14 @@ def _timing_breakdown(events: list[object], session_id: str) -> dict[str, int]:
         if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 60_000:
             raise RealtimeScenarioError(f"RT001 timing field {field} was invalid")
         browser_values[field] = value
-    phase_total = sum(
-        value for field, value in browser_values.items() if field != "total_browser_ready_ms"
-    )
-    if abs(phase_total - browser_values["total_browser_ready_ms"]) > len(HANDOFF_TIMING_FIELDS):
+    phase_total = sum(browser_values[field] for field in HANDOFF_PHASE_TIMING_FIELDS)
+    if abs(phase_total - browser_values["total_browser_ready_ms"]) > len(
+        HANDOFF_PHASE_TIMING_FIELDS
+    ):
         raise RealtimeScenarioError("RT001 browser timing phases did not match the total")
+    peer_total = sum(browser_values[field] for field in PEER_SETUP_TIMING_FIELDS)
+    if abs(peer_total - browser_values["peer_setup_ms"]) > len(PEER_SETUP_TIMING_FIELDS):
+        raise RealtimeScenarioError("RT001 peer setup subphases did not match the aggregate")
 
     def elapsed(start: str, end: str) -> int:
         value = int(by_type[end]["at_ms"]) - int(by_type[start]["at_ms"])

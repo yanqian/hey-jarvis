@@ -114,25 +114,21 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F067 - Attribute Realtime wake-to-ready latency.
+F068 - Decompose Realtime peer and SDP setup latency.
 
-F067 has been completed through evaluator-gated fast work, one newly authorized
-automatic RT001 live-host run, and separate cold-start evaluator approval.
-Python and browser timing now attribute confirmed wake, local acknowledgement,
-handoff dispatch, ephemeral-token acquisition, microphone acquisition,
-peer/SDP setup, WebRTC negotiation, and session configuration without changing
-their ordering or tuning. RT001 version 2 preserves exclusive microphone
-ownership and cleanup oracles while returning a privacy-bounded breakdown with
-no latency threshold. The accepted sample measured `8711 ms`
-confirmed-wake-to-ready: `1375 ms` acknowledgement and `7217 ms`
-handoff-to-ready, including `1034 ms` token, `115 ms` microphone, `3053 ms`
-peer/SDP, `1905 ms` negotiation, and `1056 ms` session configuration. This is
-diagnostic evidence, not an SLO or stable percentile. Final recovery passes
-with 337 project tests. Coding evidence is in
-`.agent-harness/runs/F067-fast-coding.md`, live evidence is in
-`.agent-harness/runs/F067-live-rt001.md`, and approval is recorded as
-`EVAL_PASS: F067` in
-`.agent-harness/runs/20260724T075326Z-F067-evaluation-pass.md`.
+F068 has been completed through evaluator-gated fast work, one newly authorized
+automatic RT001 version 3 live-host run, and separate cold-start evaluator
+approval. The retained `4389 ms` peer/SDP aggregate decomposed into `2 ms`
+microphone reporting, `4379 ms` input-level audio-analysis setup, `5 ms`
+PeerConnection setup, `1 ms` offer creation, and `2 ms` local-description
+setup. The nested values reconcile exactly without being counted again in the
+browser-ready total; exclusive ownership, cleanup, and final wake recovery
+passed. This is diagnostic evidence, not an SLO or stable percentile, and no
+runtime ordering or tuning changed. Final recovery passes with 337 project
+tests. Coding evidence is in `.agent-harness/runs/F068-fast-coding.md`, live
+evidence is in `.agent-harness/runs/F068-live-rt001.md`, and approval is
+recorded as `EVAL_PASS: F068` in
+`.agent-harness/runs/20260724T081320Z-F068-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -200,10 +196,8 @@ No feature is currently selected.
 
 ## Next Feature
 
-No later feature is currently planned. If lower Realtime wake-to-ready latency
-is selected next, plan it as a separate optimization feature against F067's
-measured dominant peer/SDP and negotiation phases, with token/ACK overlap as a
-separate ordering and echo-risk decision.
+No later feature is selected. The F068 live measurement will identify which
+peer/SDP subphase, if any, should become a separately planned optimization.
 
 ## Recently Completed
 

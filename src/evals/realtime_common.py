@@ -13,7 +13,7 @@ from typing import Callable
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "evals" / "realtime" / "scenario.schema.json"
 DEFAULT_FIXTURE_ROOT = PROJECT_ROOT / "tmp" / "realtime-fixtures"
-HANDOFF_TIMING_FIELDS = frozenset(
+HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
         "command_to_token_ms",
         "token_ms",
@@ -21,6 +21,21 @@ HANDOFF_TIMING_FIELDS = frozenset(
         "peer_setup_ms",
         "negotiation_ms",
         "session_configuration_ms",
+    }
+)
+PEER_SETUP_TIMING_FIELDS = frozenset(
+    {
+        "microphone_reporting_ms",
+        "audio_analysis_setup_ms",
+        "peer_connection_setup_ms",
+        "offer_creation_ms",
+        "local_description_ms",
+    }
+)
+HANDOFF_TIMING_FIELDS = frozenset(
+    {
+        *HANDOFF_PHASE_TIMING_FIELDS,
+        *PEER_SETUP_TIMING_FIELDS,
         "total_browser_ready_ms",
     }
 )

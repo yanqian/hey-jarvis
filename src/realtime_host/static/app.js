@@ -116,12 +116,17 @@ function handoffTimingSummary(readyAt){
     token_ms:elapsedMs(timing.tokenStarted,timing.tokenAcquired),
     microphone_ms:elapsedMs(timing.microphoneStarted,timing.microphoneAcquired),
     peer_setup_ms:elapsedMs(timing.microphoneAcquired,timing.negotiationStarted),
+    microphone_reporting_ms:elapsedMs(timing.microphoneAcquired,timing.microphoneReported),
+    audio_analysis_setup_ms:elapsedMs(timing.microphoneReported,timing.audioAnalysisReady),
+    peer_connection_setup_ms:elapsedMs(timing.audioAnalysisReady,timing.peerConnectionReady),
+    offer_creation_ms:elapsedMs(timing.peerConnectionReady,timing.offerCreated),
+    local_description_ms:elapsedMs(timing.offerCreated,timing.negotiationStarted),
     negotiation_ms:elapsedMs(timing.negotiationStarted,timing.negotiationCompleted),
     session_configuration_ms:elapsedMs(timing.negotiationCompleted,readyAt),
     total_browser_ready_ms:elapsedMs(timing.commandReceived,readyAt),
   };
-  const phases=Object.entries(summary).filter(([key])=>key!=="total_browser_ready_ms");
-  summary.total_browser_ready_ms=phases.reduce((total,[,value])=>total+value,0);
+  const topLevelPhases=["command_to_token_ms","token_ms","microphone_ms","peer_setup_ms","negotiation_ms","session_configuration_ms"];
+  summary.total_browser_ready_ms=topLevelPhases.reduce((total,key)=>total+summary[key],0);
   return summary;
 }
 
@@ -169,7 +174,9 @@ async function start(command){
   handoffTiming.microphoneAcquired=performance.now();
   const track=stream.getAudioTracks()[0],settings=track.getSettings();renderSettings(settings);
   await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
+  handoffTiming.microphoneReported=performance.now();
   startInputLevels(stream);
+  handoffTiming.audioAnalysisReady=performance.now();
   pc=new RTCPeerConnection();
   pc.ontrack=event=>{$("remoteAudio").srcObject=event.streams[0];log("remote_audio_track")};
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};
@@ -177,7 +184,9 @@ async function start(command){
   dc=pc.createDataChannel("oai-events");
   dc.onmessage=event=>{let data;try{data=JSON.parse(event.data)}catch{return}handleServerEvent(data).catch(()=>{});};
   dc.onclose=()=>{if(sessionId)stop("data_channel_closed").catch(()=>{});};
-  const offer=await pc.createOffer();await pc.setLocalDescription(offer);handoffTiming.negotiationStarted=performance.now();
+  handoffTiming.peerConnectionReady=performance.now();
+  const offer=await pc.createOffer();handoffTiming.offerCreated=performance.now();
+  await pc.setLocalDescription(offer);handoffTiming.negotiationStarted=performance.now();
   const answer=await fetch("https://api.openai.com/v1/realtime/calls",{method:"POST",body:offer.sdp,headers:{Authorization:`Bearer ${token.value}`,"Content-Type":"application/sdp"}});
   if(!answer.ok)throw await negotiationFailure(answer);
   await pc.setRemoteDescription({type:"answer",sdp:await answer.text()});

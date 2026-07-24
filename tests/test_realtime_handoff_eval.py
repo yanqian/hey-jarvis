@@ -26,6 +26,11 @@ TIMING = {
     "token_ms": 2,
     "microphone_ms": 3,
     "peer_setup_ms": 2,
+    "microphone_reporting_ms": 1,
+    "audio_analysis_setup_ms": 0,
+    "peer_connection_setup_ms": 0,
+    "offer_creation_ms": 1,
+    "local_description_ms": 0,
     "negotiation_ms": 5,
     "session_configuration_ms": 2,
     "total_browser_ready_ms": 15,
@@ -81,7 +86,7 @@ class RT001ContractTests(unittest.TestCase):
     def test_scenario_matches_authoritative_no_human_matrix(self):
         scenario = load_scenario()
         self.assertEqual(scenario["id"], "RT001")
-        self.assertEqual(scenario["version"], 2)
+        self.assertEqual(scenario["version"], 3)
         self.assertEqual(scenario["human_actions"], [])
         self.assertEqual(scenario["evidence"]["required"], ["offline", "live_host"])
         self.assertNotIn("response", json.dumps(scenario["oracles"]))
@@ -160,6 +165,21 @@ class RT001OracleTests(unittest.TestCase):
                 "mismatch",
                 lambda timing: timing.__setitem__("total_browser_ready_ms", 1),
                 "did not match",
+            ),
+            (
+                "peer-missing",
+                lambda timing: timing.pop("offer_creation_ms"),
+                "missing browser fields",
+            ),
+            (
+                "peer-negative",
+                lambda timing: timing.__setitem__("offer_creation_ms", -1),
+                "offer_creation_ms was invalid",
+            ),
+            (
+                "peer-mismatch",
+                lambda timing: timing.__setitem__("offer_creation_ms", 20),
+                "peer setup subphases did not match",
             ),
         ):
             with self.subTest(name=name):
@@ -268,6 +288,11 @@ class FakeRT001Host:
                 "token_ms": 1,
                 "microphone_ms": 1,
                 "peer_setup_ms": 1,
+                "microphone_reporting_ms": 0,
+                "audio_analysis_setup_ms": 0,
+                "peer_connection_setup_ms": 0,
+                "offer_creation_ms": 1,
+                "local_description_ms": 0,
                 "negotiation_ms": 1,
                 "session_configuration_ms": 1,
             })
@@ -321,7 +346,7 @@ class RT001RunnerTests(unittest.TestCase):
         self.assertEqual(evidence["evidence_tier"], "live_host")
         self.assertEqual(evidence["result"]["result"], "passed")
         encoded = json.dumps(evidence)
-        for forbidden in ("transcript", "audio", "api_key", "private-fixture"):
+        for forbidden in ('"transcript":', '"audio":', '"api_key":', "private-fixture"):
             self.assertNotIn(forbidden, encoded)
 
     def test_connection_timeout_requests_cleanup_and_records_stage(self):

@@ -30,7 +30,7 @@ MAX_HANDOFF_TIMING_MS = 60_000
 FIXTURE_AUDIO_NAMES = frozenset({"turn-1", "turn-2"})
 INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 LOCAL_TIMING_MARKERS = frozenset({"wake_confirmed", "ack_started", "ack_completed"})
-HANDOFF_TIMING_FIELDS = frozenset(
+HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
         "command_to_token_ms",
         "token_ms",
@@ -38,6 +38,21 @@ HANDOFF_TIMING_FIELDS = frozenset(
         "peer_setup_ms",
         "negotiation_ms",
         "session_configuration_ms",
+    }
+)
+PEER_SETUP_TIMING_FIELDS = frozenset(
+    {
+        "microphone_reporting_ms",
+        "audio_analysis_setup_ms",
+        "peer_connection_setup_ms",
+        "offer_creation_ms",
+        "local_description_ms",
+    }
+)
+HANDOFF_TIMING_FIELDS = frozenset(
+    {
+        *HANDOFF_PHASE_TIMING_FIELDS,
+        *PEER_SETUP_TIMING_FIELDS,
         "total_browser_ready_ms",
     }
 )
@@ -517,9 +532,12 @@ def _sanitize_handoff_timing(detail: dict[str, object]) -> dict[str, int]:
         if value < 0 or value > MAX_HANDOFF_TIMING_MS:
             raise HandoffError("Handoff timing value was outside the allowed range")
         safe[field] = value
-    phase_total = sum(safe[field] for field in HANDOFF_TIMING_FIELDS if field != "total_browser_ready_ms")
-    if abs(phase_total - safe["total_browser_ready_ms"]) > len(HANDOFF_TIMING_FIELDS):
+    phase_total = sum(safe[field] for field in HANDOFF_PHASE_TIMING_FIELDS)
+    if abs(phase_total - safe["total_browser_ready_ms"]) > len(HANDOFF_PHASE_TIMING_FIELDS):
         raise HandoffError("Handoff timing phases did not match the total")
+    peer_total = sum(safe[field] for field in PEER_SETUP_TIMING_FIELDS)
+    if abs(peer_total - safe["peer_setup_ms"]) > len(PEER_SETUP_TIMING_FIELDS):
+        raise HandoffError("Peer setup timing subphases did not match the aggregate")
     return safe
 
 

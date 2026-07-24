@@ -1469,6 +1469,35 @@
         "F062",
         "F066"
       ]
+    },
+    {
+      "id": "F068",
+      "title": "Decompose Realtime peer and SDP setup latency",
+      "description": "Split F067's peer_setup_ms aggregate into privacy-bounded browser subphases without changing the WebRTC sequence or optimizing runtime behavior.",
+      "acceptance": [
+        "The existing single browser timing report retains peer_setup_ms and adds rounded non-negative integer durations for microphone settings/reporting, input-level analysis setup, PeerConnection/track/data-channel setup, createOffer, and setLocalDescription at explicit unchanged code boundaries.",
+        "The coordinator and shared sanitizer allow only the complete bounded subphase set for the active session, reject malformed, missing, negative, excessive, duplicate, stale, or aggregate-inconsistent values, preserve the F067 top-level total check without double-counting nested fields, and retain no SDP, ICE candidate, address, audio, transcript, answer, credential, token, request identity, or provider payload.",
+        "RT001 evolves to require and return the five peer/SDP subphases while preserving peer_setup_ms, all F067 wake-to-ready timing fields, exclusive microphone ownership, connection, cleanup, and the absence of a latency pass/fail threshold.",
+        "One newly authorized automatic built-in-device RT001 live-host run produces an honest sanitized peer/SDP subphase breakdown and restores wake ownership; the single result is diagnostic evidence for later optimization rather than a stable percentile baseline.",
+        "Focused browser/coordinator/RT001/privacy/documentation tests, RT002-RT004 and Realtime fake-smoke regressions, JavaScript syntax, full unittest discovery, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing ordering, ICE configuration, model, voice, VAD, output volume, acknowledgement, wake, timeout, session, or user-turn behavior."
+      ],
+      "evals": [
+        {
+          "scenario": "RT001 peer and SDP latency decomposition",
+          "required_evidence": [
+            "offline",
+            "live_host"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F067"
+      ]
     }
   ]
 }
