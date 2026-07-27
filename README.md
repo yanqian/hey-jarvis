@@ -135,8 +135,8 @@ Developer references:
 - [Agent instructions](AGENTS.md) — repository workflow for coding agents.
 
 Development history, evaluator evidence, and orchestration state live under
-`.agent-harness/` and `runs/`; they are intentionally not part of this landing
-page.
+`.agent-harness/`, with run records in `.agent-harness/runs/`; they are
+intentionally not part of this landing page.
 
 ## Recovery
 

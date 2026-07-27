@@ -4,6 +4,16 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F072 has been completed through evaluator-gated fast work and separate
+cold-start evaluator approval. Active recovery state now agrees on the latest
+completed feature and empty next-feature queue; the README points directly to
+`.agent-harness/runs/`; and the Realtime barge-in Known Issue incorporates
+F061's accepted synchronized RT003 result instead of the superseded F060
+follow-up. Focused documentation regressions cover both active completion
+sections, Current/Next Feature state, the run-evidence path, and the F061
+wording. The final evaluator approval is recorded as `EVAL_PASS: F072` in
+`.agent-harness/runs/20260727T000000Z-F072-evaluation-pass.md`.
+
 F071 has been completed through evaluator-gated fast work and separate
 cold-start evaluator approval. The 909-line
 `README.md` is now a 151-line project landing page with backend choice, quick
@@ -131,21 +141,16 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F070 - Keep Realtime input-level diagnostics off the normal critical path.
+F072 - Reconcile active documentation and recovery state.
 
-F070 has been completed through evaluator-gated fast work, a newly authorized
-automatic RT001 version 5 live-host run, and separate cold-start evaluator
-approval. Ordinary Realtime starts now skip the optional input-level
-`AudioContext` graph, while F060 explicitly arms it for exactly one diagnostic
-handoff. The accepted live run connected with
-`audio_analysis_setup_ms=0`, all six nested analysis timings at zero,
-`peer_setup_ms=5`, ordered cleanup, and restored
-`wake_microphone_open=true`. RT001 now rejects non-zero analysis timing on the
-normal path. Final recovery passes with 341 project tests. Coding evidence is
-in `.agent-harness/runs/F070-fast-coding.md`, live evidence is in
-`.agent-harness/runs/F070-live-rt001.md`, and approval is recorded as
-`EVAL_PASS: F070` in
-`.agent-harness/runs/20260724T085543Z-F070-evaluation-pass.md`.
+F072 aligned the duplicate active completion sections, removed the stale
+F072-in-progress state after evaluator approval, corrected the hidden Harness
+run-evidence path in README, and reconciled the RT003 risk text with F061.
+Focused documentation tests and final recovery verification pass with 342
+project tests. Coding evidence is in
+`.agent-harness/runs/F072-fast-coding.md`, and approval is recorded as
+`EVAL_PASS: F072` in
+`.agent-harness/runs/20260727T000000Z-F072-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -234,27 +239,12 @@ No later feature is selected.
 
 ## Recently Completed
 
-F065 - Make Realtime farewell closure robust.
+F072 - Reconcile active documentation and recovery state.
 
-F065 has been completed through evaluator-gated fast work, newly authorized
-built-in-device live-human acceptance, and separate cold-start evaluator
-approval. The root cause was reliance on a separate asynchronous rough-guide
-ASR transcript for exact control: GPT understood the farewell but previously
-treated it as an ordinary turn when the transcript did not exactly match. The
-Realtime session now advertises one constrained semantic `end_conversation`
-function alongside the calculator while retaining exact transcription matching
-as a conservative fallback. Valid calls reuse the existing bounded
-`end_phrase` media-cleanup path without tool output or a continuation response;
-mentions, quotations, translations, malformed calls, duplicates, and stale
-events remain safe. The accepted live attempt captured one clear farewell,
-called the tool once, stopped media about 19 ms later, reopened the wake
-microphone about 97 ms after teardown, returned to `wake_owned`, and produced
-no audible GPT reply or idle-timeout substitution. Final recovery passes with
-334 project tests. Coding evidence is in
-`.agent-harness/runs/F065-fast-coding.md`, live evidence is in
-`.agent-harness/runs/F065-live-acceptance.md`, and approval is recorded as
-`EVAL_PASS: F065` in
-`.agent-harness/runs/20260724T024610Z-F065-evaluation-pass.md`.
+F072 completed the active-state cleanup after evaluator feedback exposed the
+second stale `Last Completed Feature` section. The retry added direct
+regressions for both completion sections and the post-evaluation Current
+Feature state, then received separate cold-start approval.
 
 ## Known Issues
 
@@ -265,12 +255,12 @@ no audible GPT reply or idle-timeout substitution. Final recovery passes with
 - Evidence: `.agent-harness/runs/F037-real-vad-tuning-results.md` and `.agent-harness/runs/F048-real-device-acceptance.md`.
 - Follow-up: Treat paused-prefix preservation and clap/transient rejection as separate lower-priority features if their real impact becomes material. Default enablement is a separate product decision.
 
-### Realtime natural human barge-in sensitivity
+### Realtime natural human barge-in repeatability
 
-- Impact: Three F059 live-near-end attempts under the previously accepted `REALTIME_OUTPUT_VOLUME=0.1` and server-VAD threshold `0.8` profile emitted no `host_speech_started`. The controlled F060 retry later captured strong natural human speech in both no-playback and remote-playback phases, triggered server VAD in both phases, cancelled the long response in about 74 ms, and created a continuation. The F059 failure therefore did not reproduce as a stable capture-path, server-VAD, or full-duplex attenuation defect.
-- Current safe interpretation: RT003's recorded F059 attempts remain honest failures, while F060 classifies the controlled comparison as `event_orchestration`. Do not rewrite historical evidence or automatically change Realtime tuning.
-- Evidence: `.agent-harness/runs/F059-rt003-live-failures.md` and `.agent-harness/runs/F060-live-diagnostic-attempt.md`.
-- Follow-up: after F060 evaluator review, rerun RT003 with operator timing that explicitly waits for confirmation before starting the long answer; only create a product correction if that controlled RT003 run fails again.
+- Impact: Three F059 live-near-end attempts emitted no `host_speech_started`, while F060 showed strong speech capture and server-VAD cancellation during a controlled comparison. F061 then corrected the operator/event timing and passed the synchronized RT003 live run without changing product audio tuning. This sequence does not establish statistical reliability across speakers, rooms, or devices.
+- Current safe interpretation: Preserve the F059 failures as honest historical evidence and treat F061 as the accepted result for the tested Mac and timing protocol. There is no current evidence for changing `REALTIME_OUTPUT_VOLUME=0.1`, server-VAD threshold `0.8`, capture constraints, or echo processing.
+- Evidence: `.agent-harness/runs/F059-rt003-live-failures.md`, `.agent-harness/runs/F060-live-diagnostic-attempt.md`, `.agent-harness/runs/F061-live-attempts.md`, and `.agent-harness/runs/20260723T100500Z-F061-evaluation-pass.md`.
+- Follow-up: Repeat synchronized RT003 only when a user-observed regression, environment change, or broader reliability goal makes new live evidence worthwhile. Create a product correction only if that controlled run identifies a reproducible product defect.
 
 ## Operational and Verification Constraints
 

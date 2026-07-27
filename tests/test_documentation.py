@@ -15,6 +15,7 @@ CONFIGURATION = ROOT / "docs" / "CONFIGURATION.md"
 PIPELINE = ROOT / "docs" / "PIPELINE.md"
 REALTIME = ROOT / "docs" / "REALTIME.md"
 TROUBLESHOOTING = ROOT / "docs" / "TROUBLESHOOTING.md"
+PROGRESS = ROOT / ".agent-harness" / "progress.md"
 
 PROJECT_DOCS = (
     README,
@@ -84,6 +85,39 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("Developer references", readme)
         self.assertIn("Development history", readme)
         self.assertIn(".agent-harness/", readme)
+        self.assertIn(".agent-harness/runs/", readme)
+        self.assertNotIn("`.agent-harness/` and `runs/`", readme)
+
+    def test_recovery_progress_matches_latest_documentation_state(self):
+        progress = read(PROGRESS)
+        last_completed = progress.split("## Last Completed Feature", 1)[1].split(
+            "## Recent Completed Feature History", 1
+        )[0]
+        current_feature = progress.split("## Current Feature", 1)[1].split(
+            "## Next Feature", 1
+        )[0]
+        next_feature = progress.split("## Next Feature", 1)[1].split(
+            "## Recently Completed", 1
+        )[0]
+        recently_completed = progress.split("## Recently Completed", 1)[1].split(
+            "## Known Issues", 1
+        )[0]
+        known_issues = progress.split("## Known Issues", 1)[1].split(
+            "## Operational and Verification Constraints", 1
+        )[0]
+
+        self.assertIn("F072 - Reconcile active documentation", last_completed)
+        self.assertNotIn(
+            "F070 - Keep Realtime input-level diagnostics", last_completed
+        )
+        self.assertIn("No feature is currently selected.", current_feature)
+        self.assertNotIn("F072 - Reconcile active documentation", current_feature)
+        self.assertIn("No later feature is selected.", next_feature)
+        self.assertIn("F072 - Reconcile active documentation", recently_completed)
+        self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
+        self.assertIn("F061", known_issues)
+        self.assertIn("passed the synchronized RT003 live run", known_issues)
+        self.assertNotIn("after F060 evaluator review", known_issues)
 
     def test_all_env_keys_are_owned_by_configuration_reference(self):
         configuration = read(CONFIGURATION)

@@ -1585,6 +1585,27 @@
       "depends_on": [
         "F070"
       ]
+    },
+    {
+      "id": "F072",
+      "title": "Reconcile active documentation and recovery state",
+      "description": "Audit and correct active project documentation so the README and Harness recovery state consistently reflect F071 as the latest completion, F061 as the accepted RT003 result, and the exact location of durable run evidence without rewriting historical records or runtime behavior.",
+      "acceptance": [
+        "The active progress sections identify F071 as the latest completed feature, show no selected next feature, and do not present F065 as the most recently completed work.",
+        "The active Realtime barge-in Known Issue reflects F061's accepted synchronized RT003 live result and removes the superseded instruction to rerun RT003 after F060 evaluator review.",
+        "README development-history wording points unambiguously to .agent-harness/runs/ while preserving the concise landing-page and documentation-map boundaries.",
+        "Focused documentation tests fail on the stale F065/F060 active-state wording and verify the corrected F071/F061 recovery contracts without changing runtime behavior.",
+        "Feature JSON validation, existing documentation contracts, full project tests, and final ./init.sh pass without live devices, credentials, network calls, or deletion of local tmp artifacts."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F061",
+        "F071"
+      ]
     }
   ]
 }
