@@ -380,7 +380,19 @@ class HandoffCoordinator:
                 safe_detail = {
                     key: value
                     for key, value in detail.items()
-                    if key in {"echoCancellation", "noiseSuppression", "autoGainControl", "sampleRate", "channelCount", "outputVolume", "reason"}
+                    if key
+                    in {
+                        "echoCancellation",
+                        "echoCancellationRequested",
+                        "echoCancellationAllSupported",
+                        "noiseSuppression",
+                        "autoGainControl",
+                        "inputNoiseReduction",
+                        "sampleRate",
+                        "channelCount",
+                        "outputVolume",
+                        "reason",
+                    }
                     and isinstance(value, (str, int, float, bool))
                 }
             self._record(f"host_{event_type}", session_id=session_id, **safe_detail)
@@ -407,6 +419,8 @@ class HandoffCoordinator:
                 "speech_stopped",
                 "response_created",
                 "response_done",
+                "playback_started",
+                "playback_stopped",
                 "transcription",
             }:
                 self._last_activity_at = self._clock()

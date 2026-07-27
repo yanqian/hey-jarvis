@@ -1,6 +1,6 @@
 "use strict";
 
-const AUDIO_CONSTRAINTS={echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1};
+const AUDIO_CONSTRAINTS={echoCancellation:{exact:true},noiseSuppression:true,autoGainControl:true,channelCount:1};
 const REMOTE_AUDIO_VOLUME=0.1;
 const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
 let armed=false,lastCommand=0,pc=null,dc=null,stream=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null;
@@ -12,6 +12,19 @@ function log(type,detail={}){events.push({at_ms:Math.round(performance.now()),ty
 async function post(path,payload={}){const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const data=await response.json();if(!response.ok)throw new Error(data.message||data.error);return data;}
 async function hostEvent(type,detail={}){return post("/api/event",{type,session_id:sessionId,host_id:hostId,...detail});}
 function renderSettings(settings){for(const row of $("settings").querySelectorAll("div")){const key=row.querySelector("dt").textContent;row.querySelector("dd").textContent=String(settings[key]??"not reported");}}
+async function preferStrongestEchoCancellation(track){
+  const capabilities=typeof track.getCapabilities==="function"?track.getCapabilities():{};
+  const advertised=Array.isArray(capabilities.echoCancellation)?capabilities.echoCancellation:[];
+  const allSupported=advertised.includes("all");
+  if(allSupported){
+    try{
+      await track.applyConstraints({...AUDIO_CONSTRAINTS,echoCancellation:{exact:"all"}});
+      return {requested:"all",allSupported:true};
+    }catch{}
+  }
+  await track.applyConstraints(AUDIO_CONSTRAINTS);
+  return {requested:"true",allSupported};
+}
 function boundedDiagnosticValue(value){
   return typeof value==="string"&&/^[A-Za-z0-9_.:-]{1,100}$/.test(value)?value:null;
 }
@@ -98,6 +111,7 @@ async function arm(){
 function sendSessionUpdate(){
   const turnDetection=sessionConfig.server_vad?{type:"server_vad",threshold:sessionConfig.server_vad_threshold,prefix_padding_ms:300,silence_duration_ms:500,create_response:true,interrupt_response:true}:null;
   const input={turn_detection:turnDetection};
+  input.noise_reduction=sessionConfig.input_noise_reduction==="none"?null:{type:sessionConfig.input_noise_reduction};
   if(sessionConfig.input_transcription)input.transcription={model:sessionConfig.transcription_model};
   const tools=[
     {type:"function",name:"calculator",description:"Safely evaluate one arithmetic expression. Use only for arithmetic.",parameters:{type:"object",additionalProperties:false,properties:{expression:{type:"string",description:"Arithmetic expression using numbers, parentheses, +, -, *, /, //, %, or **."}},required:["expression"]}},
@@ -156,19 +170,21 @@ async function forwardToolCall(item){
 }
 
 async function handleServerEvent(event){
-  const tracked=["session.created","session.updated","input_audio_buffer.speech_started","input_audio_buffer.speech_stopped","response.created","response.done","response.function_call_arguments.done","conversation.item.input_audio_transcription.completed","conversation.item.input_audio_transcription.failed","error"];
+  const tracked=["session.created","session.updated","input_audio_buffer.speech_started","input_audio_buffer.speech_stopped","response.created","response.done","output_audio_buffer.started","output_audio_buffer.stopped","response.function_call_arguments.done","conversation.item.input_audio_transcription.completed","conversation.item.input_audio_transcription.failed","error"];
   if(!tracked.includes(event.type))return;
   log(event.type,{status:event.response?.status});
   if(event.type==="session.created"){await hostEvent("session_created");sendSessionUpdate();}
   if(event.type==="session.updated"){const readyAt=performance.now();await hostEvent("handoff_timing",handoffTimingSummary(readyAt));await hostEvent("connected");$("status").textContent="Live · follow-up speech stays in this session";}
   if(event.type==="input_audio_buffer.speech_started")await hostEvent("speech_started");
   if(event.type==="input_audio_buffer.speech_stopped")await hostEvent("speech_stopped");
-  if(event.type==="response.created"){flushInputLevels();assistantSpeaking=true;await hostEvent("response_created");}
+  if(event.type==="response.created"){flushInputLevels();await hostEvent("response_created");}
   if(event.type==="response.done"){
-    flushInputLevels();assistantSpeaking=false;
+    flushInputLevels();
     await hostEvent("response_done",{reason:String(event.response?.status||"unknown")});
     for(const item of event.response?.output||[])if(item.type==="function_call"&&await forwardToolCall(item))return;
   }
+  if(event.type==="output_audio_buffer.started"){flushInputLevels();assistantSpeaking=true;await hostEvent("playback_started");}
+  if(event.type==="output_audio_buffer.stopped"){flushInputLevels();assistantSpeaking=false;await hostEvent("playback_stopped");}
   if(event.type==="response.function_call_arguments.done")await forwardToolCall(event);
   if(event.type==="conversation.item.input_audio_transcription.completed"){
     const transcript=typeof event.transcript==="string"&&event.transcript.length<=200?event.transcript:null;
@@ -191,8 +207,8 @@ async function start(command){
   $("remoteAudio").volume=Number.isFinite(sessionConfig.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;
   stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
   handoffTiming.microphoneAcquired=performance.now();
-  const track=stream.getAudioTracks()[0],settings=track.getSettings();renderSettings(settings);
-  await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
+  const track=stream.getAudioTracks()[0],echoPreference=await preferStrongestEchoCancellation(track),settings=track.getSettings();renderSettings(settings);
+  await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,echoCancellationRequested:echoPreference.requested,echoCancellationAllSupported:echoPreference.allSupported,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,inputNoiseReduction:sessionConfig.input_noise_reduction,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
   handoffTiming.microphoneReported=performance.now();
   if(command.input_level_diagnostics===true)startInputLevels(stream,handoffTiming);
   else skipInputLevels(handoffTiming);

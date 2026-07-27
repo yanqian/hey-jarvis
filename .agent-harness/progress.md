@@ -4,6 +4,18 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F073 has been completed through evaluator-gated fast work, a user-led Mac
+built-in-microphone/speaker run, and separate cold-start evaluator approval.
+The Realtime host now prefers the strongest browser-advertised standardized
+echo-cancellation mode with a required fallback, enables validated far-field
+input noise reduction, and records playback-buffer lifecycle separately from
+response generation. At local output volume 0.3, one normal answer played
+continuously for 5,557 ms without false speech, deliberate near-end speech
+cancelled an active reply and received a continuation, and the intentional
+ending restored wake ownership. The checked-in volume default remains 0.1
+pending broader device evidence. Approval is recorded as `EVAL_PASS: F073` in
+`.agent-harness/runs/20260727T070000Z-F073-evaluation-pass.md`.
+
 F072 has been completed through evaluator-gated fast work and separate
 cold-start evaluator approval. Active recovery state now agrees on the latest
 completed feature and empty next-feature queue; the README points directly to
@@ -141,16 +153,14 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F072 - Reconcile active documentation and recovery state.
+F073 - Stabilize Realtime playback on Mac built-in speakers.
 
-F072 aligned the duplicate active completion sections, removed the stale
-F072-in-progress state after evaluator approval, corrected the hidden Harness
-run-evidence path in README, and reconciled the RT003 risk text with F061.
-Focused documentation tests and final recovery verification pass with 342
-project tests. Coding evidence is in
-`.agent-harness/runs/F072-fast-coding.md`, and approval is recorded as
-`EVAL_PASS: F072` in
-`.agent-harness/runs/20260727T000000Z-F072-evaluation-pass.md`.
+F073 added capability-aware echo cancellation, Realtime far-field input noise
+reduction, sanitized capture configuration, and output-buffer playback
+lifecycle evidence while preserving server-managed barge-in. Offline recovery
+passes with 344 project tests. The user-led built-in-speaker acceptance passed
+at local output volume 0.3, and separate cold-start approval is recorded as
+`EVAL_PASS: F073`.
 
 ## Recent Completed Feature History
 
@@ -239,12 +249,12 @@ No later feature is selected.
 
 ## Recently Completed
 
-F072 - Reconcile active documentation and recovery state.
+F073 - Stabilize Realtime playback on Mac built-in speakers.
 
-F072 completed the active-state cleanup after evaluator feedback exposed the
-second stale `Last Completed Feature` section. The retry added direct
-regressions for both completion sections and the post-evaluation Current
-Feature state, then received separate cold-start approval.
+F073 corrected the reproducible built-in-speaker self-echo cancellation chain
+without disabling real interruption. The accepted target-Mac run used
+far-field input reduction and local output volume 0.3, produced continuous
+normal playback, preserved deliberate barge-in, and recovered wake ownership.
 
 ## Known Issues
 
@@ -257,10 +267,17 @@ Feature state, then received separate cold-start approval.
 
 ### Realtime natural human barge-in repeatability
 
-- Impact: Three F059 live-near-end attempts emitted no `host_speech_started`, while F060 showed strong speech capture and server-VAD cancellation during a controlled comparison. F061 then corrected the operator/event timing and passed the synchronized RT003 live run without changing product audio tuning. This sequence does not establish statistical reliability across speakers, rooms, or devices.
-- Current safe interpretation: Preserve the F059 failures as honest historical evidence and treat F061 as the accepted result for the tested Mac and timing protocol. There is no current evidence for changing `REALTIME_OUTPUT_VOLUME=0.1`, server-VAD threshold `0.8`, capture constraints, or echo processing.
-- Evidence: `.agent-harness/runs/F059-rt003-live-failures.md`, `.agent-harness/runs/F060-live-diagnostic-attempt.md`, `.agent-harness/runs/F061-live-attempts.md`, and `.agent-harness/runs/20260723T100500Z-F061-evaluation-pass.md`.
+- Impact: Three F059 live-near-end attempts emitted no `host_speech_started`, while F060 showed strong speech capture and server-VAD cancellation during a controlled comparison. F061 passed the synchronized RT003 run. A later user-observed built-in-speaker regression produced playback-correlated false speech and repeated cancellation until F073 added far-field preprocessing and stronger echo-cancellation negotiation. This sequence still does not establish statistical reliability across speakers, rooms, or devices.
+- Current safe interpretation: Preserve the historical failures and use the F073 target-Mac result as evidence for `far_field` plus local output volume 0.3 on that device. The checked-in volume default remains 0.1 until broader evidence supports changing it; server-VAD threshold remains 0.8.
+- Evidence: `.agent-harness/runs/F059-rt003-live-failures.md`, `.agent-harness/runs/F060-live-diagnostic-attempt.md`, `.agent-harness/runs/F061-live-attempts.md`, `.agent-harness/runs/20260727T064500Z-F073-live-acceptance.md`, and `.agent-harness/runs/20260727T070000Z-F073-evaluation-pass.md`.
 - Follow-up: Repeat synchronized RT003 only when a user-observed regression, environment change, or broader reliability goal makes new live evidence worthwhile. Create a product correction only if that controlled run identifies a reproducible product defect.
+
+### Realtime wake-to-ready first-utterance loss
+
+- Impact: All three F073 trials confirmed the wake word, but in the first two the user began speaking about 250 ms before `host_connected`. The incomplete captured turn closed without an audible answer, which appeared to the user as a missed wake. Wake-to-connected took about 3.8–4.3 seconds from confirmation and 2.2–3.4 seconds after the acknowledgement completed.
+- Current safe interpretation: This is an implementation/readiness gap, not user error, wake-detector failure, or speaker echo failure. Until corrected, wait for the host to show `Live` before asking the first question.
+- Evidence: `.agent-harness/runs/20260727T064500Z-F073-live-acceptance.md`.
+- Follow-up: Plan a separate audible-ready or preconnected first-utterance preservation feature; do not weaken F073 or disable barge-in to mask it.
 
 ## Operational and Verification Constraints
 

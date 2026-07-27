@@ -4,6 +4,7 @@ import json
 import unittest
 from http import HTTPStatus
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from src.realtime_host.coordinator import (
     MAX_TOOL_ARGUMENT_CHARS,
@@ -378,11 +379,25 @@ class RealtimeHostTests(unittest.TestCase):
         javascript = server.resolve_static("/app.js")[0].decode()
         guidance = (server.STATIC_ROOT.parent / "README.md").read_text()
         self.assertIn("Arm hands-free audio", html)
-        for text in ("getUserMedia", "/api/command?after=", "host_id", "echoCancellation:true", "track.stop()", "peer.close()"):
+        for text in ("getUserMedia", "/api/command?after=", "host_id", "echoCancellation:{exact:true}", "track.stop()", "peer.close()"):
             self.assertIn(text, javascript)
         self.assertIn("REMOTE_AUDIO_VOLUME=0.1", javascript)
         self.assertIn("threshold:sessionConfig.server_vad_threshold", javascript)
         self.assertIn("sessionConfig.output_volume", javascript)
+        for text in (
+            'advertised.includes("all")',
+            'echoCancellation:{exact:"all"}',
+            "input.noise_reduction",
+            'sessionConfig.input_noise_reduction==="none"?null',
+            '"output_audio_buffer.started"',
+            '"output_audio_buffer.stopped"',
+            'hostEvent("playback_started")',
+            'hostEvent("playback_stopped")',
+            "echoCancellationRequested:echoPreference.requested",
+            "echoCancellationAllSupported:echoPreference.allSupported",
+            "inputNoiseReduction:sessionConfig.input_noise_reduction",
+        ):
+            self.assertIn(text, javascript)
         for text in (
             "createMediaStreamSource(mediaStream)",
             "getFloatTimeDomainData",
@@ -470,6 +485,65 @@ class RealtimeHostTests(unittest.TestCase):
         )
         self.assertEqual(result, {"value": "ek_test", "model": "model-test", "voice": "marin"})
         self.assertNotIn("sk-fake-standard", json.dumps(result))
+
+    def test_token_response_passes_validated_input_noise_reduction_to_browser(self):
+        responses: list[tuple[HTTPStatus, dict[str, object]]] = []
+        handler = object.__new__(server.HostRequestHandler)
+        handler.path = "/token"
+        handler._json = lambda status, payload: responses.append((status, dict(payload)))
+        settings = SimpleNamespace(
+            openai_api_key="sk-private",
+            realtime_model="model-test",
+            realtime_voice="marin",
+            realtime_output_volume=0.3,
+            realtime_server_vad_enabled=True,
+            realtime_server_vad_threshold=0.8,
+            realtime_input_noise_reduction="far_field",
+            realtime_input_transcription_enabled=True,
+            transcribe_model="gpt-4o-mini-transcribe",
+        )
+        with patch.object(server, "load_settings", return_value=settings), patch.object(
+            server,
+            "mint_client_secret",
+            return_value={"value": "ek-test", "model": "model-test", "voice": "marin"},
+        ):
+            handler.do_POST()
+
+        self.assertEqual(responses[0][0], HTTPStatus.OK)
+        session = responses[0][1]["session"]
+        self.assertEqual(session["input_noise_reduction"], "far_field")
+        self.assertEqual(session["output_volume"], 0.3)
+        self.assertNotIn("sk-private", json.dumps(responses))
+
+    def test_capture_and_playback_evidence_is_allowlisted_without_content(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event(
+            "microphone_acquired",
+            session_id,
+            echoCancellation="all",
+            echoCancellationRequested="all",
+            echoCancellationAllSupported=True,
+            noiseSuppression=True,
+            autoGainControl=True,
+            inputNoiseReduction="far_field",
+            outputVolume=0.3,
+            transcript="must-not-survive",
+        )
+        coordinator.host_event("connected", session_id)
+        coordinator.host_event("playback_started", session_id, answer="must-not-survive")
+        coordinator.host_event("playback_stopped", session_id)
+
+        report = coordinator.report()
+        microphone = next(event for event in report["events"] if event["type"] == "host_microphone_acquired")
+        self.assertEqual(microphone["echoCancellationRequested"], "all")
+        self.assertTrue(microphone["echoCancellationAllSupported"])
+        self.assertEqual(microphone["inputNoiseReduction"], "far_field")
+        self.assertEqual(microphone["outputVolume"], 0.3)
+        self.assertNotIn("must-not-survive", json.dumps(report))
+        self.assertIn("host_playback_started", [event["type"] for event in report["events"]])
+        self.assertIn("host_playback_stopped", [event["type"] for event in report["events"]])
 
     def test_report_is_bounded_and_redacts_content_and_tool_secrets(self):
         coordinator, _lease = self.build_coordinator()

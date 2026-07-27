@@ -106,17 +106,18 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F072 - Reconcile active documentation", last_completed)
+        self.assertIn("F073 - Stabilize Realtime playback", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
         self.assertIn("No feature is currently selected.", current_feature)
-        self.assertNotIn("F072 - Reconcile active documentation", current_feature)
+        self.assertNotIn("F073 - Stabilize Realtime playback", current_feature)
         self.assertIn("No later feature is selected.", next_feature)
-        self.assertIn("F072 - Reconcile active documentation", recently_completed)
+        self.assertIn("F073 - Stabilize Realtime playback", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
         self.assertIn("F061", known_issues)
-        self.assertIn("passed the synchronized RT003 live run", known_issues)
+        self.assertIn("passed the synchronized RT003 run", known_issues)
+        self.assertIn("Realtime wake-to-ready first-utterance loss", known_issues)
         self.assertNotIn("after F060 evaluator review", known_issues)
 
     def test_all_env_keys_are_owned_by_configuration_reference(self):
@@ -216,6 +217,8 @@ class DocumentationTests(unittest.TestCase):
             "English receives English",
             "REALTIME_OUTPUT_VOLUME=0.1",
             "REALTIME_SERVER_VAD_THRESHOLD=0.8",
+            "REALTIME_INPUT_NOISE_REDUCTION=far_field",
+            "playback-buffer",
             "for exactly the next wake-triggered session",
         ):
             self.assertIn(phrase, realtime)

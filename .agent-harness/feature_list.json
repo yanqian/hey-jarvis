@@ -1606,6 +1606,37 @@
         "F061",
         "F071"
       ]
+    },
+    {
+      "id": "F073",
+      "title": "Stabilize Realtime playback on Mac built-in speakers",
+      "description": "Prevent Mac built-in speaker output from being recaptured as false user speech by combining capability-aware browser echo cancellation, Realtime far-field input noise reduction, and playback-buffer observability while preserving genuine server-managed barge-in.",
+      "acceptance": [
+        "The browser prefers standardized all-system-audio echo cancellation when the active microphone track advertises that capability, otherwise requires boolean echo cancellation, and reports requested constraints, actual settings, configured noise reduction, and output volume through bounded allowlisted fields.",
+        "Realtime session updates configure validated input noise reduction as far_field by default, allow near_field or disabled overrides, and keep server VAD create_response and interrupt_response enabled so genuine human barge-in is not removed.",
+        "The host tracks WebRTC output_audio_buffer.started/stopped lifecycle separately from response generation, records sanitized playback events, and retains deterministic media/data-channel/peer cleanup plus wake-microphone recovery.",
+        "Configuration and operator guidance explain built-in-speaker versus headset profiles, the checked-in 0.1 output-volume default remains unchanged until live acceptance, and automated config/server/browser/coordinator/privacy tests plus JavaScript syntax, full project tests, Realtime fake smoke, and final ./init.sh pass without devices, network, credentials, or local-log changes.",
+        "One user-led built-in-microphone/speaker live run at a louder local output volume records sanitized evidence that a normal answer remains continuous without self-echo cancellation, a deliberate interruption cancels the active answer and receives a continuation, cleanup restores wake ownership, and separate cold-start evaluator approval passes."
+      ],
+      "evals": [
+        {
+          "scenario": "Mac built-in speaker full-duplex Realtime acceptance",
+          "required_evidence": [
+            "offline",
+            "live_host",
+            "live_near_end"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F052",
+        "F061"
+      ]
     }
   ]
 }

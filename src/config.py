@@ -103,6 +103,8 @@ DEFAULT_REALTIME_IDLE_TIMEOUT_SECONDS = 15.0
 DEFAULT_REALTIME_MAX_DURATION_SECONDS = 600.0
 DEFAULT_REALTIME_SERVER_VAD_ENABLED = True
 DEFAULT_REALTIME_SERVER_VAD_THRESHOLD = 0.8
+DEFAULT_REALTIME_INPUT_NOISE_REDUCTION = "far_field"
+SUPPORTED_REALTIME_INPUT_NOISE_REDUCTIONS = ("none", "near_field", "far_field")
 DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED = True
 DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE = "local"
 SUPPORTED_REALTIME_ACKNOWLEDGEMENT_MODES = ("local", "none")
@@ -117,6 +119,14 @@ def normalize_realtime_acknowledgement_mode(value: str) -> str:
     if normalized not in SUPPORTED_REALTIME_ACKNOWLEDGEMENT_MODES:
         raise ValueError(value)
     return normalized
+
+
+def normalize_realtime_input_noise_reduction(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in SUPPORTED_REALTIME_INPUT_NOISE_REDUCTIONS:
+        raise ValueError(value)
+    return normalized
+
 
 SUPPORTED_PYTHON_VERSIONS = {(3, 11), (3, 12)}
 PLACEHOLDER_API_KEYS = {"", "your_api_key_here", "replace_me", "changeme"}
@@ -214,6 +224,7 @@ class Settings:
     realtime_max_duration_seconds: float = DEFAULT_REALTIME_MAX_DURATION_SECONDS
     realtime_server_vad_enabled: bool = DEFAULT_REALTIME_SERVER_VAD_ENABLED
     realtime_server_vad_threshold: float = DEFAULT_REALTIME_SERVER_VAD_THRESHOLD
+    realtime_input_noise_reduction: str = DEFAULT_REALTIME_INPUT_NOISE_REDUCTION
     realtime_input_transcription_enabled: bool = DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED
     realtime_acknowledgement_mode: str = DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE
     realtime_debug: bool = DEFAULT_REALTIME_DEBUG
@@ -278,6 +289,7 @@ def load_settings(
     realtime_max_duration_seconds = DEFAULT_REALTIME_MAX_DURATION_SECONDS
     realtime_server_vad_enabled = DEFAULT_REALTIME_SERVER_VAD_ENABLED
     realtime_server_vad_threshold = DEFAULT_REALTIME_SERVER_VAD_THRESHOLD
+    realtime_input_noise_reduction = DEFAULT_REALTIME_INPUT_NOISE_REDUCTION
     realtime_input_transcription_enabled = DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED
     realtime_acknowledgement_mode = DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE
     realtime_debug = DEFAULT_REALTIME_DEBUG
@@ -320,6 +332,14 @@ def load_settings(
             errors,
             minimum=0.0,
             maximum=1.0,
+        )
+        realtime_input_noise_reduction = _choice_value(
+            raw_env,
+            "REALTIME_INPUT_NOISE_REDUCTION",
+            DEFAULT_REALTIME_INPUT_NOISE_REDUCTION,
+            SUPPORTED_REALTIME_INPUT_NOISE_REDUCTIONS,
+            errors,
+            normalizer=normalize_realtime_input_noise_reduction,
         )
         realtime_input_transcription_enabled = _bool_value(
             raw_env,
@@ -761,6 +781,7 @@ def load_settings(
         realtime_max_duration_seconds=realtime_max_duration_seconds,
         realtime_server_vad_enabled=realtime_server_vad_enabled,
         realtime_server_vad_threshold=realtime_server_vad_threshold,
+        realtime_input_noise_reduction=realtime_input_noise_reduction,
         realtime_input_transcription_enabled=realtime_input_transcription_enabled,
         realtime_acknowledgement_mode=realtime_acknowledgement_mode,
         realtime_debug=realtime_debug,
@@ -913,7 +934,9 @@ def _backend_readiness_checks(settings: Settings) -> list[DiagnosticCheck]:
             "realtime:model-voice",
             "ok",
             f"Realtime model={settings.realtime_model} voice={settings.realtime_voice} "
-            f"output_volume={settings.realtime_output_volume} server_vad_threshold={settings.realtime_server_vad_threshold}",
+            f"output_volume={settings.realtime_output_volume} "
+            f"server_vad_threshold={settings.realtime_server_vad_threshold} "
+            f"input_noise_reduction={settings.realtime_input_noise_reduction}",
         ),
         DiagnosticCheck(
             "realtime:credential",

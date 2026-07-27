@@ -62,12 +62,22 @@ The accepted built-in speaker/microphone profile uses:
 ```text
 REALTIME_OUTPUT_VOLUME=0.1
 REALTIME_SERVER_VAD_THRESHOLD=0.8
+REALTIME_INPUT_NOISE_REDUCTION=far_field
 ```
 
 Output volume is direct browser playback gain. Server VAD threshold controls
-speech activation. These values passed the accepted device trials but are not
-universal; changing room, speaker, or microphone conditions requires renewed
-manual acceptance.
+speech activation. `far_field` filters the laptop microphone input before VAD
+and the Realtime model; use `near_field` for a close headset microphone or
+`none` only for diagnosis. Chrome requests mandatory echo cancellation and
+prefers the standardized `all` mode when the active track advertises it.
+Sanitized host evidence records the requested mode, actual browser setting,
+and remote playback-buffer start/stop separately from response generation.
+
+The checked-in 0.1 gain remains conservative until the F073 built-in-speaker
+acceptance run establishes a louder baseline. For a local trial, increase
+`REALTIME_OUTPUT_VOLUME` gradually and repeat both a normal answer and a
+deliberate barge-in. Do not treat headphones alone as built-in-speaker proof.
+Server-managed interruption remains enabled.
 
 Normal sessions do not create the optional Web Audio input-level analyser.
 That analyser is enabled for exactly the next wake-triggered session only by

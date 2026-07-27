@@ -18,6 +18,7 @@ diagnostics.
 | `REALTIME_MAX_DURATION_SECONDS` | `600` | Hard session-duration bound. |
 | `REALTIME_SERVER_VAD_ENABLED` | `1` | Enable server turn detection. |
 | `REALTIME_SERVER_VAD_THRESHOLD` | `0.8` | Server speech activation threshold. |
+| `REALTIME_INPUT_NOISE_REDUCTION` | `far_field` | Input preprocessing: `far_field` for built-in speaker/mic, `near_field` for a headset, or `none`. |
 | `REALTIME_INPUT_TRANSCRIPTION_ENABLED` | `1` | Enable rough-guide asynchronous input transcription. |
 | `REALTIME_ACKNOWLEDGEMENT_MODE` | `local` | Play acknowledgement before browser handoff. |
 | `REALTIME_DEBUG` | `0` | Add bounded local lifecycle diagnostics. |
@@ -25,10 +26,12 @@ diagnostics.
 | `REALTIME_BRIDGE_HOST` | `127.0.0.1` | Loopback host; keep local. |
 | `REALTIME_BRIDGE_PORT` | `8770` | Loopback host port. |
 
-`REALTIME_OUTPUT_VOLUME=0.1` and
-`REALTIME_SERVER_VAD_THRESHOLD=0.8` are the accepted quiet built-in
-speaker/microphone profile, not universal tuning. Re-run manual acceptance if
-room, device, or volume changes.
+`REALTIME_OUTPUT_VOLUME=0.1` remains the checked-in conservative gain while
+F073 validates a louder built-in-speaker level. The built-in Mac profile uses
+`REALTIME_INPUT_NOISE_REDUCTION=far_field`; a close headset microphone should
+use `near_field`. The browser prefers standardized all-system-audio echo
+cancellation when advertised and otherwise requires ordinary echo
+cancellation. Re-run manual acceptance if room, device, or volume changes.
 
 ## Wake and acknowledgement
 

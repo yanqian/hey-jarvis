@@ -16,6 +16,7 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertEqual(defaults.backend, "pipeline")
         self.assertEqual(defaults.realtime_output_volume, 0.1)
         self.assertEqual(defaults.realtime_server_vad_threshold, 0.8)
+        self.assertEqual(defaults.realtime_input_noise_reduction, "far_field")
         settings = load_settings(
             env={
                 "BACKEND": "pipeline",
@@ -38,6 +39,7 @@ class RealtimeConfigTests(unittest.TestCase):
                 "REALTIME_MAX_DURATION_SECONDS": "120",
                 "REALTIME_SERVER_VAD_ENABLED": "0",
                 "REALTIME_SERVER_VAD_THRESHOLD": "0.75",
+                "REALTIME_INPUT_NOISE_REDUCTION": "near_field",
                 "REALTIME_INPUT_TRANSCRIPTION_ENABLED": "1",
                 "REALTIME_ACKNOWLEDGEMENT_MODE": "none",
                 "REALTIME_DEBUG": "1",
@@ -54,6 +56,7 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertEqual(settings.realtime_max_duration_seconds, 120.0)
         self.assertFalse(settings.realtime_server_vad_enabled)
         self.assertEqual(settings.realtime_server_vad_threshold, 0.75)
+        self.assertEqual(settings.realtime_input_noise_reduction, "near_field")
         self.assertTrue(settings.realtime_input_transcription_enabled)
         self.assertEqual(settings.realtime_acknowledgement_mode, "none")
         self.assertTrue(settings.realtime_debug)
@@ -71,6 +74,7 @@ class RealtimeConfigTests(unittest.TestCase):
                     "REALTIME_ACKNOWLEDGEMENT_MODE": "remote",
                     "REALTIME_OUTPUT_VOLUME": "1.1",
                     "REALTIME_SERVER_VAD_THRESHOLD": "1.1",
+                    "REALTIME_INPUT_NOISE_REDUCTION": "studio",
                 },
                 env_file=None,
             )
@@ -80,6 +84,7 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertIn("ACKNOWLEDGEMENT_MODE", message)
         self.assertIn("REALTIME_OUTPUT_VOLUME", message)
         self.assertIn("REALTIME_SERVER_VAD_THRESHOLD", message)
+        self.assertIn("REALTIME_INPUT_NOISE_REDUCTION", message)
 
     def test_cli_override_dispatches_to_realtime_runtime(self):
         args = build_parser().parse_args(["--backend", "realtime", "--dry-run"])
@@ -122,6 +127,7 @@ class RealtimeConfigTests(unittest.TestCase):
         ):
             self.assertEqual(checks[name].status, "ok")
         self.assertIn("server_vad_threshold=0.8", checks["realtime:model-voice"].message)
+        self.assertIn("input_noise_reduction=far_field", checks["realtime:model-voice"].message)
         self.assertNotIn("sk-private", "\n".join(check.message for check in realtime.checks))
 
 
