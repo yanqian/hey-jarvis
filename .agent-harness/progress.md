@@ -4,6 +4,30 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F075 has been completed through evaluator-gated fast work, three user-led
+built-in-device sessions, and separate cold-start evaluator approval. The
+browser now sends SDP only to the loopback host; Python combines it with the
+complete validated session configuration in one unified Realtime call. The
+ephemeral-token request and post-connect `session.update` are removed while
+F074's disabled-track, audible acknowledgement, and explicit input-enable
+boundary remain intact. All three removed token phases were zero, no speech
+occurred before input readiness, and final wake ownership recovered. Median
+wake-to-configured latency fell from F074's 5,066 ms to 2,081 ms in the bounded
+same-device comparison. Approval is recorded as `EVAL_PASS: F075` in
+`.agent-harness/runs/20260727T083331Z-F075-evaluation-pass.md`.
+
+F074 has been completed through provider-native fast coding, user-led
+built-in-device acceptance, and separate cold-start evaluator approval.
+Confirmed wake now queues Realtime immediately; the browser sends silence
+through a disabled outgoing track until configuration readiness; Python then
+plays “在呢” and explicitly enables input. `host_connected` is the input-ready
+boundary. JavaScript syntax, 346 project tests, Realtime fake smoke, and final
+recovery pass. Three live sessions showed no speech event before input
+readiness; the normal interactive session completed multiple playback turns
+and semantic ending, and every session restored wake ownership. Approval is
+recorded as `EVAL_PASS: F074` in
+`.agent-harness/runs/20260727T090000Z-F074-evaluation-pass.md`.
+
 F073 has been completed through evaluator-gated fast work, a user-led Mac
 built-in-microphone/speaker run, and separate cold-start evaluator approval.
 The Realtime host now prefers the strongest browser-advertised standardized
@@ -153,14 +177,11 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F073 - Stabilize Realtime playback on Mac built-in speakers.
+F075 - Create configured Realtime sessions through one unified WebRTC call.
 
-F073 added capability-aware echo cancellation, Realtime far-field input noise
-reduction, sanitized capture configuration, and output-buffer playback
-lifecycle evidence while preserving server-managed barge-in. Offline recovery
-passes with 344 project tests. The user-led built-in-speaker acceptance passed
-at local output volume 0.3, and separate cold-start approval is recorded as
-`EVAL_PASS: F073`.
+F075 removed the ephemeral-token and separate session-update round trips,
+preserved the audible input-ready gate, and reduced bounded same-device median
+wake-to-configured latency by 58.9%. Live and evaluator acceptance pass.
 
 ## Recent Completed Feature History
 
@@ -241,7 +262,7 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently selected.
+No feature is currently in progress.
 
 ## Next Feature
 
@@ -249,12 +270,11 @@ No later feature is selected.
 
 ## Recently Completed
 
-F073 - Stabilize Realtime playback on Mac built-in speakers.
+F074 - Gate Realtime input behind an audible ready acknowledgement.
 
-F073 corrected the reproducible built-in-speaker self-echo cancellation chain
-without disabling real interruption. The accepted target-Mac run used
-far-field input reduction and local output volume 0.3, produced continuous
-normal playback, preserved deliberate barge-in, and recovered wake ownership.
+F074 passed live and evaluator acceptance: speech after “在呢” receives normal
+answers, no speech is submitted before input readiness, and cleanup restores
+wake ownership.
 
 ## Known Issues
 
@@ -271,13 +291,6 @@ normal playback, preserved deliberate barge-in, and recovered wake ownership.
 - Current safe interpretation: Preserve the historical failures and use the F073 target-Mac result as evidence for `far_field` plus local output volume 0.3 on that device. The checked-in volume default remains 0.1 until broader evidence supports changing it; server-VAD threshold remains 0.8.
 - Evidence: `.agent-harness/runs/F059-rt003-live-failures.md`, `.agent-harness/runs/F060-live-diagnostic-attempt.md`, `.agent-harness/runs/F061-live-attempts.md`, `.agent-harness/runs/20260727T064500Z-F073-live-acceptance.md`, and `.agent-harness/runs/20260727T070000Z-F073-evaluation-pass.md`.
 - Follow-up: Repeat synchronized RT003 only when a user-observed regression, environment change, or broader reliability goal makes new live evidence worthwhile. Create a product correction only if that controlled run identifies a reproducible product defect.
-
-### Realtime wake-to-ready first-utterance loss
-
-- Impact: All three F073 trials confirmed the wake word, but in the first two the user began speaking about 250 ms before `host_connected`. The incomplete captured turn closed without an audible answer, which appeared to the user as a missed wake. Wake-to-connected took about 3.8–4.3 seconds from confirmation and 2.2–3.4 seconds after the acknowledgement completed.
-- Current safe interpretation: This is an implementation/readiness gap, not user error, wake-detector failure, or speaker echo failure. Until corrected, wait for the host to show `Live` before asking the first question.
-- Evidence: `.agent-harness/runs/20260727T064500Z-F073-live-acceptance.md`.
-- Follow-up: Plan a separate audible-ready or preconnected first-utterance preservation feature; do not weaken F073 or disable barge-in to mask it.
 
 ## Operational and Verification Constraints
 

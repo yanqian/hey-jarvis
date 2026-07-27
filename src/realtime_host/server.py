@@ -9,6 +9,7 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,7 +24,8 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8770
 DEFAULT_MODEL = "gpt-realtime-2.1"
 DEFAULT_VOICE = "marin"
-CLIENT_SECRET_URL = "https://api.openai.com/v1/realtime/client_secrets"
+REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls"
+MAX_SDP_BYTES = 128_000
 CHROME_BINARY = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
 STATIC_FILES = {
@@ -63,24 +65,141 @@ def load_host_config(env: Mapping[str, str] | None = None, env_file: str | Path 
     )
 
 
-def mint_client_secret(*, api_key: str, model: str, voice: str, urlopen: Callable[..., object] = urllib.request.urlopen) -> dict[str, object]:
+def build_realtime_session_config(settings: object) -> dict[str, object]:
+    turn_detection = (
+        {
+            "type": "server_vad",
+            "threshold": settings.realtime_server_vad_threshold,
+            "prefix_padding_ms": 300,
+            "silence_duration_ms": 500,
+            "create_response": True,
+            "interrupt_response": True,
+        }
+        if settings.realtime_server_vad_enabled
+        else None
+    )
+    input_audio: dict[str, object] = {"turn_detection": turn_detection}
+    input_audio["noise_reduction"] = (
+        None
+        if settings.realtime_input_noise_reduction == "none"
+        else {"type": settings.realtime_input_noise_reduction}
+    )
+    if settings.realtime_input_transcription_enabled:
+        input_audio["transcription"] = {"model": settings.transcribe_model}
+    instructions = "\n".join(
+        (
+            "# Role & Objective",
+            "- Be a concise, natural voice assistant.",
+            "# Language",
+            "- For every turn, respond in the language primarily used in the user's current utterance.",
+            "- For Mandarin Chinese input, answer entirely in concise, natural Simplified Chinese.",
+            "- For English input, answer in English.",
+            "- The current user utterance overrides prior turns, these English instructions, English tool definitions, and English tool outputs.",
+            "- For mixed or ambiguous input, use the language of the main request; never default to English merely because developer or tool text is English.",
+            "- If the user explicitly asks for translation, spelling, pronunciation, language practice, or a whole response in another language, include or use the requested target language. Unless the whole response is requested in that language, keep the surrounding explanation in the language of the current request.",
+            "# Conversation Ending",
+            "- If the user clearly and unambiguously wants to end the current conversation, call end_conversation with {} and do not provide a spoken or substantive response.",
+            "- Do not call end_conversation when farewell words are merely mentioned, quoted, translated, or requested as content.",
+        )
+    )
+    tools = [
+        {
+            "type": "function",
+            "name": "calculator",
+            "description": "Safely evaluate one arithmetic expression. Use only for arithmetic.",
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "Arithmetic expression using numbers, parentheses, +, -, *, /, //, %, or **.",
+                    }
+                },
+                "required": ["expression"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "end_conversation",
+            "description": "End the current voice session only when the user clearly and unambiguously wants to leave, stop, say goodbye, or end this conversation. Do not use when the user merely mentions, quotes, translates, or asks you to say a farewell phrase.",
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {},
+            },
+        },
+    ]
+    return {
+        "type": "realtime",
+        "model": settings.realtime_model,
+        "instructions": instructions,
+        "output_modalities": ["audio"],
+        "audio": {
+            "input": input_audio,
+            "output": {"voice": settings.realtime_voice},
+        },
+        "tools": tools,
+        "tool_choice": "auto",
+    }
+
+
+def _multipart_call_body(
+    sdp: str,
+    session: Mapping[str, object],
+    *,
+    boundary: str,
+) -> bytes:
+    parts: list[bytes] = []
+    for name, content_type, value in (
+        ("sdp", "application/sdp", sdp.encode("utf-8")),
+        (
+            "session",
+            "application/json",
+            json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        ),
+    ):
+        parts.extend(
+            (
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="{name}"\r\n'.encode(),
+                f"Content-Type: {content_type}\r\n\r\n".encode(),
+                value,
+                b"\r\n",
+            )
+        )
+    parts.append(f"--{boundary}--\r\n".encode())
+    return b"".join(parts)
+
+
+def create_realtime_call(
+    *,
+    api_key: str,
+    sdp: str,
+    session: Mapping[str, object],
+    urlopen: Callable[..., object] = urllib.request.urlopen,
+    boundary: str | None = None,
+) -> str:
+    multipart_boundary = boundary or f"hey-jarvis-{uuid.uuid4().hex}"
     request = urllib.request.Request(
-        CLIENT_SECRET_URL,
-        data=json.dumps({"session": {"type": "realtime", "model": model, "audio": {"output": {"voice": voice}}}}).encode(),
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        REALTIME_CALLS_URL,
+        data=_multipart_call_body(sdp, session, boundary=multipart_boundary),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": f"multipart/form-data; boundary={multipart_boundary}",
+        },
         method="POST",
     )
     try:
         with urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode())
+            answer = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        raise HostServerError(f"OpenAI client-secret request failed with HTTP {exc.code}") from exc
-    except (urllib.error.URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise HostServerError("OpenAI client-secret request failed safely") from exc
-    value = payload.get("value") if isinstance(payload, dict) else None
-    if not isinstance(value, str) or not value:
-        raise HostServerError("OpenAI client-secret response was malformed")
-    return {"value": value, "model": model, "voice": voice}
+        raise HostServerError(f"OpenAI Realtime call failed with HTTP {exc.code}") from exc
+    except (urllib.error.URLError, TimeoutError, UnicodeDecodeError) as exc:
+        raise HostServerError("OpenAI Realtime call failed safely") from exc
+    if not answer.startswith("v=0") or len(answer.encode("utf-8")) > MAX_SDP_BYTES:
+        raise HostServerError("OpenAI Realtime SDP answer was malformed")
+    return answer
 
 
 class HostHTTPServer(ThreadingHTTPServer):
@@ -142,6 +261,20 @@ class HostRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/report":
             self._json(HTTPStatus.OK, self.server.coordinator.report())
             return
+        if parsed.path == "/api/realtime-settings":
+            try:
+                settings = load_settings(backend="realtime")
+            except ConfigError as exc:
+                self._json(HTTPStatus.CONFLICT, {"error": "host_control_failed", "message": str(exc)})
+                return
+            self._json(
+                HTTPStatus.OK,
+                {
+                    "output_volume": settings.realtime_output_volume,
+                    "input_noise_reduction": settings.realtime_input_noise_reduction,
+                },
+            )
+            return
         asset = resolve_static(parsed.path)
         if asset is None:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
@@ -158,25 +291,16 @@ class HostRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
         try:
-            if path == "/token":
+            if path == "/session":
+                sdp = self._read_sdp()
                 settings = load_settings(require_openai_api_key=True, backend="realtime")
                 assert settings.openai_api_key is not None
-                token = mint_client_secret(
+                answer = create_realtime_call(
                     api_key=settings.openai_api_key,
-                    model=settings.realtime_model,
-                    voice=settings.realtime_voice,
+                    sdp=sdp,
+                    session=build_realtime_session_config(settings),
                 )
-                token["session"] = {
-                    "model": settings.realtime_model,
-                    "voice": settings.realtime_voice,
-                    "output_volume": settings.realtime_output_volume,
-                    "server_vad": settings.realtime_server_vad_enabled,
-                    "server_vad_threshold": settings.realtime_server_vad_threshold,
-                    "input_noise_reduction": settings.realtime_input_noise_reduction,
-                    "input_transcription": settings.realtime_input_transcription_enabled,
-                    "transcription_model": settings.transcribe_model,
-                }
-                self._json(HTTPStatus.OK, token)
+                self._bytes(HTTPStatus.OK, answer.encode("utf-8"), "application/sdp")
                 return
             if path == "/api/simulate-wake":
                 self._json(HTTPStatus.OK, {"session_id": self.server.coordinator.begin_handoff()})
@@ -226,6 +350,24 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             return
         self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
+    def _read_sdp(self) -> str:
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/sdp":
+            raise HostServerError("Realtime SDP content type was invalid")
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise HostServerError("Realtime SDP size was invalid") from exc
+        if length <= 0 or length > MAX_SDP_BYTES:
+            raise HostServerError("Realtime SDP size was invalid")
+        try:
+            sdp = self.rfile.read(length).decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HostServerError("Realtime SDP was invalid") from exc
+        if not sdp.startswith("v=0"):
+            raise HostServerError("Realtime SDP was invalid")
+        return sdp
+
     def _read_json(self, *, max_length: int = 4096) -> dict[str, object]:
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -243,10 +385,14 @@ class HostRequestHandler(BaseHTTPRequestHandler):
 
     def _json(self, status: HTTPStatus, payload: Mapping[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode()
+        self._bytes(status, body, "application/json; charset=utf-8")
+
+    def _bytes(self, status: HTTPStatus, body: bytes, content_type: str) -> None:
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 

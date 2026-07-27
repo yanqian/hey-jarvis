@@ -106,18 +106,17 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F073 - Stabilize Realtime playback", last_completed)
+        self.assertIn("F075 - Create configured Realtime sessions", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
-        self.assertIn("No feature is currently selected.", current_feature)
-        self.assertNotIn("F073 - Stabilize Realtime playback", current_feature)
+        self.assertIn("No feature is currently in progress.", current_feature)
         self.assertIn("No later feature is selected.", next_feature)
-        self.assertIn("F073 - Stabilize Realtime playback", recently_completed)
+        self.assertIn("F074 - Gate Realtime input", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
         self.assertIn("F061", known_issues)
         self.assertIn("passed the synchronized RT003 run", known_issues)
-        self.assertIn("Realtime wake-to-ready first-utterance loss", known_issues)
+        self.assertNotIn("Realtime wake-to-ready latency", known_issues)
         self.assertNotIn("after F060 evaluator review", known_issues)
 
     def test_all_env_keys_are_owned_by_configuration_reference(self):
@@ -209,7 +208,8 @@ class DocumentationTests(unittest.TestCase):
             "`function_call_output`",
             "Weather, FX, stocks",
             "Pre-wake",
-            "ephemeral client secret",
+            "unified WebRTC call interface",
+            "never an API credential",
             "billable",
             "bounded sanitized",
             "current audio turn",

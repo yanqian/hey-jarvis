@@ -1637,6 +1637,67 @@
         "F052",
         "F061"
       ]
+    },
+    {
+      "id": "F074",
+      "title": "Gate Realtime input behind an audible ready acknowledgement",
+      "description": "Make the existing 在呢 acknowledgement mean the configured Realtime session is input-ready by keeping the browser audio track disabled through negotiation and acknowledgement playback, then enabling it through one explicit session-scoped command.",
+      "acceptance": [
+        "After confirmed wake, Python releases its wake microphone and queues the browser handoff before acknowledgement playback; the browser disables the acquired audio track before attaching it to WebRTC and reports session configuration readiness only after OpenAI emits session.updated.",
+        "Python plays the existing acknowledgement only after session configuration readiness, records its completion, and queues exactly one active-session enable_input command; acknowledgement failure, startup timeout, input-ready timeout, stale commands, errors, Ctrl+C, and stop paths keep input closed and restore wake ownership only after browser media cleanup.",
+        "The browser enables only the current session audio track in response to enable_input and emits connected as the input_ready boundary afterward; the coordinator rejects early, duplicate, or stale readiness and does not enter HOST_ACTIVE or accept user-turn activity before that boundary.",
+        "Sanitized lifecycle/timing evidence, RT001 ordering, operator guidance, controller/coordinator/browser/privacy tests, JavaScript syntax, RT002-RT004 and F073 regressions, Realtime fake smoke, full project tests, and final ./init.sh pass without adding pre-ready audio buffering, a fixed readiness delay, a pre-wake connection, or changes to model, voice, VAD, echo/noise processing, output volume, interruption, or F070 diagnostics.",
+        "One user-led built-in-microphone/speaker live run shows no speech_started before input_ready, speech begun after hearing 在呢 receives a normal audible answer, cleanup restores wake ownership, fast coding evidence is recorded, and a separate cold-start Evaluator Agent approves the feature."
+      ],
+      "evals": [
+        {
+          "scenario": "Realtime audible input-ready handoff",
+          "required_evidence": [
+            "offline",
+            "live_host",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F070",
+        "F073"
+      ]
+    },
+    {
+      "id": "F075",
+      "title": "Create configured Realtime sessions through one unified WebRTC call",
+      "description": "Reduce Realtime readiness latency by combining SDP and complete session configuration in one backend-owned unified WebRTC call, eliminating ephemeral-token and post-connect session-update round trips.",
+      "acceptance": [
+        "A loopback-only bounded application/sdp endpoint builds the complete validated Realtime session configuration and submits multipart sdp plus session to the official calls endpoint with the standard API key retained server-side, returning only SDP and bounded safe upstream diagnostics.",
+        "The browser removes its token request, ephemeral credential handling, direct OpenAI fetch, and session.update; it keeps the outgoing track disabled before attachment and treats session.created from the already-configured call as session_configured without weakening F074 acknowledgement or enable_input ordering.",
+        "Existing timing evidence remains reconciled and privacy-safe: removed command-to-token and token phases are explicit zeroes, unified call creation is measured as negotiation, and only the post-answer session.created wait is session configuration; malformed, stale, duplicate, excessive, or sensitive evidence remains rejected.",
+        "Focused server/browser/config/privacy/timing tests, JavaScript syntax, RT001-RT004 and F073-F074 regressions, Realtime fake smoke, full project tests, and final ./init.sh pass without changing model, voice, VAD, echo/noise processing, output volume, interruption, pre-wake privacy, microphone ownership, or cleanup.",
+        "One authorized built-in-device multi-session live comparison records zero token phases, no speech before input_ready, successful speech after 在呢, final wake recovery, and honest latency observations without claiming a stable SLO; fast coding evidence and separate cold-start evaluator approval pass."
+      ],
+      "evals": [
+        {
+          "scenario": "Unified configured Realtime WebRTC creation",
+          "required_evidence": [
+            "offline",
+            "live_host",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F074"
+      ]
     }
   ]
 }

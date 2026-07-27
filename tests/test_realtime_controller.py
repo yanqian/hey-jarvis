@@ -67,6 +67,10 @@ class RealtimeControllerTests(unittest.TestCase):
         def sleep(seconds: float) -> None:
             clock.advance(max(seconds, 0.1))
             if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_READY:
                 coordinator.host_event("connected", coordinator.session_id)
             elif coordinator.state == HandoffState.HOST_ACTIVE:
                 coordinator.request_stop("test")
@@ -102,7 +106,9 @@ class RealtimeControllerTests(unittest.TestCase):
                 session_id = coordinator.session_id
                 coordinator.host_event("transport_connected", session_id)
                 coordinator.host_event("session_created", session_id)
-                coordinator.host_event("connected", session_id)
+                coordinator.host_event("session_configured", session_id)
+            elif coordinator.state == HandoffState.HOST_READY:
+                coordinator.host_event("connected", coordinator.session_id)
             elif coordinator.state == HandoffState.HOST_ACTIVE:
                 active_polls += 1
                 if active_polls == 1:
@@ -135,9 +141,11 @@ class RealtimeControllerTests(unittest.TestCase):
         types = [event["type"] for event in events]
         for before, after in (
             ("wake_confirmed", "wake_microphone_closed"),
-            ("wake_microphone_closed", "ack_started"),
+            ("wake_microphone_closed", "handoff_queued"),
+            ("handoff_queued", "host_session_configured"),
+            ("host_session_configured", "ack_started"),
             ("ack_started", "ack_completed"),
-            ("ack_completed", "handoff_queued"),
+            ("ack_completed", "host_connected"),
         ):
             self.assertLess(types.index(before), types.index(after))
         markers = {event["type"]: event["at_ms"] for event in events}
@@ -149,6 +157,10 @@ class RealtimeControllerTests(unittest.TestCase):
         def sleep(seconds: float) -> None:
             clock.advance(max(seconds, 0.6))
             if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_READY:
                 coordinator.host_event("connected", coordinator.session_id)
             elif coordinator.state == HandoffState.HOST_ACTIVE:
                 coordinator.host_event("speech_started", coordinator.session_id)
@@ -173,6 +185,10 @@ class RealtimeControllerTests(unittest.TestCase):
         def sleep(seconds: float) -> None:
             clock.advance(max(seconds, 0.1))
             if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_READY:
                 coordinator.host_event("connected", coordinator.session_id)
             elif coordinator.state == HandoffState.HOST_ACTIVE:
                 coordinator.host_event("error", coordinator.session_id, reason="network")
@@ -191,11 +207,20 @@ class RealtimeControllerTests(unittest.TestCase):
         self.assertTrue(result.recovered_to_wake)
         self.assertTrue(lease.is_open)
 
-    def test_acknowledgement_failure_reopens_without_starting_host(self):
+    def test_acknowledgement_failure_stops_configured_host_before_reopening(self):
         clock, lease, coordinator, detector = build_runtime()
 
         def fail_ack() -> None:
             raise RuntimeError("playback failed")
+
+        def sleep(seconds: float) -> None:
+            clock.advance(max(seconds, 0.1))
+            if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_STOPPING:
+                coordinator.host_event("stopped", coordinator.session_id)
 
         result = RealtimeSessionController(
             coordinator=coordinator,
@@ -204,12 +229,40 @@ class RealtimeControllerTests(unittest.TestCase):
             idle_timeout_seconds=1.0,
             max_duration_seconds=2.0,
             clock=clock,
-            sleep=lambda seconds: clock.advance(seconds),
+            sleep=sleep,
         ).run_once()
         self.assertEqual(result.reason, "error:RuntimeError")
         self.assertTrue(result.recovered_to_wake)
         self.assertTrue(lease.is_open)
         self.assertFalse(coordinator.report()["active_session"])
+
+    def test_input_ready_timeout_stops_gated_host_after_acknowledgement(self):
+        clock, lease, coordinator, detector = build_runtime()
+        acknowledgements: list[str] = []
+
+        def sleep(seconds: float) -> None:
+            clock.advance(max(seconds, 0.1))
+            if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_STOPPING:
+                coordinator.host_event("stopped", coordinator.session_id)
+
+        result = RealtimeSessionController(
+            coordinator=coordinator,
+            wake_detector=detector,
+            play_acknowledgement=lambda: acknowledgements.append("played"),
+            idle_timeout_seconds=1.0,
+            max_duration_seconds=2.0,
+            connect_timeout_seconds=0.3,
+            clock=clock,
+            sleep=sleep,
+        ).run_once()
+        self.assertEqual(acknowledgements, ["played"])
+        self.assertEqual(result.reason, "input_ready_timeout")
+        self.assertTrue(result.recovered_to_wake)
+        self.assertTrue(lease.is_open)
 
     def test_ctrl_c_active_session_requests_stop_before_reopening(self):
         clock, lease, coordinator, detector = build_runtime()
@@ -219,6 +272,10 @@ class RealtimeControllerTests(unittest.TestCase):
             nonlocal interrupted
             clock.advance(max(seconds, 0.1))
             if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_READY:
                 coordinator.host_event("connected", coordinator.session_id)
             elif coordinator.state == HandoffState.HOST_ACTIVE and not interrupted:
                 interrupted = True

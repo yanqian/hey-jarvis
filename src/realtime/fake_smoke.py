@@ -107,6 +107,8 @@ def run_fake_smoke() -> FakeSmokeResult:
             coordinator.host_event("microphone_acquired", session_id, echoCancellation=True)
             coordinator.host_event("transport_connected", session_id)
             coordinator.host_event("session_created", session_id)
+            coordinator.host_event("session_configured", session_id)
+        elif coordinator.state == HandoffState.HOST_READY:
             coordinator.host_event("connected", session_id)
             connected = coordinator.state == HandoffState.HOST_ACTIVE
         elif coordinator.state == HandoffState.HOST_ACTIVE and stage == 0:
@@ -134,7 +136,7 @@ def run_fake_smoke() -> FakeSmokeResult:
                 name="calculator",
                 arguments=json.dumps({"expression": "100 * 1000"}),
             )
-            command = coordinator.command_after(1)
+            command = coordinator.command_after(2)
             calculator_output = bool(
                 command
                 and command["type"] == "tool_result"

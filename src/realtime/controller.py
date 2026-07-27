@@ -57,12 +57,19 @@ class RealtimeSessionController:
             self._wait_for_local_wake()
             self.coordinator.record_local_timing_marker("wake_confirmed")
             self.coordinator.release_wake_for_acknowledgement()
-            self.coordinator.record_local_timing_marker("ack_started")
-            self.play_acknowledgement()
-            self.coordinator.record_local_timing_marker("ack_completed")
             session_id = self.coordinator.begin_handoff()
             if not self._wait_until_not(HandoffState.HOST_STARTING, self.connect_timeout_seconds):
                 self.coordinator.request_stop("connect_timeout")
+            if self.coordinator.state == HandoffState.HOST_READY:
+                self.coordinator.record_local_timing_marker("ack_started")
+                self.play_acknowledgement()
+                self.coordinator.record_local_timing_marker("ack_completed")
+                self.coordinator.enable_host_input()
+                if not self._wait_until_not(
+                    HandoffState.HOST_READY,
+                    self.connect_timeout_seconds,
+                ):
+                    self.coordinator.request_stop("input_ready_timeout")
             while self.coordinator.state == HandoffState.HOST_ACTIVE:
                 reason = self.coordinator.timeout_reason(
                     idle_seconds=self.idle_timeout_seconds,

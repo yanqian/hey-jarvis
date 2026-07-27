@@ -26,12 +26,13 @@ DEFAULT_EVIDENCE_PATH = PROJECT_ROOT / "tmp" / "realtime-evals" / "RT001-evidenc
 ORDERED_EVENTS = (
     "wake_confirmed",
     "wake_microphone_closed",
-    "ack_started",
-    "ack_completed",
     "handoff_queued",
     "host_microphone_requested",
     "host_microphone_acquired",
     "host_handoff_timing",
+    "host_session_configured",
+    "ack_started",
+    "ack_completed",
     "host_connected",
     "host_stopped",
     "wake_microphone_reopened",
@@ -125,6 +126,7 @@ def evaluate_observation(
             "host_microphone_requested",
             "host_microphone_acquired",
             "host_handoff_timing",
+            "host_session_configured",
             "host_connected",
             "host_stopped",
             "wake_microphone_reopened",
@@ -151,6 +153,7 @@ def evaluate_observation(
             "host_microphone_requested",
             "host_microphone_acquired",
             "host_handoff_timing",
+            "host_session_configured",
             "host_connected",
         }
     }
@@ -178,7 +181,7 @@ def evaluate_observation(
 
 def _timing_breakdown(events: list[object], session_id: str) -> dict[str, int]:
     by_type: dict[str, dict[str, object]] = {}
-    required = ORDERED_EVENTS[:9]
+    required = ORDERED_EVENTS[:10]
     for event_type in required:
         matches = [
             event
@@ -203,14 +206,17 @@ def _timing_breakdown(events: list[object], session_id: str) -> dict[str, int]:
             raise RealtimeScenarioError(f"RT001 timing interval {start} to {end} was invalid")
         return value
 
-    handoff_to_ready = elapsed("handoff_queued", "host_connected")
-    if browser_values["total_browser_ready_ms"] > handoff_to_ready:
+    handoff_to_configured = elapsed("handoff_queued", "host_session_configured")
+    if browser_values["total_browser_ready_ms"] > handoff_to_configured:
         raise RealtimeScenarioError("RT001 browser timing exceeded coordinator handoff-to-ready time")
+    handoff_to_ready = elapsed("handoff_queued", "host_connected")
     return {
-        "wake_to_ack_start_ms": elapsed("wake_confirmed", "ack_started"),
+        "wake_to_handoff_ms": elapsed("wake_confirmed", "handoff_queued"),
+        "handoff_to_configured_ms": handoff_to_configured,
+        "configured_to_ack_start_ms": elapsed("host_session_configured", "ack_started"),
         "acknowledgement_ms": elapsed("ack_started", "ack_completed"),
-        "ack_to_handoff_ms": elapsed("ack_completed", "handoff_queued"),
-        "handoff_dispatch_ms": handoff_to_ready - browser_values["total_browser_ready_ms"],
+        "ack_to_input_ready_ms": elapsed("ack_completed", "host_connected"),
+        "handoff_dispatch_ms": handoff_to_configured - browser_values["total_browser_ready_ms"],
         "handoff_to_ready_ms": handoff_to_ready,
         "wake_to_ready_ms": elapsed("wake_confirmed", "host_connected"),
         **browser_values,

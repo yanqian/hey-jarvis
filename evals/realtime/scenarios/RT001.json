@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "RT001",
-  "version": 5,
+  "version": 7,
   "title": "Wake-triggered exclusive microphone handoff and Realtime connection",
   "goal": "Prove that a saved wake transfers exclusive microphone ownership from Python to the armed browser, reaches one connected Realtime session, then stops and restores wake listening without a user question.",
   "preconditions": [
@@ -13,12 +13,13 @@
   "observations": [
     "wake_confirmed",
     "wake_microphone_closed",
-    "ack_started",
-    "ack_completed",
     "handoff_queued",
     "host_microphone_requested",
     "host_microphone_acquired",
     "host_handoff_timing",
+    "host_session_configured",
+    "ack_started",
+    "ack_completed",
     "host_connected",
     "host_stopped",
     "wake_microphone_reopened"

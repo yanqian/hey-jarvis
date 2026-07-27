@@ -42,7 +42,9 @@ SAFE_REASONS = frozenset(
         "webrtc_negotiation_failed",
     }
 )
-SAFE_STATES = frozenset({"wake_owned", "host_starting", "host_active", "host_stopping"})
+SAFE_STATES = frozenset(
+    {"wake_owned", "host_starting", "host_ready", "host_active", "host_stopping"}
+)
 LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 MAX_LEVEL_EVENTS = 80
 SAFE_DIAGNOSTIC_VALUE = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")

@@ -26,7 +26,7 @@ def timing(audio_context_ms: int):
     peer_setup_ms = audio_context_ms + 1
     return {
         "command_to_token_ms": 0,
-        "token_ms": 1,
+        "token_ms": 0,
         "microphone_ms": 1,
         "peer_setup_ms": peer_setup_ms,
         "microphone_reporting_ms": 0,
@@ -42,7 +42,7 @@ def timing(audio_context_ms: int):
         "local_description_ms": 0,
         "negotiation_ms": 1,
         "session_configuration_ms": 1,
-        "total_browser_ready_ms": audio_context_ms + 5,
+        "total_browser_ready_ms": audio_context_ms + 4,
     }
 
 

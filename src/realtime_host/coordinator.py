@@ -40,6 +40,7 @@ HANDOFF_PHASE_TIMING_FIELDS = frozenset(
         "session_configuration_ms",
     }
 )
+REMOVED_TOKEN_TIMING_FIELDS = frozenset({"command_to_token_ms", "token_ms"})
 PEER_SETUP_TIMING_FIELDS = frozenset(
     {
         "microphone_reporting_ms",
@@ -99,6 +100,7 @@ class MicrophoneLease(Protocol):
 class HandoffState(str, Enum):
     WAKE_OWNED = "wake_owned"
     HOST_STARTING = "host_starting"
+    HOST_READY = "host_ready"
     HOST_ACTIVE = "host_active"
     HOST_STOPPING = "host_stopping"
 
@@ -171,6 +173,7 @@ class HandoffCoordinator:
         self._transport_connected = False
         self._session_created = False
         self._session_configured = False
+        self._input_enable_requested = False
         self._connected_at: float | None = None
         self._last_activity_at: float | None = None
         self._handoff_timing_received = False
@@ -281,6 +284,7 @@ class HandoffCoordinator:
             self._transport_connected = False
             self._session_created = False
             self._session_configured = False
+            self._input_enable_requested = False
             self._connected_at = None
             self._last_activity_at = self._clock()
             self._handoff_timing_received = False
@@ -295,6 +299,17 @@ class HandoffCoordinator:
             else:
                 self._enqueue("start", session_id)
             return session_id
+
+    def enable_host_input(self) -> None:
+        """Open browser input only after configuration and local acknowledgement."""
+
+        with self._lock:
+            if self._session_id is None or self._state != HandoffState.HOST_READY:
+                raise HandoffError("Host input can only be enabled after session configuration")
+            if self._input_enable_requested:
+                raise HandoffError("Host input enablement was already requested")
+            self._input_enable_requested = True
+            self._enqueue("enable_input", self._session_id)
 
     def request_stop(self, reason: str = "requested") -> None:
         with self._lock:
@@ -359,6 +374,27 @@ class HandoffCoordinator:
                 raise HandoffError("Host event did not match the active session")
             if event_type in {"microphone_requested", "microphone_acquired"} and self._wake_lease.is_open:
                 raise HandoffError("Host microphone requested before wake microphone closed")
+            if event_type == "session_configured":
+                if self._state != HandoffState.HOST_STARTING:
+                    raise HandoffError("Session configuration readiness was duplicated or late")
+                if not self._transport_connected or not self._session_created:
+                    raise HandoffError("Session configured before transport and session creation")
+            if event_type == "connected":
+                if self._state != HandoffState.HOST_READY or not self._input_enable_requested:
+                    raise HandoffError("Host reported input ready before enablement")
+            if event_type in {
+                "fixture_submitted",
+                "speech_started",
+                "speech_stopped",
+                "response_created",
+                "response_done",
+                "playback_started",
+                "playback_stopped",
+                "transcription",
+                "transcription_failed",
+                "tool_call",
+            } and self._state in {HandoffState.HOST_STARTING, HandoffState.HOST_READY}:
+                raise HandoffError("Host user-turn activity arrived before input readiness")
             if event_type == "transcription":
                 return self._handle_completed_transcription(session_id, detail)
             if event_type == "transcription_failed":
@@ -397,22 +433,16 @@ class HandoffCoordinator:
                 }
             self._record(f"host_{event_type}", session_id=session_id, **safe_detail)
             if event_type == "connected":
-                self._transport_connected = True
-                self._session_created = True
-                self._session_configured = True
+                self._state = HandoffState.HOST_ACTIVE
+                self._connected_at = self._clock()
+                self._last_activity_at = self._connected_at
             elif event_type == "transport_connected":
                 self._transport_connected = True
             elif event_type == "session_created":
                 self._session_created = True
-            if (
-                self._transport_connected
-                and self._session_created
-                and self._session_configured
-                and event_type == "connected"
-            ):
-                self._state = HandoffState.HOST_ACTIVE
-                self._connected_at = self._clock()
-                self._last_activity_at = self._connected_at
+            elif event_type == "session_configured":
+                self._session_configured = True
+                self._state = HandoffState.HOST_READY
             if event_type in {
                 "fixture_submitted",
                 "speech_started",
@@ -534,6 +564,7 @@ class HandoffCoordinator:
         self._transport_connected = False
         self._session_created = False
         self._session_configured = False
+        self._input_enable_requested = False
         self._connected_at = None
         self._last_activity_at = None
         self._handoff_timing_received = False
@@ -576,6 +607,8 @@ def _sanitize_handoff_timing(detail: dict[str, object]) -> dict[str, int]:
         if value < 0 or value > MAX_HANDOFF_TIMING_MS:
             raise HandoffError("Handoff timing value was outside the allowed range")
         safe[field] = value
+    if any(safe[field] != 0 for field in REMOVED_TOKEN_TIMING_FIELDS):
+        raise HandoffError("Removed token timing phases must be zero")
     phase_total = sum(safe[field] for field in HANDOFF_PHASE_TIMING_FIELDS)
     if abs(phase_total - safe["total_browser_ready_ms"]) > len(HANDOFF_PHASE_TIMING_FIELDS):
         raise HandoffError("Handoff timing phases did not match the total")

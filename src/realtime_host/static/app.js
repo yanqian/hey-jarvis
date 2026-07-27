@@ -3,7 +3,7 @@
 const AUDIO_CONSTRAINTS={echoCancellation:{exact:true},noiseSuppression:true,autoGainControl:true,channelCount:1};
 const REMOTE_AUDIO_VOLUME=0.1;
 const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
-let armed=false,lastCommand=0,pc=null,dc=null,stream=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null;
+let armed=false,lastCommand=0,pc=null,dc=null,stream=null,inputTrack=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null,sessionCreatedAt=null,transportReported=false;
 let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
@@ -98,40 +98,19 @@ function skipInputLevels(timing){
 
 async function arm(){
   try{
-    const warm=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
+    const [settingsResponse,warm]=await Promise.all([
+      fetch("/api/realtime-settings",{cache:"no-store"}),
+      navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS}),
+    ]);
+    const safeSettings=await settingsResponse.json();if(!settingsResponse.ok)throw new Error(safeSettings.message||safeSettings.error);
+    sessionConfig=safeSettings;
     renderSettings(warm.getAudioTracks()[0]?.getSettings()||{});
     warm.getTracks().forEach(track=>track.stop());
-    $("remoteAudio").volume=REMOTE_AUDIO_VOLUME;
+    $("remoteAudio").volume=Number.isFinite(sessionConfig.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;
     const playAttempt=$("remoteAudio").play();if(playAttempt)playAttempt.catch(()=>{});
     sessionId=null;await hostEvent("armed");armed=true;$("arm").disabled=true;
     $("status").textContent="Armed · waiting for Python wake";log("armed");poll();
   }catch(error){$("status").textContent=`Arm failed: ${error.message}`;}
-}
-
-function sendSessionUpdate(){
-  const turnDetection=sessionConfig.server_vad?{type:"server_vad",threshold:sessionConfig.server_vad_threshold,prefix_padding_ms:300,silence_duration_ms:500,create_response:true,interrupt_response:true}:null;
-  const input={turn_detection:turnDetection};
-  input.noise_reduction=sessionConfig.input_noise_reduction==="none"?null:{type:sessionConfig.input_noise_reduction};
-  if(sessionConfig.input_transcription)input.transcription={model:sessionConfig.transcription_model};
-  const tools=[
-    {type:"function",name:"calculator",description:"Safely evaluate one arithmetic expression. Use only for arithmetic.",parameters:{type:"object",additionalProperties:false,properties:{expression:{type:"string",description:"Arithmetic expression using numbers, parentheses, +, -, *, /, //, %, or **."}},required:["expression"]}},
-    {type:"function",name:"end_conversation",description:"End the current voice session only when the user clearly and unambiguously wants to leave, stop, say goodbye, or end this conversation. Do not use when the user merely mentions, quotes, translates, or asks you to say a farewell phrase.",parameters:{type:"object",additionalProperties:false,properties:{}}},
-  ];
-  const instructions=[
-    "# Role & Objective",
-    "- Be a concise, natural voice assistant.",
-    "# Language",
-    "- For every turn, respond in the language primarily used in the user's current utterance.",
-    "- For Mandarin Chinese input, answer entirely in concise, natural Simplified Chinese.",
-    "- For English input, answer in English.",
-    "- The current user utterance overrides prior turns, these English instructions, English tool definitions, and English tool outputs.",
-    "- For mixed or ambiguous input, use the language of the main request; never default to English merely because developer or tool text is English.",
-    "- If the user explicitly asks for translation, spelling, pronunciation, language practice, or a whole response in another language, include or use the requested target language. Unless the whole response is requested in that language, keep the surrounding explanation in the language of the current request.",
-    "# Conversation Ending",
-    "- If the user clearly and unambiguously wants to end the current conversation, call end_conversation with {} and do not provide a spoken or substantive response.",
-    "- Do not call end_conversation when farewell words are merely mentioned, quoted, translated, or requested as content.",
-  ].join("\n");
-  dc.send(JSON.stringify({type:"session.update",session:{type:"realtime",model:sessionConfig.model,instructions,output_modalities:["audio"],audio:{input,output:{voice:sessionConfig.voice}},tools,tool_choice:"auto"}}));
 }
 
 function elapsedMs(start,end){return Math.max(0,Math.round(end-start));}
@@ -169,12 +148,21 @@ async function forwardToolCall(item){
   return false;
 }
 
+async function reportConfiguredSession(){
+  if(sessionCreatedAt===null||!transportReported)return;
+  const readyAt=Math.max(sessionCreatedAt,handoffTiming.negotiationCompleted);
+  sessionCreatedAt=null;
+  await hostEvent("session_created");
+  await hostEvent("handoff_timing",handoffTimingSummary(readyAt));
+  await hostEvent("session_configured");
+  $("status").textContent="Configured · waiting for audible ready acknowledgement";
+}
+
 async function handleServerEvent(event){
-  const tracked=["session.created","session.updated","input_audio_buffer.speech_started","input_audio_buffer.speech_stopped","response.created","response.done","output_audio_buffer.started","output_audio_buffer.stopped","response.function_call_arguments.done","conversation.item.input_audio_transcription.completed","conversation.item.input_audio_transcription.failed","error"];
+  const tracked=["session.created","input_audio_buffer.speech_started","input_audio_buffer.speech_stopped","response.created","response.done","output_audio_buffer.started","output_audio_buffer.stopped","response.function_call_arguments.done","conversation.item.input_audio_transcription.completed","conversation.item.input_audio_transcription.failed","error"];
   if(!tracked.includes(event.type))return;
   log(event.type,{status:event.response?.status});
-  if(event.type==="session.created"){await hostEvent("session_created");sendSessionUpdate();}
-  if(event.type==="session.updated"){const readyAt=performance.now();await hostEvent("handoff_timing",handoffTimingSummary(readyAt));await hostEvent("connected");$("status").textContent="Live · follow-up speech stays in this session";}
+  if(event.type==="session.created"){sessionCreatedAt=performance.now();await reportConfiguredSession();}
   if(event.type==="input_audio_buffer.speech_started")await hostEvent("speech_started");
   if(event.type==="input_audio_buffer.speech_stopped")await hostEvent("speech_stopped");
   if(event.type==="response.created"){flushInputLevels();await hostEvent("response_created");}
@@ -197,17 +185,16 @@ async function handleServerEvent(event){
 
 async function start(command){
   if(!armed||pc)throw new Error("host is not ready for start");
-  handoffTiming={commandReceived:performance.now()};
+  handoffTiming={commandReceived:performance.now()};sessionCreatedAt=null;transportReported=false;
   sessionId=command.session_id;$("status").textContent="Python released wake microphone · connecting";
   await hostEvent("microphone_requested");
-  handoffTiming.tokenStarted=performance.now();
-  const token=await fetch("/token",{method:"POST"}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.message||data.error);return data;});
-  handoffTiming.tokenAcquired=performance.now();handoffTiming.microphoneStarted=handoffTiming.tokenAcquired;
-  sessionConfig=token.session;
+  handoffTiming.tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived;
+  handoffTiming.microphoneStarted=handoffTiming.commandReceived;
   $("remoteAudio").volume=Number.isFinite(sessionConfig.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;
   stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
   handoffTiming.microphoneAcquired=performance.now();
   const track=stream.getAudioTracks()[0],echoPreference=await preferStrongestEchoCancellation(track),settings=track.getSettings();renderSettings(settings);
+  track.enabled=false;inputTrack=track;
   await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,echoCancellationRequested:echoPreference.requested,echoCancellationAllSupported:echoPreference.allSupported,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,inputNoiseReduction:sessionConfig.input_noise_reduction,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
   handoffTiming.microphoneReported=performance.now();
   if(command.input_level_diagnostics===true)startInputLevels(stream,handoffTiming);
@@ -222,20 +209,28 @@ async function start(command){
   handoffTiming.peerConnectionReady=performance.now();
   const offer=await pc.createOffer();handoffTiming.offerCreated=performance.now();
   await pc.setLocalDescription(offer);handoffTiming.negotiationStarted=performance.now();
-  const answer=await fetch("https://api.openai.com/v1/realtime/calls",{method:"POST",body:offer.sdp,headers:{Authorization:`Bearer ${token.value}`,"Content-Type":"application/sdp"}});
+  const answer=await fetch("/session",{method:"POST",body:offer.sdp,headers:{"Content-Type":"application/sdp"}});
   if(!answer.ok)throw await negotiationFailure(answer);
   await pc.setRemoteDescription({type:"answer",sdp:await answer.text()});
   handoffTiming.negotiationCompleted=performance.now();
   await hostEvent("transport_connected");
+  transportReported=true;await reportConfiguredSession();
   $("status").textContent="Connecting · waiting for session.created";$("long").disabled=false;$("stop").disabled=false;log("transport_connected");
+}
+
+async function enableInput(command){
+  if(command.session_id!==sessionId||!inputTrack||inputTrack.enabled||dc?.readyState!=="open")throw new Error("input enablement requires the configured active session");
+  inputTrack.enabled=true;
+  await hostEvent("connected");
+  $("status").textContent="Live · input ready; follow-up speech stays in this session";log("input_ready");
 }
 
 async function stop(reason="command"){
   const endingSession=sessionId;if(!endingSession)return;stopInputLevels();sessionId=null;
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
-  if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}
-  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;sessionConfig=null;handoffTiming=null;
+  if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}inputTrack=null;
+  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;handoffTiming=null;sessionCreatedAt=null;transportReported=false;
   $("long").disabled=true;$("stop").disabled=true;log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
   $("status").textContent="Armed · Python wake microphone restored";
@@ -250,7 +245,7 @@ async function sendFixtureAudio(command){
   log("fixture_audio_sent",{name:String(command.fixture_name||"unknown")});
 }
 
-async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
+async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
 function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:"Count slowly from one to one hundred, saying every number clearly. Do not abbreviate or skip any number."}]}}));dc.send(JSON.stringify({type:"response.create"}));}
 
 $("arm").addEventListener("click",arm);$("long").addEventListener("click",longAnswer);$("stop").addEventListener("click",()=>post("/api/stop"));window.addEventListener("beforeunload",()=>{if(stream)stream.getTracks().forEach(track=>track.stop());});

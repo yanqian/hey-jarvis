@@ -23,6 +23,7 @@ HANDOFF_PHASE_TIMING_FIELDS = frozenset(
         "session_configuration_ms",
     }
 )
+REMOVED_TOKEN_TIMING_FIELDS = frozenset({"command_to_token_ms", "token_ms"})
 PEER_SETUP_TIMING_FIELDS = frozenset(
     {
         "microphone_reporting_ms",
@@ -61,6 +62,7 @@ SAFE_EVENT_TYPES = frozenset(
         "host_microphone_requested",
         "host_microphone_acquired",
         "host_handoff_timing",
+        "host_session_configured",
         "host_connected",
         "host_fixture_submitted",
         "host_response_created",
@@ -75,7 +77,14 @@ SAFE_EVENT_REASONS = frozenset(
     {"cancelled", "completed", "explicit", "end_phrase", "idle_timeout", "max_duration", "error", "test"}
 )
 SAFE_REPORT_STATES = frozenset(
-    {"wake_owned", "python_stopping", "host_starting", "host_active", "host_stopping"}
+    {
+        "wake_owned",
+        "python_stopping",
+        "host_starting",
+        "host_ready",
+        "host_active",
+        "host_stopping",
+    }
 )
 
 
@@ -107,6 +116,8 @@ def validate_handoff_timing_event(
         if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 60_000:
             raise RealtimeScenarioError(f"{context} timing field {field} was invalid")
         values[field] = value
+    if any(values[field] != 0 for field in REMOVED_TOKEN_TIMING_FIELDS):
+        raise RealtimeScenarioError(f"{context} removed token timing phases must be zero")
     phase_total = sum(values[field] for field in HANDOFF_PHASE_TIMING_FIELDS)
     if abs(phase_total - values["total_browser_ready_ms"]) > len(
         HANDOFF_PHASE_TIMING_FIELDS

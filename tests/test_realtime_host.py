@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from http import HTTPStatus
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -43,12 +44,40 @@ class FakeResponse:
         return json.dumps(self.payload).encode()
 
 
+class FakeSDPResponse(FakeResponse):
+    def read(self) -> bytes:
+        return str(self.payload).encode()
+
+
 class RealtimeHostTests(unittest.TestCase):
     def build_coordinator(self):
         lease = FakeLease()
         ids = iter(f"session-{index}" for index in range(10))
         coordinator = HandoffCoordinator(lease, clock=lambda: 1.25, session_ids=lambda: next(ids))
         return coordinator, lease
+
+    def activate_session(
+        self,
+        coordinator: HandoffCoordinator,
+        session_id: str,
+        *,
+        host_id: str | None = None,
+    ) -> int:
+        coordinator.host_event("transport_connected", session_id, host_id=host_id)
+        coordinator.host_event("session_created", session_id, host_id=host_id)
+        coordinator.host_event("session_configured", session_id, host_id=host_id)
+        coordinator.enable_host_input()
+        cursor = 0
+        enable = None
+        while command := coordinator.command_after(cursor, host_id=host_id):
+            cursor = int(command["command_id"])
+            if command["type"] == "enable_input" and command["session_id"] == session_id:
+                enable = command
+                break
+        self.assertIsNotNone(enable)
+        self.assertEqual(enable["type"], "enable_input")
+        coordinator.host_event("connected", session_id, host_id=host_id)
+        return int(enable["command_id"])
 
     def test_host_requires_one_arm_then_preserves_exclusive_order_for_five_cycles(self):
         coordinator, lease = self.build_coordinator()
@@ -64,7 +93,7 @@ class RealtimeHostTests(unittest.TestCase):
             cursor = start["command_id"]
             coordinator.host_event("microphone_requested", session_id)
             coordinator.host_event("microphone_acquired", session_id, echoCancellation=True)
-            coordinator.host_event("connected", session_id)
+            cursor = self.activate_session(coordinator, session_id)
             self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
             coordinator.request_long_answer()
             long_answer = coordinator.command_after(cursor)
@@ -88,10 +117,37 @@ class RealtimeHostTests(unittest.TestCase):
         session_id = coordinator.begin_handoff()
         self.assertIsNone(coordinator.command_after(0, host_id="host-stale"))
         self.assertEqual(coordinator.command_after(0, host_id="host-current")["type"], "start")
+        coordinator.host_event("transport_connected", session_id, host_id="host-current")
+        coordinator.host_event("session_created", session_id, host_id="host-current")
+        coordinator.host_event("session_configured", session_id, host_id="host-current")
+        coordinator.enable_host_input()
         with self.assertRaisesRegex(HandoffError, "armed host"):
             coordinator.host_event("connected", session_id, host_id="host-stale")
         coordinator.host_event("connected", session_id, host_id="host-current")
         self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
+    def test_input_ready_requires_configured_session_and_one_explicit_enable(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        with self.assertRaisesRegex(HandoffError, "before enablement"):
+            coordinator.host_event("connected", session_id)
+        with self.assertRaisesRegex(HandoffError, "before transport"):
+            coordinator.host_event("session_configured", session_id)
+        coordinator.host_event("transport_connected", session_id)
+        coordinator.host_event("session_created", session_id)
+        coordinator.host_event("session_configured", session_id)
+        self.assertEqual(coordinator.state, HandoffState.HOST_READY)
+        with self.assertRaisesRegex(HandoffError, "before input readiness"):
+            coordinator.host_event("speech_started", session_id)
+        coordinator.enable_host_input()
+        self.assertEqual(coordinator.command_after(1)["type"], "enable_input")
+        with self.assertRaisesRegex(HandoffError, "already requested"):
+            coordinator.enable_host_input()
+        coordinator.host_event("connected", session_id)
+        self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+        with self.assertRaisesRegex(HandoffError, "before enablement"):
+            coordinator.host_event("connected", session_id)
 
     def test_input_level_diagnostics_are_explicit_one_shot_and_state_bounded(self):
         coordinator, lease = self.build_coordinator()
@@ -173,7 +229,7 @@ class RealtimeHostTests(unittest.TestCase):
                 )
                 coordinator.host_event("armed")
                 session_id = coordinator.begin_handoff()
-                coordinator.host_event("connected", session_id)
+                self.activate_session(coordinator, session_id)
                 result = coordinator.host_event(
                     "transcription", session_id, item_id="item-1", transcript=transcript
                 )
@@ -192,7 +248,7 @@ class RealtimeHostTests(unittest.TestCase):
         )
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
-        coordinator.host_event("connected", session_id)
+        self.activate_session(coordinator, session_id)
         for index, transcript in enumerate(("", "goodbye for now please", "please say goodbye", "取消", "再见北京")):
             self.assertEqual(
                 coordinator.host_event(
@@ -224,7 +280,7 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1", end_phrases=("goodbye",))
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
-        coordinator.host_event("connected", session_id)
+        self.activate_session(coordinator, session_id)
         for detail in (
             {"transcript": "goodbye"},
             {"item_id": "item-empty", "transcript": "  "},
@@ -239,7 +295,7 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
-        coordinator.host_event("connected", session_id)
+        cursor = self.activate_session(coordinator, session_id)
         coordinator.host_event(
             "tool_call",
             session_id,
@@ -247,7 +303,7 @@ class RealtimeHostTests(unittest.TestCase):
             name="calculator",
             arguments=json.dumps({"expression": "(2 + 3) * 4"}),
         )
-        command = coordinator.command_after(1)
+        command = coordinator.command_after(cursor)
         self.assertEqual(command["type"], "tool_result")
         self.assertEqual(command["call_id"], "call-1")
         self.assertEqual(json.loads(command["output"]), {"status": "success", "answer": "The answer is 20."})
@@ -272,11 +328,11 @@ class RealtimeHostTests(unittest.TestCase):
                 coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
                 coordinator.host_event("armed")
                 session_id = coordinator.begin_handoff()
-                coordinator.host_event("connected", session_id)
+                cursor = self.activate_session(coordinator, session_id)
                 coordinator.host_event(
                     "tool_call", session_id, call_id=f"call-{index}", name=name, arguments=arguments
                 )
-                output = json.loads(coordinator.command_after(1)["output"])
+                output = json.loads(coordinator.command_after(cursor)["output"])
                 self.assertEqual(output["status"], "error")
                 self.assertIn(expected, output["answer"])
                 self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
@@ -286,7 +342,7 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
-        coordinator.host_event("connected", session_id)
+        cursor = self.activate_session(coordinator, session_id)
 
         result = coordinator.host_event(
             "tool_call",
@@ -298,7 +354,7 @@ class RealtimeHostTests(unittest.TestCase):
 
         self.assertEqual(result, "stopping")
         self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
-        command = coordinator.command_after(1)
+        command = coordinator.command_after(cursor)
         self.assertEqual(command["type"], "stop")
         self.assertEqual(command["reason"], "end_phrase")
         self.assertNotIn("output", command)
@@ -332,7 +388,7 @@ class RealtimeHostTests(unittest.TestCase):
                 coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
                 coordinator.host_event("armed")
                 session_id = coordinator.begin_handoff()
-                coordinator.host_event("connected", session_id)
+                self.activate_session(coordinator, session_id)
                 result = coordinator.host_event(
                     "tool_call",
                     session_id,
@@ -342,7 +398,7 @@ class RealtimeHostTests(unittest.TestCase):
                 )
                 self.assertEqual(result, "accepted")
                 self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
-                self.assertIsNone(coordinator.command_after(1))
+                self.assertIsNone(coordinator.command_after(2))
                 report_text = json.dumps(coordinator.report())
                 self.assertIn("host_end_conversation_tool_ignored", report_text)
                 self.assertNotIn(arguments, report_text)
@@ -351,10 +407,10 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator, _lease = self.build_coordinator()
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
-        coordinator.host_event("connected", session_id)
+        cursor = self.activate_session(coordinator, session_id)
         encoded = "AQACAA=="
         coordinator.request_fixture_audio("turn-1", encoded)
-        command = coordinator.command_after(1)
+        command = coordinator.command_after(cursor)
         self.assertEqual(command["type"], "fixture_audio")
         self.assertEqual(command["fixture_name"], "turn-1")
         self.assertEqual(command["audio"], encoded)
@@ -382,13 +438,10 @@ class RealtimeHostTests(unittest.TestCase):
         for text in ("getUserMedia", "/api/command?after=", "host_id", "echoCancellation:{exact:true}", "track.stop()", "peer.close()"):
             self.assertIn(text, javascript)
         self.assertIn("REMOTE_AUDIO_VOLUME=0.1", javascript)
-        self.assertIn("threshold:sessionConfig.server_vad_threshold", javascript)
         self.assertIn("sessionConfig.output_volume", javascript)
         for text in (
             'advertised.includes("all")',
             'echoCancellation:{exact:"all"}',
-            "input.noise_reduction",
-            'sessionConfig.input_noise_reduction==="none"?null',
             '"output_audio_buffer.started"',
             '"output_audio_buffer.stopped"',
             'hostEvent("playback_started")',
@@ -437,26 +490,25 @@ class RealtimeHostTests(unittest.TestCase):
             "negotiation_ms",
             "session_configuration_ms",
             "total_browser_ready_ms",
+            "track.enabled=false;inputTrack=track",
+            'hostEvent("session_configured")',
+            'command.type==="enable_input"',
+            'inputTrack.enabled=true',
+            'hostEvent("connected")',
+            'log("input_ready")',
         ):
             self.assertIn(text, javascript)
+        self.assertLess(
+            javascript.index("track.enabled=false;inputTrack=track"),
+            javascript.index("pc.addTrack(track,stream)"),
+        )
+        self.assertLess(
+            javascript.index('hostEvent("session_configured")'),
+            javascript.index('inputTrack.enabled=true'),
+        )
         self.assertEqual(javascript.count("new AudioContextClass()"), 1)
         self.assertNotIn("JSON.stringify(payload)", javascript.split("async function negotiationFailure", 1)[1].split("function flushInputLevels", 1)[0])
-        for text in ('type:"server_vad"', "create_response:true", "interrupt_response:true", 'event.type==="session.updated"'):
-            self.assertIn(text, javascript)
         for text in (
-            'name:"calculator"',
-            'name:"end_conversation"',
-            "# Language",
-            "language primarily used in the user's current utterance",
-            "concise, natural Simplified Chinese",
-            "For English input, answer in English",
-            "current user utterance overrides prior turns",
-            "English tool definitions, and English tool outputs",
-            "mixed or ambiguous input",
-            "translation, spelling, pronunciation, language practice",
-            "surrounding explanation in the language of the current request",
-            "clearly and unambiguously wants to end",
-            "do not provide a spoken or substantive response",
             "async function forwardToolCall",
             'result.status==="stopping"',
             'await stop("end_phrase")',
@@ -470,26 +522,91 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertNotIn("transcript decides", javascript)
         for forbidden in ("response.cancel", "conversation.item.truncate", "output_audio_buffer.clear"):
             self.assertNotIn(forbidden, javascript)
-        self.assertNotIn("OPENAI_API_KEY", javascript)
+        for forbidden in (
+            "OPENAI_API_KEY",
+            "/token",
+            "client_secrets",
+            "session.update",
+            "session.updated",
+            "api.openai.com",
+            "Authorization:",
+        ):
+            self.assertNotIn(forbidden, javascript)
+        self.assertIn('fetch("/session"', javascript)
+        self.assertIn('event.type==="session.created"', javascript)
+        self.assertIn("tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived", javascript)
         self.assertIn("without another browser click", guidance)
         self.assertIn("five start/stop cycles", guidance)
 
-    def test_loopback_and_token_redaction(self):
+    def test_loopback_and_unified_call_redaction(self):
         with self.assertRaisesRegex(server.HostServerError, "loopback"):
             server.build_server("0.0.0.0", 0)
-        result = server.mint_client_secret(
-            api_key="sk-fake-standard",
-            model="model-test",
-            voice="marin",
-            urlopen=lambda *_args, **_kwargs: FakeResponse({"value": "ek_test", "secret": "ignored"}),
-        )
-        self.assertEqual(result, {"value": "ek_test", "model": "model-test", "voice": "marin"})
-        self.assertNotIn("sk-fake-standard", json.dumps(result))
+        captured: dict[str, object] = {}
 
-    def test_token_response_passes_validated_input_noise_reduction_to_browser(self):
+        def fake_urlopen(request, timeout):
+            captured["request"] = request
+            captured["timeout"] = timeout
+            return FakeSDPResponse("v=0\r\no=answer")
+
+        result = server.create_realtime_call(
+            api_key="sk-fake-standard",
+            sdp="v=0\r\no=offer",
+            session={"type": "realtime", "model": "model-test"},
+            urlopen=fake_urlopen,
+            boundary="test-boundary",
+        )
+        request = captured["request"]
+        body = request.data.decode()
+        self.assertEqual(result, "v=0\r\no=answer")
+        self.assertEqual(request.full_url, server.REALTIME_CALLS_URL)
+        self.assertEqual(request.headers["Authorization"], "Bearer sk-fake-standard")
+        self.assertEqual(
+            request.headers["Content-type"],
+            "multipart/form-data; boundary=test-boundary",
+        )
+        self.assertIn('name="sdp"', body)
+        self.assertIn("v=0\r\no=offer", body)
+        self.assertIn('name="session"', body)
+        self.assertIn('{"type":"realtime","model":"model-test"}', body)
+        self.assertNotIn("sk-fake-standard", body)
+
+    def test_unified_session_uses_complete_validated_configuration(self):
+        settings = SimpleNamespace(
+            realtime_model="model-test",
+            realtime_voice="marin",
+            realtime_server_vad_enabled=True,
+            realtime_server_vad_threshold=0.8,
+            realtime_input_noise_reduction="far_field",
+            realtime_input_transcription_enabled=True,
+            transcribe_model="gpt-4o-mini-transcribe",
+        )
+        session = server.build_realtime_session_config(settings)
+        self.assertEqual(session["model"], "model-test")
+        self.assertEqual(session["output_modalities"], ["audio"])
+        self.assertEqual(session["audio"]["output"], {"voice": "marin"})
+        self.assertEqual(
+            session["audio"]["input"],
+            {
+                "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": 0.8,
+                    "prefix_padding_ms": 300,
+                    "silence_duration_ms": 500,
+                    "create_response": True,
+                    "interrupt_response": True,
+                },
+                "noise_reduction": {"type": "far_field"},
+                "transcription": {"model": "gpt-4o-mini-transcribe"},
+            },
+        )
+        self.assertEqual([tool["name"] for tool in session["tools"]], ["calculator", "end_conversation"])
+        self.assertIn("# Language", session["instructions"])
+        self.assertIn("concise, natural Simplified Chinese", session["instructions"])
+
+    def test_arm_time_settings_expose_only_safe_browser_values(self):
         responses: list[tuple[HTTPStatus, dict[str, object]]] = []
         handler = object.__new__(server.HostRequestHandler)
-        handler.path = "/token"
+        handler.path = "/api/realtime-settings"
         handler._json = lambda status, payload: responses.append((status, dict(payload)))
         settings = SimpleNamespace(
             openai_api_key="sk-private",
@@ -502,18 +619,30 @@ class RealtimeHostTests(unittest.TestCase):
             realtime_input_transcription_enabled=True,
             transcribe_model="gpt-4o-mini-transcribe",
         )
-        with patch.object(server, "load_settings", return_value=settings), patch.object(
-            server,
-            "mint_client_secret",
-            return_value={"value": "ek-test", "model": "model-test", "voice": "marin"},
-        ):
-            handler.do_POST()
+        with patch.object(server, "load_settings", return_value=settings):
+            handler.do_GET()
 
         self.assertEqual(responses[0][0], HTTPStatus.OK)
-        session = responses[0][1]["session"]
-        self.assertEqual(session["input_noise_reduction"], "far_field")
-        self.assertEqual(session["output_volume"], 0.3)
+        self.assertEqual(
+            responses[0][1],
+            {"input_noise_reduction": "far_field", "output_volume": 0.3},
+        )
         self.assertNotIn("sk-private", json.dumps(responses))
+
+    def test_session_endpoint_rejects_unbounded_or_non_sdp_payloads(self):
+        for content_type, body, message in (
+            ("application/json", b"v=0", "content type"),
+            ("application/sdp", b"not-sdp", "invalid"),
+            ("application/sdp", b"v=0" + b"x" * server.MAX_SDP_BYTES, "size"),
+        ):
+            handler = object.__new__(server.HostRequestHandler)
+            handler.headers = {
+                "Content-Type": content_type,
+                "Content-Length": str(len(body)),
+            }
+            handler.rfile = BytesIO(body)
+            with self.assertRaisesRegex(server.HostServerError, message):
+                handler._read_sdp()
 
     def test_capture_and_playback_evidence_is_allowlisted_without_content(self):
         coordinator, _lease = self.build_coordinator()
@@ -531,7 +660,7 @@ class RealtimeHostTests(unittest.TestCase):
             outputVolume=0.3,
             transcript="must-not-survive",
         )
-        coordinator.host_event("connected", session_id)
+        self.activate_session(coordinator, session_id)
         coordinator.host_event("playback_started", session_id, answer="must-not-survive")
         coordinator.host_event("playback_stopped", session_id)
 
@@ -549,7 +678,7 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator, _lease = self.build_coordinator()
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
-        coordinator.host_event("connected", session_id)
+        self.activate_session(coordinator, session_id)
         coordinator.host_event(
             "tool_call",
             session_id,
@@ -575,7 +704,7 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator, _lease = self.build_coordinator()
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
-        coordinator.host_event("connected", session_id)
+        self.activate_session(coordinator, session_id)
         coordinator.host_event(
             "input_level",
             session_id,
@@ -623,8 +752,8 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator.record_local_timing_marker("ack_completed")
         session_id = coordinator.begin_handoff()
         timing = {
-            "command_to_token_ms": 4,
-            "token_ms": 200,
+            "command_to_token_ms": 0,
+            "token_ms": 0,
             "microphone_ms": 300,
             "peer_setup_ms": 20,
             "microphone_reporting_ms": 2,
@@ -640,7 +769,7 @@ class RealtimeHostTests(unittest.TestCase):
             "local_description_ms": 8,
             "negotiation_ms": 900,
             "session_configuration_ms": 100,
-            "total_browser_ready_ms": 1524,
+            "total_browser_ready_ms": 1320,
         }
         coordinator.host_event(
             "handoff_timing",
@@ -665,6 +794,8 @@ class RealtimeHostTests(unittest.TestCase):
             ({key: value for key, value in timing.items() if key != "token_ms"}, "incomplete"),
             ({**timing, "transcript": "private", "token": "secret"}, "unsupported"),
             ({**timing, "token_ms": -1}, "outside"),
+            ({**timing, "token_ms": 1, "total_browser_ready_ms": 1321}, "must be zero"),
+            ({**timing, "command_to_token_ms": 1, "total_browser_ready_ms": 1321}, "must be zero"),
             ({**timing, "token_ms": True}, "integer"),
             ({**timing, "total_browser_ready_ms": 1}, "match"),
             ({**timing, "local_description_ms": 40}, "subphases"),

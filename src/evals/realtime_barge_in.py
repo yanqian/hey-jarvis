@@ -41,7 +41,9 @@ SAFE_EVENT_REASONS = frozenset(
         "test",
     }
 )
-SAFE_REPORT_STATES = frozenset({"wake_owned", "python_stopping", "host_starting", "host_active", "host_stopping"})
+SAFE_REPORT_STATES = frozenset(
+    {"wake_owned", "python_stopping", "host_starting", "host_ready", "host_active", "host_stopping"}
+)
 
 
 class RealtimeEvalError(RuntimeError):

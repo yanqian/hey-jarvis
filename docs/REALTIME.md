@@ -11,6 +11,16 @@ wake phrase; Python closes its wake microphone before Chrome obtains WebRTC
 media. Follow-up turns and barge-in then remain inside one session without
 another wake.
 
+The first-turn ready contract is audible: wait until the local “在呢”
+acknowledgement finishes, then speak. After wake, Python queues the Realtime
+handoff immediately. Chrome acquires its audio track disabled, negotiates, and
+posts its SDP to the loopback host. The host creates one already-configured
+Realtime call; `session.created` is therefore the configuration barrier. Only
+then does Python play “在呢”; after playback it sends one session-scoped
+input-enable command. `host_connected` therefore means `input_ready`, not
+merely that a transport exists. Speech before “在呢” is intentionally not
+buffered by this version.
+
 ## Lifecycle and ownership
 
 The pipeline remains the default. A Realtime session can close through a
@@ -45,15 +55,16 @@ Pre-wake audio is processed locally by Python, which uploads no pre-wake PCM,
 transcript, or wake clip. After handoff, WebRTC sends session audio directly to
 OpenAI and plays returned audio in Chrome.
 
-The standard API key stays in Python. The browser receives a server-minted
-ephemeral client secret, not the standard key. Realtime audio and optional
-input transcription are billable.
+The standard API key stays in Python. The browser sends its SDP only to the
+loopback host; Python combines it with the validated session configuration and
+uses OpenAI's unified WebRTC call interface. The browser receives only the SDP
+answer, never an API credential. Realtime audio and optional input
+transcription are billable.
 
 Default reports retain bounded sanitized lifecycle/timing metadata. They
-exclude keys, ephemeral credentials, raw/base64 audio, audio deltas,
-transcripts, answers, tool arguments/results, call IDs, SDP, and provider
-bodies. `REALTIME_DEBUG=1` adds bounded local troubleshooting events, not
-production telemetry.
+exclude keys, raw/base64 audio, audio deltas, transcripts, answers, tool
+arguments/results, call IDs, SDP, and provider bodies. `REALTIME_DEBUG=1` adds
+bounded local troubleshooting events, not production telemetry.
 
 ## Output and turn detection
 
@@ -125,7 +136,8 @@ explicit authorization for every run. Offline commands evaluate an existing
 sanitized observation.
 
 RT001 verifies saved-wake handoff, exclusive microphone ordering, connection,
-cleanup, timing attribution, and wake recovery. It needs no fresh human speech:
+configured-session readiness, acknowledgement-gated input, cleanup, timing
+attribution, and wake recovery. It needs no fresh human speech:
 
 ```bash
 python -m src.evals.realtime_handoff live

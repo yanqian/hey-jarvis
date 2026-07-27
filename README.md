@@ -110,7 +110,7 @@ sources were checked.
 - `.env`, private voice fixtures, recordings, and local eval evidence are not
   intended for Git.
 - Default Realtime reports keep bounded lifecycle metadata and exclude API
-  keys, ephemeral credentials, raw audio, transcript text, and tool content.
+  keys, SDP, raw audio, transcript text, and tool content.
 - The calculator uses a bounded parser, never `eval`.
 - Live Realtime and provider checks may use paid services. Run them only when
   you intend to use the microphone, network, and API quota.
