@@ -193,6 +193,28 @@ def build_realtime_session_config(settings: object) -> dict[str, object]:
         },
         {
             "type": "function",
+            "name": "stock",
+            "description": (
+                "Get the latest available Finnhub quote for one explicitly requested stock "
+                "ticker. Resolve a clearly named company to its conservative ticker when known. "
+                "This returns market data only and cannot place trades or give financial advice."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{1,5}(?:\\.[A-Z])?$",
+                        "maxLength": 7,
+                        "description": "One uppercase stock ticker, for example AAPL or BRK.B.",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+        {
+            "type": "function",
             "name": "end_conversation",
             "description": "End the current voice session only when the user clearly and unambiguously wants to leave, stop, say goodbye, or end this conversation. Do not use when the user merely mentions, quotes, translates, or asks you to say a farewell phrase.",
             "parameters": {

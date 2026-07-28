@@ -106,25 +106,30 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F083 - Bridge the FX tool into Realtime", last_completed)
-        self.assertIn("EVAL_PASS: F083", last_completed)
+        self.assertIn("F084 - Bridge the stock quote tool into Realtime", last_completed)
+        self.assertIn("EVAL_PASS: F084", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
         self.assertIn("F078 is blocked", current_feature)
         self.assertIn("F080 now owns the conservative correction", current_feature)
         self.assertIn("No feature is currently in progress", current_feature)
-        self.assertIn("F083-live-acceptance.md", current_feature)
-        self.assertIn("F084 - Bridge the stock quote tool into Realtime", next_feature)
-        self.assertIn("F083 FX is complete", next_feature)
-        self.assertIn("credentialed Finnhub stock-quote boundary", next_feature)
-        self.assertIn("dependent F079 are deferred", next_feature)
+        self.assertIn("F084 is evaluator-approved", current_feature)
+        self.assertIn("No feature is selected", next_feature)
+        self.assertIn("dependent F079 remain explicitly deferred", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
         self.assertIn("F061", known_issues)
         self.assertIn("passed the synchronized RT003 run", known_issues)
         self.assertNotIn("Realtime wake-to-ready latency", known_issues)
         self.assertNotIn("after F060 evaluator review", known_issues)
+
+        spec = (ROOT / ".agent-harness" / "SPEC.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "Feature mapping: this normalized parent requirement covers F082",
+            spec,
+        )
+        self.assertIn("F083 (foreign exchange), and F084 (stock quotes)", spec)
 
     def test_all_env_keys_are_owned_by_configuration_reference(self):
         configuration = read(CONFIGURATION)
@@ -211,15 +216,16 @@ class DocumentationTests(unittest.TestCase):
         for phrase in (
             "pipeline remains the default",
             "once per Chrome host launch",
-            "exactly five allowlisted local functions",
+            "exactly six allowlisted local functions",
             "`calculator`",
             "`weather`",
             "`local_time`",
             "`fx`",
+            "`stock`",
             "`end_conversation`",
             "`function_call_output`",
             "DEFAULT_LOCATION=Singapore",
-            "Stocks, shell access",
+            "Trading actions, shell access",
             "Pre-wake",
             "unified WebRTC call interface",
             "never an API credential",
@@ -350,8 +356,9 @@ class DocumentationTests(unittest.TestCase):
         ):
             self.assertIn(phrase, readme)
 
-        self.assertIn("Stocks, shell access", realtime)
+        self.assertIn("Trading actions, shell access", realtime)
         self.assertIn("`fx`", realtime)
+        self.assertIn("`stock`", realtime)
         self.assertIn("weather", realtime)
         self.assertIn("outside the Realtime tool boundary", realtime)
 

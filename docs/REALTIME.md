@@ -33,7 +33,7 @@ semantic `end_conversation` tool call, an exact configured transcription
 fallback phrase, idle or maximum duration, explicit stop, transport error, or
 Ctrl+C. Browser media is closed before Python restores wake ownership.
 
-Realtime advertises exactly five allowlisted local functions:
+Realtime advertises exactly six allowlisted local functions:
 
 - `calculator`, backed by the same safe bounded parser as the pipeline;
 - `weather`, backed by the existing Open-Meteo provider, with
@@ -43,9 +43,12 @@ Realtime advertises exactly five allowlisted local functions:
 - `fx`, backed by the existing Frankfurter provider and configured currency
   defaults, with bounded amounts, supported currency codes, reference-rate
   date, rounding, and the existing non-trade-quote caveat;
+- `stock`, backed by the existing credentialed Finnhub provider for one
+  conservative ticker, with quote timestamp, delayed-data warning, and
+  non-trading-advice caveat;
 - `end_conversation`, a constrained no-argument semantic close control.
 
-Valid calculator, weather, local-time, and FX calls return one correlated
+Valid calculator, weather, local-time, FX, and stock calls return one correlated
 `function_call_output` and request spoken continuation in the same
 conversation. Weather accepts current, today, and tomorrow intent plus an
 optional explicit place. FX accepts an optional positive amount and optional
@@ -53,9 +56,11 @@ supported base/quote codes; omitted fields retain the existing provider
 defaults. Python owns each fixed-provider request, timeout, and structured
 failure boundary; the browser remains a content-blind loopback relay. Provider
 work does not hold the lifecycle lock, and a late result cannot cross into a
-stopped or replacement session. Stocks, shell access, and arbitrary routing
-remain outside the Realtime tool boundary. Pipeline history mutation also
-remains excluded.
+stopped or replacement session. Stock requires `FINNHUB_API_KEY`; a missing key
+or unknown ticker remains a bounded provider error and never becomes invented
+market data. Trading actions, shell access, and arbitrary routing remain
+outside the Realtime tool boundary. Pipeline history mutation also remains
+excluded.
 
 ## Language
 
@@ -130,9 +135,9 @@ python -m src.realtime.fake_smoke
 ```
 
 This verifies wake, exclusive handoff, connection, two turns, interruption,
-calculator output, mocked default-Singapore weather and FX outputs, injected
-local-time output, closing, and wake recovery without browser, audio, network,
-OpenAI, or wall-clock sleep.
+calculator output, mocked default-Singapore weather, FX, and stock outputs,
+injected local-time output, closing, and wake recovery without browser, audio,
+network, OpenAI, or wall-clock sleep.
 
 ## Private fixtures
 

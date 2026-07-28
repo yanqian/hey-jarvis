@@ -1905,6 +1905,10 @@ surfaces, so they remain separate future features.
 
 ### Complete Realtime Integration for Existing Structured Tools
 
+Feature mapping: this normalized parent requirement covers F082 (local time),
+F083 (foreign exchange), and F084 (stock quotes). It extends the F081 weather
+bridge without changing F081's already accepted scope.
+
 Goal: make every structured tool already implemented in the pipeline available
 inside the continuous Realtime voice conversation, so local time, foreign
 exchange conversion, and stock quotes work through the same safe function-call

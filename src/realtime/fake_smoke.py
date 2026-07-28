@@ -77,6 +77,16 @@ class _ToolClient:
                 "quote": "SGD",
                 "rate": 1.35,
             },
+            {
+                "c": 193.12,
+                "d": 1.23,
+                "dp": 0.64,
+                "h": 194.0,
+                "l": 190.0,
+                "o": 191.0,
+                "pc": 191.89,
+                "t": 1783306800,
+            },
         ]
 
     def get_json(self, _url: str, *, params=None, timeout_seconds: float):
@@ -95,6 +105,7 @@ class FakeSmokeResult:
     weather_output: bool
     local_time_output: bool
     fx_output: bool
+    stock_output: bool
     end_phrase: bool
     closed: bool
     recovered_to_wake: bool
@@ -113,6 +124,7 @@ class FakeSmokeResult:
                 self.weather_output,
                 self.local_time_output,
                 self.fx_output,
+                self.stock_output,
                 self.end_phrase,
                 self.closed,
                 self.recovered_to_wake,
@@ -130,7 +142,10 @@ def run_fake_smoke() -> FakeSmokeResult:
         clock=clock,
         session_ids=lambda: "fake-session",
         end_phrases=("goodbye",),
-        tool_provider_config=ProviderConfig(default_location="Singapore"),
+        tool_provider_config=ProviderConfig(
+            default_location="Singapore",
+            finnhub_api_key="fake-finnhub-key",
+        ),
         tool_http_client=_ToolClient(),
         tool_now_provider=lambda: datetime(
             2026,
@@ -152,11 +167,13 @@ def run_fake_smoke() -> FakeSmokeResult:
     weather_output = False
     local_time_output = False
     fx_output = False
+    stock_output = False
 
     def sleep(seconds: float) -> None:
         nonlocal stage, user_turns, assistant_completions
         nonlocal connected, exclusive_handoff, barge_in
         nonlocal calculator_output, weather_output, local_time_output, fx_output
+        nonlocal stock_output
         clock.advance(max(seconds, 0.1))
         session_id = coordinator.session_id
         if coordinator.state == HandoffState.HOST_STARTING:
@@ -256,6 +273,25 @@ def run_fake_smoke() -> FakeSmokeResult:
                 and fx_payload["data"]["quote"] == "SGD"
                 and fx_payload["data"]["converted_amount"] == 135.0
             )
+            coordinator.host_event(
+                "tool_call",
+                session_id,
+                call_id="fake-stock-call",
+                name="stock",
+                arguments=json.dumps({"symbol": "AAPL"}),
+            )
+            stock_command = coordinator.command_after(int(fx_command["command_id"]))
+            stock_payload = (
+                json.loads(str(stock_command["output"])) if stock_command else {}
+            )
+            stock_output = bool(
+                stock_command
+                and stock_command["type"] == "tool_result"
+                and stock_payload["status"] == "success"
+                and stock_payload["data"]["symbol"] == "AAPL"
+                and stock_payload["data"]["current_price"] == 193.12
+                and "not trading advice" in stock_payload["answer"]
+            )
             coordinator.host_event("response_created", session_id)
             coordinator.host_event("response_done", session_id, reason="completed")
             assistant_completions += 1
@@ -293,6 +329,7 @@ def run_fake_smoke() -> FakeSmokeResult:
         weather_output=weather_output,
         local_time_output=local_time_output,
         fx_output=fx_output,
+        stock_output=stock_output,
         end_phrase="host_end_conversation_tool" in event_types,
         closed=stage == 3,
         recovered_to_wake=result.recovered_to_wake and lease.is_open,

@@ -177,18 +177,19 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F083 - Bridge the FX tool into Realtime.
+F084 - Bridge the stock quote tool into Realtime.
 
-F083 advertises a strict bounded `fx` function and reuses the existing
-Frankfurter ToolRoute, provider configuration, defaults, reference date,
-rounding, caveat, timeout, and structured-error behavior. The user accepted the
-provider-backed Chinese conversion and same-session follow-up; duplicate calls
-were de-duplicated, semantic ending restored wake ownership, and offline
-verification passes with 368 tests. Coding and live evidence are recorded in
-`.agent-harness/runs/F083-fast-coding.md` and
-`.agent-harness/runs/F083-live-acceptance.md`; separate cold-start approval is
-recorded as `EVAL_PASS: F083` in
-`.agent-harness/runs/20260728T090340Z-F083-evaluation-pass.md`.
+F084 advertises one strict bounded `stock` function and reuses the existing
+Finnhub ToolRoute, optional credential, timeout, quote fields, timestamp,
+delayed-data warning, non-advice caveat, and structured-error behavior. The
+user accepted provider-backed stock behavior and same-session follow-up;
+duplicate calls were de-duplicated, semantic ending restored wake ownership,
+and offline verification passes with 371 tests. Coding and live evidence are
+recorded in `.agent-harness/runs/F084-fast-coding.md` and
+`.agent-harness/runs/F084-live-acceptance.md`; after repairing the explicit
+normalized SPEC feature mapping, separate cold-start approval is recorded as
+`EVAL_PASS: F084` in
+`.agent-harness/runs/20260728T094830Z-F084-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -269,10 +270,12 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F083 completed through evaluator-gated
-fast work, user-led Realtime FX acceptance, and separate cold-start evaluator
-approval. Coding and live evidence are recorded in
-`.agent-harness/runs/F083-fast-coding.md` and
+No feature is currently in progress. F084 is evaluator-approved, completing
+the planned Realtime bridge sequence for all existing structured tools.
+
+F083 completed through evaluator-gated fast work, user-led Realtime FX
+acceptance, and separate cold-start evaluator approval. Coding and live
+evidence are recorded in `.agent-harness/runs/F083-fast-coding.md` and
 `.agent-harness/runs/F083-live-acceptance.md`; approval is recorded in
 `.agent-harness/runs/20260728T090340Z-F083-evaluation-pass.md`.
 
@@ -298,12 +301,9 @@ F079 remains deferred behind F080.
 
 ## Next Feature
 
-F084 - Bridge the stock quote tool into Realtime.
-
-F083 FX is complete. F084 is the final existing structured provider tool still
-outside Realtime and will reuse the credentialed Finnhub stock-quote boundary.
-News remains excluded because no news tool is implemented. F078, F080, and
-dependent F079 are deferred until this tool bridge sequence is complete.
+No feature is selected. News remains excluded because no news tool is
+implemented. F078, F080, and dependent F079 remain explicitly deferred pending
+the user's next direction.
 
 F076 is evaluator-approved. Its fresh-restart five-session follow-up measured
 a tight 849–930 ms readiness range (860 ms median), versus a 2,702 ms median in

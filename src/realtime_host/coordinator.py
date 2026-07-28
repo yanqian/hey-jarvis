@@ -28,6 +28,7 @@ MAX_TOOL_ARGUMENT_CHARS = 512
 MAX_CALCULATOR_EXPRESSION_CHARS = 200
 MAX_WEATHER_LOCATION_CHARS = 100
 MAX_FX_AMOUNT = 1_000_000_000
+_SAFE_STOCK_SYMBOL = re.compile(r"^[A-Z]{1,5}(?:\.[A-Z])?$")
 MAX_TOOL_OUTPUT_CHARS = 4096
 MAX_INPUT_LEVEL_SAMPLE_COUNT = 10
 MAX_FIXTURE_AUDIO_BYTES = 384_000
@@ -786,7 +787,7 @@ def _realtime_tool_output(
 ) -> str:
     """Execute one allowlisted existing tool and return bounded JSON output."""
 
-    if name not in {"calculator", "weather", "local_time", "fx"}:
+    if name not in {"calculator", "weather", "local_time", "fx", "stock"}:
         return json.dumps({"status": "error", "answer": "Unsupported Realtime tool."})
     if not isinstance(arguments, str) or len(arguments) > MAX_TOOL_ARGUMENT_CHARS:
         return _invalid_tool_arguments(name)
@@ -853,6 +854,23 @@ def _realtime_tool_output(
         )
         return _bounded_tool_output(result.status, result.answer, data=result.data)
 
+    if name == "stock":
+        if not isinstance(payload, dict) or set(payload) != {"symbol"}:
+            return _invalid_tool_arguments(name)
+        symbol = payload.get("symbol")
+        if not isinstance(symbol, str) or not _SAFE_STOCK_SYMBOL.fullmatch(symbol):
+            return _invalid_tool_arguments(name)
+        result = execute_route(
+            ToolRoute(
+                "stock",
+                "stock_provider",
+                {"query": "realtime stock quote request", "symbol": symbol},
+            ),
+            provider_config=provider_config,
+            http_client=http_client,
+        )
+        return _bounded_tool_output(result.status, result.answer, data=result.data)
+
     if not isinstance(payload, dict) or not set(payload).issubset({"location", "intent"}):
         return _invalid_tool_arguments(name)
     intent = payload.get("intent")
@@ -882,6 +900,7 @@ def _invalid_tool_arguments(name: object) -> str:
         "weather": "Weather",
         "local_time": "Local time",
         "fx": "FX",
+        "stock": "Stock",
     }.get(name, "Tool")
     return json.dumps({"status": "error", "answer": f"{label} arguments were invalid."})
 

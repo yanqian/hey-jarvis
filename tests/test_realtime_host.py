@@ -379,7 +379,7 @@ class RealtimeHostTests(unittest.TestCase):
             ("calculator", "not-json", "Calculator arguments were invalid."),
             ("calculator", json.dumps({"expression": "__import__('os')"}), "I could not safely calculate"),
             ("weather", json.dumps({"expression": "2+2"}), "Weather arguments were invalid."),
-            ("stock", json.dumps({"symbol": "AAPL"}), "Unsupported Realtime tool."),
+            ("shell", json.dumps({"command": "pwd"}), "Unsupported Realtime tool."),
         )
         for index, (name, arguments, expected) in enumerate(cases):
             with self.subTest(name=name, arguments=arguments):
@@ -641,6 +641,144 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertNotIn("rate", output["data"])
         self.assertLessEqual(len(json.dumps(output)), 4096)
         self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
+    def test_realtime_stock_reuses_finnhub_quote_and_redacts_symbol_price_and_key(self):
+        lease = FakeLease()
+        client = FakeJsonClient(
+            [
+                {
+                    "c": 193.12,
+                    "d": 1.23,
+                    "dp": 0.64,
+                    "h": 194.0,
+                    "l": 190.0,
+                    "o": 191.0,
+                    "pc": 191.89,
+                    "t": 1783306800,
+                }
+            ]
+        )
+        coordinator = HandoffCoordinator(
+            lease,
+            session_ids=lambda: "session-1",
+            tool_provider_config=ProviderConfig(
+                finnhub_api_key="private-finnhub-key",
+                http_timeout_seconds=2.5,
+            ),
+            tool_http_client=client,
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        cursor = self.activate_session(coordinator, session_id)
+        coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="stock-private-call",
+            name="stock",
+            arguments=json.dumps({"symbol": "AAPL"}),
+        )
+        output = json.loads(coordinator.command_after(cursor)["output"])
+        self.assertEqual(output["status"], "success")
+        self.assertEqual(output["data"]["symbol"], "AAPL")
+        self.assertEqual(output["data"]["current_price"], 193.12)
+        self.assertEqual(output["data"]["time"], "2026-07-06 03:00 UTC")
+        self.assertIn("market data may be delayed", output["answer"])
+        self.assertIn("not trading advice", output["answer"])
+        self.assertEqual(
+            client.calls,
+            [
+                (
+                    "https://api.finnhub.io/api/v1/quote",
+                    {"symbol": "AAPL", "token": "private-finnhub-key"},
+                )
+            ],
+        )
+        report_text = json.dumps(coordinator.report())
+        for private in ("stock-private-call", "AAPL", "193.12", "private-finnhub-key"):
+            self.assertNotIn(private, report_text)
+
+    def test_realtime_stock_rejects_malformed_tickers_without_provider_call(self):
+        cases = (
+            {},
+            {"symbol": ""},
+            {"symbol": "aapl"},
+            {"symbol": "TOOLONG"},
+            {"symbol": "AAPL;DROP"},
+            {"symbol": "AAPL", "extra": True},
+        )
+        for index, arguments in enumerate(cases):
+            with self.subTest(arguments=arguments):
+                lease = FakeLease()
+                client = FakeJsonClient([])
+                coordinator = HandoffCoordinator(
+                    lease,
+                    session_ids=lambda: "session-1",
+                    tool_provider_config=ProviderConfig(
+                        finnhub_api_key="private-finnhub-key"
+                    ),
+                    tool_http_client=client,
+                )
+                coordinator.host_event("armed")
+                session_id = coordinator.begin_handoff()
+                cursor = self.activate_session(coordinator, session_id)
+                coordinator.host_event(
+                    "tool_call",
+                    session_id,
+                    call_id=f"stock-invalid-{index}",
+                    name="stock",
+                    arguments=json.dumps(arguments),
+                )
+                output = json.loads(coordinator.command_after(cursor)["output"])
+                self.assertEqual(output["status"], "error")
+                self.assertIn("Stock arguments were invalid", output["answer"])
+                self.assertEqual(client.calls, [])
+                self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
+    def test_realtime_stock_missing_key_and_provider_failure_are_non_speculative(self):
+        cases = (
+            (
+                ProviderConfig(finnhub_api_key=None),
+                FakeJsonClient([]),
+                "missing_credentials",
+            ),
+            (
+                ProviderConfig(finnhub_api_key="private-finnhub-key"),
+                FakeJsonClient([ProviderError("timeout", "request timed out")]),
+                "timeout",
+            ),
+            (
+                ProviderConfig(finnhub_api_key="private-finnhub-key"),
+                FakeJsonClient(
+                    [{"c": 0, "d": 0, "dp": 0, "h": 0, "l": 0, "o": 0, "pc": 0, "t": 0}]
+                ),
+                "unknown_symbol",
+            ),
+        )
+        for index, (config, client, expected_error) in enumerate(cases):
+            with self.subTest(expected_error=expected_error):
+                lease = FakeLease()
+                coordinator = HandoffCoordinator(
+                    lease,
+                    session_ids=lambda: "session-1",
+                    tool_provider_config=config,
+                    tool_http_client=client,
+                )
+                coordinator.host_event("armed")
+                session_id = coordinator.begin_handoff()
+                cursor = self.activate_session(coordinator, session_id)
+                coordinator.host_event(
+                    "tool_call",
+                    session_id,
+                    call_id=f"stock-failure-{index}",
+                    name="stock",
+                    arguments=json.dumps({"symbol": "AAPL"}),
+                )
+                output = json.loads(coordinator.command_after(cursor)["output"])
+                self.assertEqual(output["status"], "error")
+                self.assertEqual(output["data"]["provider_error"], expected_error)
+                self.assertNotIn("current_price", output["data"])
+                self.assertLessEqual(len(json.dumps(output)), 4096)
+                self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
 
     def test_slow_realtime_weather_does_not_hold_lifecycle_lock_or_enqueue_late_result(self):
         started = threading.Event()
@@ -950,7 +1088,7 @@ class RealtimeHostTests(unittest.TestCase):
         )
         self.assertEqual(
             [tool["name"] for tool in session["tools"]],
-            ["calculator", "weather", "local_time", "fx", "end_conversation"],
+            ["calculator", "weather", "local_time", "fx", "stock", "end_conversation"],
         )
         weather = session["tools"][1]
         self.assertEqual(weather["parameters"]["required"], ["intent"])
@@ -980,6 +1118,18 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertEqual(
             fx["parameters"]["properties"]["quote"]["enum"],
             ["USD", "SGD", "CNY", "EUR", "JPY", "HKD", "GBP", "AUD"],
+        )
+        stock = session["tools"][4]
+        self.assertFalse(stock["parameters"]["additionalProperties"])
+        self.assertEqual(stock["parameters"]["required"], ["symbol"])
+        self.assertEqual(
+            stock["parameters"]["properties"]["symbol"],
+            {
+                "type": "string",
+                "pattern": "^[A-Z]{1,5}(?:\\.[A-Z])?$",
+                "maxLength": 7,
+                "description": "One uppercase stock ticker, for example AAPL or BRK.B.",
+            },
         )
         self.assertIn("# Language", session["instructions"])
         self.assertIn("concise, natural Simplified Chinese", session["instructions"])
