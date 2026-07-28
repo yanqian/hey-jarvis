@@ -106,7 +106,8 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F075 - Create configured Realtime sessions", last_completed)
+        self.assertIn("F081 - Bridge the existing weather tool into Realtime", last_completed)
+        self.assertIn("EVAL_PASS: F081", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
@@ -204,11 +205,13 @@ class DocumentationTests(unittest.TestCase):
         for phrase in (
             "pipeline remains the default",
             "once per Chrome host launch",
-            "exactly two local functions",
+            "exactly three allowlisted local functions",
             "`calculator`",
+            "`weather`",
             "`end_conversation`",
             "`function_call_output`",
-            "Weather, FX, stocks",
+            "DEFAULT_LOCATION=Singapore",
+            "FX, stocks",
             "Pre-wake",
             "unified WebRTC call interface",
             "never an API credential",
@@ -339,7 +342,8 @@ class DocumentationTests(unittest.TestCase):
         ):
             self.assertIn(phrase, readme)
 
-        self.assertIn("Weather, FX, stocks", realtime)
+        self.assertIn("FX, stocks", realtime)
+        self.assertIn("weather", realtime)
         self.assertIn("outside the Realtime tool boundary", realtime)
 
     def test_local_markdown_links_resolve(self):

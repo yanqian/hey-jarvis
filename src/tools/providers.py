@@ -48,6 +48,14 @@ PROVIDER_ERROR_MISSING_QUOTE_FIELDS = "missing_quote_fields"
 
 OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_LOCATION_ALIASES = {
+    "东京": "Tokyo",
+    "东京市": "Tokyo",
+    "日本东京": "Tokyo",
+    "東京": "Tokyo",
+    "東京都": "Tokyo",
+    "日本東京": "Tokyo",
+}
 FRANKFURTER_RATE_URL_TEMPLATE = "https://api.frankfurter.dev/v2/rate/{base}/{quote}"
 FINNHUB_QUOTE_URL = "https://api.finnhub.io/api/v1/quote"
 DEFAULT_QUOTE_CURRENCY = "SGD"
@@ -395,9 +403,10 @@ def _resolve_open_meteo_location(
     http_client: JsonHttpClient,
     timeout_seconds: float,
 ) -> Mapping[str, str | float]:
+    provider_query = OPEN_METEO_LOCATION_ALIASES.get(location_query.strip(), location_query)
     data = http_client.get_json(
         OPEN_METEO_GEOCODING_URL,
-        params={"name": location_query, "count": 1, "language": "en", "format": "json"},
+        params={"name": provider_query, "count": 1, "language": "en", "format": "json"},
         timeout_seconds=timeout_seconds,
     )
     if not isinstance(data, Mapping):

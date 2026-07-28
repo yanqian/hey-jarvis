@@ -177,11 +177,14 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F075 - Create configured Realtime sessions through one unified WebRTC call.
+F081 - Bridge the existing weather tool into Realtime.
 
-F075 removed the ephemeral-token and separate session-update round trips,
-preserved the audible input-ready gate, and reduced bounded same-device median
-wake-to-configured latency by 58.9%. Live and evaluator acceptance pass.
+F081 advertises a strict Realtime weather function and reuses the existing
+Open-Meteo provider outside the coordinator lifecycle lock. Default Singapore
+and explicit Japan-Tokyo weather passed user-led built-in-device acceptance;
+semantic ending restored wake ownership. Offline verification passes with 364
+tests and separate cold-start approval is recorded as `EVAL_PASS: F081` in
+`.agent-harness/runs/20260728T080314Z-F081-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -262,7 +265,12 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress.
+No feature is currently in progress. F081 completed through evaluator-gated
+fast work, user-led Realtime acceptance, and separate cold-start evaluator
+approval. Coding and live evidence are recorded in
+`.agent-harness/runs/F081-fast-coding.md` and
+`.agent-harness/runs/F081-live-attempts.md`; approval is recorded in
+`.agent-harness/runs/20260728T080314Z-F081-evaluation-pass.md`.
 
 ## Next Feature
 

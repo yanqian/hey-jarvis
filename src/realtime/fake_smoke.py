@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from src.realtime.controller import RealtimeSessionController
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffState
+from src.tools import ProviderConfig
 
 
 class _Clock:
@@ -45,6 +46,36 @@ class _Detector:
         pass
 
 
+class _WeatherClient:
+    def __init__(self) -> None:
+        self.responses = [
+            {
+                "results": [
+                    {
+                        "name": "Singapore",
+                        "country": "Singapore",
+                        "latitude": 1.29,
+                        "longitude": 103.85,
+                        "timezone": "Asia/Singapore",
+                    }
+                ]
+            },
+            {
+                "current": {
+                    "time": "2026-07-28T15:00",
+                    "temperature_2m": 30.0,
+                    "apparent_temperature": 34.0,
+                    "weather_code": 3,
+                    "precipitation": 0.0,
+                    "rain": 0.0,
+                }
+            },
+        ]
+
+    def get_json(self, _url: str, *, params=None, timeout_seconds: float):
+        return self.responses.pop(0)
+
+
 @dataclass(frozen=True)
 class FakeSmokeResult:
     wake: bool
@@ -54,6 +85,7 @@ class FakeSmokeResult:
     assistant_completions: int
     barge_in: bool
     calculator_output: bool
+    weather_output: bool
     end_phrase: bool
     closed: bool
     recovered_to_wake: bool
@@ -69,6 +101,7 @@ class FakeSmokeResult:
                 self.assistant_completions == 2,
                 self.barge_in,
                 self.calculator_output,
+                self.weather_output,
                 self.end_phrase,
                 self.closed,
                 self.recovered_to_wake,
@@ -86,6 +119,8 @@ def run_fake_smoke() -> FakeSmokeResult:
         clock=clock,
         session_ids=lambda: "fake-session",
         end_phrases=("goodbye",),
+        tool_provider_config=ProviderConfig(default_location="Singapore"),
+        tool_http_client=_WeatherClient(),
     )
     coordinator.host_event("armed")
     stage = 0
@@ -95,10 +130,11 @@ def run_fake_smoke() -> FakeSmokeResult:
     exclusive_handoff = False
     barge_in = False
     calculator_output = False
+    weather_output = False
 
     def sleep(seconds: float) -> None:
         nonlocal stage, user_turns, assistant_completions
-        nonlocal connected, exclusive_handoff, barge_in, calculator_output
+        nonlocal connected, exclusive_handoff, barge_in, calculator_output, weather_output
         clock.advance(max(seconds, 0.1))
         session_id = coordinator.session_id
         if coordinator.state == HandoffState.HOST_STARTING:
@@ -142,6 +178,23 @@ def run_fake_smoke() -> FakeSmokeResult:
                 and command["type"] == "tool_result"
                 and json.loads(str(command["output"]))["answer"] == "The answer is 100000."
             )
+            coordinator.host_event(
+                "tool_call",
+                session_id,
+                call_id="fake-weather-call",
+                name="weather",
+                arguments=json.dumps({"intent": "current"}),
+            )
+            weather_command = coordinator.command_after(int(command["command_id"]))
+            weather_payload = (
+                json.loads(str(weather_command["output"])) if weather_command else {}
+            )
+            weather_output = bool(
+                weather_command
+                and weather_command["type"] == "tool_result"
+                and weather_payload["status"] == "success"
+                and weather_payload["data"]["location"].startswith("Singapore")
+            )
             coordinator.host_event("response_created", session_id)
             coordinator.host_event("response_done", session_id, reason="completed")
             assistant_completions += 1
@@ -176,6 +229,7 @@ def run_fake_smoke() -> FakeSmokeResult:
         assistant_completions=assistant_completions,
         barge_in=barge_in,
         calculator_output=calculator_output,
+        weather_output=weather_output,
         end_phrase="host_end_conversation_tool" in event_types,
         closed=stage == 3,
         recovered_to_wake=result.recovered_to_wake and lease.is_open,

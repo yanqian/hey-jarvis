@@ -1728,3 +1728,89 @@ one inseparable information-architecture correction with a shared Markdown
 verification surface. Rewriting developer-process history or changing product
 behavior would have separate audiences and verification boundaries and remains
 out of scope.
+### Realtime Weather Tool Bridge
+
+Goal: let a user ask current, today, or tomorrow weather questions during an
+active Realtime voice conversation and receive a spoken answer backed by the
+existing Open-Meteo provider, using Singapore when the user does not name a
+location.
+
+Included scope: advertise one strict Realtime `weather` function alongside the
+accepted calculator and conversation-ending functions; accept an optional
+explicit location plus a bounded current/today/tomorrow intent; default omitted
+locations through the existing `DEFAULT_LOCATION`; reuse the existing
+`ToolRoute`, `execute_route`, `ProviderConfig`, Open-Meteo parsing, timeout, and
+structured failure behavior; generalize the calculator-only Realtime execution
+boundary into an allowlisted dispatcher; return one correlated
+`function_call_output` followed by `response.create`; and update Realtime
+operator guidance, deterministic tests, fake smoke coverage, and user-led live
+acceptance.
+
+Excluded scope: adding Realtime time, FX, stock, news, arbitrary web browsing,
+MCP, model-hosted provider access, a second Chat Completions naturalization
+call, transcript-side duplicate weather routing, new provider credentials, or
+changes to pipeline tool behavior, Open-Meteo endpoints, Realtime model, voice,
+volume, acknowledgement, WebRTC transport, input gating, VAD, interruption,
+timeouts, microphone ownership, privacy, or cleanup.
+
+Core flows: during an active Realtime session, “今天天气怎么样” produces a
+weather function call with no required location, Python resolves the configured
+default Singapore through Open-Meteo, and the correlated structured result
+causes a concise Simplified Chinese spoken continuation in the same
+conversation. An explicit request such as tomorrow in Tokyo uses Tokyo instead.
+Malformed, unsupported, duplicate, failed, late, or stale calls return a
+bounded safe result or are ignored without executing twice, leaking arguments,
+inventing live facts, reopening input, or sending output into another session.
+Slow provider work does not hold the coordinator lifecycle lock, so stop,
+timeout, browser cleanup, and wake recovery remain responsive.
+
+Constraints: the browser remains a content-blind loopback relay and never
+receives an API credential; Python owns the fixed-provider network call and
+allowlist; arguments, outputs, evidence, and call identity remain bounded; no
+raw query, location, weather answer, call ID, secret, or provider response is
+retained in lifecycle evidence; provider failures must not fall back to model
+speculation; automated verification must use injected/mocked HTTP and no live
+network, credential, microphone, speaker, or browser permission; and the
+official Realtime contract remains `conversation.item.create` with
+`function_call_output`, followed by `response.create`.
+
+Ambiguities or assumptions: “今天天气” maps to `today`, “现在天气” maps to
+`current`, and an otherwise unspecified weather request may use `current`; the
+model may omit `location` only when the user did not name one, while Python is
+the authority for the configured default. Existing English structured provider
+answers are acceptable tool data because the Realtime session instruction
+requires the spoken continuation to follow the current utterance language.
+Only weather is enabled in this feature; the dispatcher is intentionally
+extensible but does not advertise unimplemented Realtime tools.
+
+Required capabilities: the existing Open-Meteo provider and configuration,
+loopback Realtime function-call bridge, deterministic injected HTTP fixtures,
+JavaScript syntax checking, full project recovery, fast coding evidence, and a
+separate cold-start Evaluator Agent. Final product acceptance additionally
+requires a user-authorized billable Realtime session, provider network access,
+Chrome host, and Mac built-in microphone and speakers.
+
+Implementation paths: `src/realtime_host/server.py`,
+`src/realtime_host/coordinator.py`, `src/realtime_host/static/app.js`,
+`src/realtime/fake_smoke.py`, existing tool modules under `src/tools/`,
+`docs/REALTIME.md`, `MANUAL_TESTING.md`, focused tests under `tests/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: strict session tool schema; omitted-location Singapore
+and explicit-location weather execution through mocked Open-Meteo responses;
+current/today/tomorrow intent; malformed, oversized, unsupported, provider
+failure, duplicate, late, and stale calls; proof that slow tool execution does
+not block stop or lifecycle lock acquisition; correlated output and browser
+`response.create`; privacy/evidence redaction; unchanged calculator,
+end-conversation, input-ready, interruption, and cleanup regressions;
+JavaScript syntax; focused tests; full unittest discovery; Realtime fake smoke;
+final `./init.sh`; one user-led built-in-device weather conversation; fast
+coding evidence; and separate cold-start evaluator approval.
+
+Decomposition decision: F081 intentionally combines the allowlisted asynchronous
+Realtime dispatcher with the weather function because the dispatcher has no
+independent user value and provider execution cannot safely ship without its
+non-blocking lifecycle and stale-result boundary. Additional tool categories
+have distinct schemas, credentials, provider semantics, and live verification
+surfaces, so they remain separate future features.

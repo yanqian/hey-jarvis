@@ -1817,6 +1817,37 @@
         "F077",
         "F078"
       ]
+    },
+    {
+      "id": "F081",
+      "title": "Bridge existing weather tool into Realtime",
+      "description": "Advertise a strict Realtime weather function and safely reuse the existing Open-Meteo provider so omitted-location voice requests answer for configured-default Singapore in the same continuous conversation.",
+      "acceptance": [
+        "The unified Realtime session advertises one strict weather function with optional explicit location and bounded current/today/tomorrow intent, while calculator and end-conversation behavior remain unchanged and unimplemented tool categories remain unadvertised.",
+        "Realtime weather execution reuses the existing ToolRoute, ProviderConfig, Open-Meteo, timeout, default-location, and structured error boundaries; omitted location resolves to Singapore by active default, explicit locations remain explicit, and provider failure never falls back to invented live facts.",
+        "Tool calls remain bounded, allowlisted, correlated, de-duplicated, session-scoped, and content-redacted; provider work runs without holding the coordinator lifecycle lock, and late or stale results cannot enter a stopped or replacement session.",
+        "The browser returns exactly one correlated function_call_output followed by response.create, and focused server/coordinator/provider/privacy tests, JavaScript syntax, full project tests, Realtime fake smoke, and final ./init.sh pass without live network, credential, browser permission, microphone, or speaker.",
+        "One user-led Mac built-in-device Realtime run confirms that 今天天气怎么样 produces a concise Chinese Singapore weather answer backed by the configured provider, an explicit-location request uses that location, ordinary follow-up remains usable, and ending restores wake ownership."
+      ],
+      "evals": [
+        {
+          "scenario": "Realtime default and explicit-location weather",
+          "required_evidence": [
+            "offline",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F024",
+        "F056",
+        "F075"
+      ]
     }
   ]
 }

@@ -276,6 +276,25 @@ class ToolProviderTests(unittest.TestCase):
         self.assertEqual(result.data["time"], "2026-07-07")
         self.assertEqual(result.data["precipitation_probability_max_percent"], 75.0)
 
+    def test_open_meteo_normalizes_observed_chinese_tokyo_alias_safely(self):
+        client = FakeJsonClient(
+            [geocoding_response(name="Tokyo", country="Japan"), daily_forecast_response()]
+        )
+        route = ToolRoute(
+            "weather",
+            "weather_provider",
+            {"query": "明天东京天气怎么样", "location": "东京", "intent": "tomorrow"},
+        )
+
+        from src.tools import execute_route
+
+        result = execute_route(route, provider_config=ProviderConfig(), http_client=client)
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(client.calls[0][1]["name"], "Tokyo")
+        self.assertEqual(result.data["location"], "Tokyo, Japan")
+        self.assertEqual(result.data["intent"], "tomorrow")
+
     def test_open_meteo_weather_uses_default_location_when_omitted(self):
         client = FakeJsonClient([geocoding_response(), daily_forecast_response()])
         route = ToolRoute("weather", "weather_provider", {"query": "明天天气怎么样", "intent": "tomorrow"})

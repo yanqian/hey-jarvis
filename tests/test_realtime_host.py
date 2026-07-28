@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import unittest
 from http import HTTPStatus
 from io import BytesIO
@@ -14,6 +15,7 @@ from src.realtime_host.coordinator import (
     HandoffState,
 )
 from src.realtime_host import server
+from src.tools import ProviderConfig, ProviderError
 
 
 class FakeLease:
@@ -47,6 +49,61 @@ class FakeResponse:
 class FakeSDPResponse(FakeResponse):
     def read(self) -> bytes:
         return str(self.payload).encode()
+
+
+class FakeJsonClient:
+    def __init__(self, responses: list[object]) -> None:
+        self.responses = list(responses)
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def get_json(self, url: str, *, params=None, timeout_seconds: float):
+        self.calls.append((url, dict(params or {})))
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def weather_location(name: str = "Singapore") -> dict[str, object]:
+    return {
+        "results": [
+            {
+                "name": name,
+                "country": "Singapore" if name == "Singapore" else "Japan",
+                "latitude": 1.29 if name == "Singapore" else 35.68,
+                "longitude": 103.85 if name == "Singapore" else 139.69,
+                "timezone": "Asia/Singapore" if name == "Singapore" else "Asia/Tokyo",
+            }
+        ]
+    }
+
+
+def current_weather() -> dict[str, object]:
+    return {
+        "current": {
+            "time": "2026-07-28T15:00",
+            "temperature_2m": 30.0,
+            "apparent_temperature": 34.0,
+            "weather_code": 3,
+            "precipitation": 0.0,
+            "rain": 0.0,
+        }
+    }
+
+
+def today_weather() -> dict[str, object]:
+    return {
+        "daily": {
+            "time": ["2026-07-28", "2026-07-29"],
+            "weather_code": [61, 3],
+            "temperature_2m_min": [25.0, 26.0],
+            "temperature_2m_max": [31.0, 32.0],
+            "apparent_temperature_max": [35.0, 36.0],
+            "precipitation_sum": [3.0, 0.0],
+            "rain_sum": [3.0, 0.0],
+            "precipitation_probability_max": [70.0, 20.0],
+        }
+    }
 
 
 class RealtimeHostTests(unittest.TestCase):
@@ -320,7 +377,8 @@ class RealtimeHostTests(unittest.TestCase):
         cases = (
             ("calculator", "not-json", "Calculator arguments were invalid."),
             ("calculator", json.dumps({"expression": "__import__('os')"}), "I could not safely calculate"),
-            ("weather", json.dumps({"expression": "2+2"}), "Unsupported Realtime tool."),
+            ("weather", json.dumps({"expression": "2+2"}), "Weather arguments were invalid."),
+            ("stock", json.dumps({"symbol": "AAPL"}), "Unsupported Realtime tool."),
         )
         for index, (name, arguments, expected) in enumerate(cases):
             with self.subTest(name=name, arguments=arguments):
@@ -336,6 +394,119 @@ class RealtimeHostTests(unittest.TestCase):
                 self.assertEqual(output["status"], "error")
                 self.assertIn(expected, output["answer"])
                 self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
+    def test_realtime_weather_defaults_to_singapore_and_preserves_explicit_location(self):
+        cases = (
+            (
+                {"intent": "today"},
+                [weather_location(), today_weather()],
+                "Singapore",
+                "today",
+            ),
+            (
+                {"location": "东京", "intent": "current"},
+                [weather_location("Tokyo"), current_weather()],
+                "Tokyo",
+                "current",
+            ),
+        )
+        for index, (arguments, responses, expected_location, expected_intent) in enumerate(cases):
+            with self.subTest(arguments=arguments):
+                lease = FakeLease()
+                client = FakeJsonClient(responses)
+                coordinator = HandoffCoordinator(
+                    lease,
+                    session_ids=lambda: "session-1",
+                    tool_provider_config=ProviderConfig(default_location="Singapore"),
+                    tool_http_client=client,
+                )
+                coordinator.host_event("armed")
+                session_id = coordinator.begin_handoff()
+                cursor = self.activate_session(coordinator, session_id)
+                coordinator.host_event(
+                    "tool_call",
+                    session_id,
+                    call_id=f"weather-{index}",
+                    name="weather",
+                    arguments=json.dumps(arguments),
+                )
+                command = coordinator.command_after(cursor)
+                output = json.loads(command["output"])
+                self.assertEqual(command["type"], "tool_result")
+                self.assertEqual(output["status"], "success")
+                self.assertTrue(output["data"]["location"].startswith(expected_location))
+                self.assertEqual(output["data"]["intent"], expected_intent)
+                self.assertEqual(client.calls[0][1]["name"], expected_location)
+                report_text = json.dumps(coordinator.report(), ensure_ascii=False)
+                self.assertNotIn(expected_location, report_text)
+                self.assertNotIn(f"weather-{index}", report_text)
+
+    def test_realtime_weather_provider_failure_returns_bounded_non_speculative_output(self):
+        lease = FakeLease()
+        client = FakeJsonClient([ProviderError("timeout", "request timed out")])
+        coordinator = HandoffCoordinator(
+            lease,
+            session_ids=lambda: "session-1",
+            tool_provider_config=ProviderConfig(default_location="Singapore"),
+            tool_http_client=client,
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        cursor = self.activate_session(coordinator, session_id)
+        coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="weather-failure",
+            name="weather",
+            arguments=json.dumps({"intent": "current"}),
+        )
+        output = json.loads(coordinator.command_after(cursor)["output"])
+        self.assertEqual(output["status"], "error")
+        self.assertIn("could not get weather data", output["answer"])
+        self.assertEqual(output["data"]["provider_error"], "timeout")
+        self.assertNotIn("temperature", json.dumps(output))
+        self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
+    def test_slow_realtime_weather_does_not_hold_lifecycle_lock_or_enqueue_late_result(self):
+        started = threading.Event()
+        release = threading.Event()
+
+        class BlockingClient:
+            def get_json(self, _url: str, *, params=None, timeout_seconds: float):
+                started.set()
+                release.wait(1.0)
+                return weather_location()
+
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(
+            lease,
+            session_ids=lambda: "session-1",
+            tool_http_client=BlockingClient(),
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        cursor = self.activate_session(coordinator, session_id)
+        worker = threading.Thread(
+            target=lambda: coordinator.host_event(
+                "tool_call",
+                session_id,
+                call_id="weather-slow",
+                name="weather",
+                arguments=json.dumps({"intent": "current"}),
+            )
+        )
+        worker.start()
+        self.assertTrue(started.wait(0.5))
+        coordinator.request_stop("test")
+        stop = coordinator.command_after(cursor)
+        self.assertEqual(stop["type"], "stop")
+        release.set()
+        worker.join(1.0)
+        self.assertFalse(worker.is_alive())
+        self.assertIsNone(coordinator.command_after(stop["command_id"]))
+        report_text = json.dumps(coordinator.report())
+        self.assertIn("host_tool_result_ignored", report_text)
+        self.assertNotIn("weather-slow", report_text)
 
     def test_end_conversation_tool_requests_one_existing_stop_without_output(self):
         lease = FakeLease()
@@ -602,7 +773,17 @@ class RealtimeHostTests(unittest.TestCase):
                 "transcription": {"model": "gpt-4o-mini-transcribe"},
             },
         )
-        self.assertEqual([tool["name"] for tool in session["tools"]], ["calculator", "end_conversation"])
+        self.assertEqual(
+            [tool["name"] for tool in session["tools"]],
+            ["calculator", "weather", "end_conversation"],
+        )
+        weather = session["tools"][1]
+        self.assertEqual(weather["parameters"]["required"], ["intent"])
+        self.assertFalse(weather["parameters"]["additionalProperties"])
+        self.assertEqual(
+            weather["parameters"]["properties"]["intent"]["enum"],
+            ["current", "today", "tomorrow"],
+        )
         self.assertIn("# Language", session["instructions"])
         self.assertIn("concise, natural Simplified Chinese", session["instructions"])
 

@@ -363,6 +363,7 @@ def run_realtime_forever(settings: Settings) -> int:
         real_microphone=True,
         wake_after_arm=True,
         end_phrases=settings.realtime_end_phrases,
+        tool_provider_config=provider_config_from_settings(settings),
     )
     url = f"http://{settings.realtime_bridge_host}:{server.server_port}/"
     launch_chrome_app(url)

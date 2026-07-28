@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Protocol
 
-from src.tools import ToolRoute, execute_route
+from src.tools import ProviderConfig, ToolRoute, execute_route
 
 
 MAX_EVIDENCE_EVENTS = 200
@@ -24,6 +24,8 @@ MAX_TRANSCRIPT_CONTROL_CHARS = 200
 MAX_NORMALIZED_END_PHRASE_CHARS = 64
 MAX_TOOL_ARGUMENT_CHARS = 512
 MAX_CALCULATOR_EXPRESSION_CHARS = 200
+MAX_WEATHER_LOCATION_CHARS = 100
+MAX_TOOL_OUTPUT_CHARS = 4096
 MAX_INPUT_LEVEL_SAMPLE_COUNT = 10
 MAX_FIXTURE_AUDIO_BYTES = 384_000
 MAX_HANDOFF_TIMING_MS = 60_000
@@ -163,6 +165,8 @@ class HandoffCoordinator:
         session_ids: Callable[[], str] = lambda: uuid.uuid4().hex,
         open_wake_on_init: bool = True,
         end_phrases: tuple[str, ...] = (),
+        tool_provider_config: object | None = None,
+        tool_http_client: object | None = None,
     ) -> None:
         self._wake_lease = wake_lease
         self._clock = clock
@@ -190,6 +194,8 @@ class HandoffCoordinator:
         )
         self._seen_transcription_items: set[str] = set()
         self._handled_tool_calls: set[str] = set()
+        self._tool_provider_config = tool_provider_config or ProviderConfig()
+        self._tool_http_client = tool_http_client
         if open_wake_on_init:
             if not self._wake_lease.is_open:
                 self._wake_lease.open()
@@ -380,6 +386,12 @@ class HandoffCoordinator:
         host_id: str | None = None,
         **detail: object,
     ) -> str:
+        if event_type == "tool_call":
+            return self._handle_tool_call(
+                session_id,
+                host_id=host_id,
+                detail=detail,
+            )
         with self._lock:
             if event_type == "armed":
                 self.arm_host(host_id)
@@ -419,8 +431,6 @@ class HandoffCoordinator:
                 self._record("host_transcription_failed", session_id=session_id, reason="provider_failure")
                 self._last_activity_at = self._clock()
                 return "accepted"
-            if event_type == "tool_call":
-                return self._handle_tool_call(session_id, detail)
             if event_type == "input_level":
                 safe_detail = _sanitize_input_level(detail)
             elif event_type == "handoff_timing":
@@ -509,49 +519,88 @@ class HandoffCoordinator:
             return "stopping"
         return "accepted"
 
-    def _handle_tool_call(self, session_id: str, detail: dict[str, object]) -> str:
-        call_id = detail.get("call_id")
-        name = detail.get("name")
-        arguments = detail.get("arguments")
-        if not isinstance(call_id, str) or not _SAFE_VALUE.fullmatch(call_id):
-            raise HandoffError("Realtime tool call identity was invalid")
-        if call_id in self._handled_tool_calls:
-            self._record("host_tool_call_duplicate", session_id=session_id)
-            return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
-        self._handled_tool_calls.add(call_id)
-        if name == "end_conversation":
+    def _handle_tool_call(
+        self,
+        session_id: str | None,
+        *,
+        host_id: str | None,
+        detail: dict[str, object],
+    ) -> str:
+        """Claim under the lifecycle lock, execute outside it, then correlate safely."""
+
+        with self._lock:
+            if host_id != self._host_id:
+                raise HandoffError("Host event did not match the armed host")
+            if session_id != self._session_id or self._session_id is None:
+                raise HandoffError("Host event did not match the active session")
+            if self._state in {HandoffState.HOST_STARTING, HandoffState.HOST_READY}:
+                raise HandoffError("Host user-turn activity arrived before input readiness")
+            call_id = detail.get("call_id")
+            name = detail.get("name")
+            arguments = detail.get("arguments")
+            if not isinstance(call_id, str) or not _SAFE_VALUE.fullmatch(call_id):
+                raise HandoffError("Realtime tool call identity was invalid")
+            if call_id in self._handled_tool_calls:
+                self._record("host_tool_call_duplicate", session_id=session_id)
+                return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
+            self._handled_tool_calls.add(call_id)
+            if name == "end_conversation":
+                if self._state != HandoffState.HOST_ACTIVE:
+                    self._record(
+                        "host_end_conversation_tool_ignored",
+                        session_id=session_id,
+                        reason="late_event",
+                    )
+                    return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
+                try:
+                    payload = (
+                        json.loads(arguments)
+                        if isinstance(arguments, str)
+                        and len(arguments) <= MAX_TOOL_ARGUMENT_CHARS
+                        else None
+                    )
+                except json.JSONDecodeError:
+                    payload = None
+                if payload != {}:
+                    self._record(
+                        "host_end_conversation_tool_ignored",
+                        session_id=session_id,
+                        reason="invalid_arguments",
+                    )
+                    return "accepted"
+                self._record("host_end_conversation_tool", session_id=session_id)
+                self._last_activity_at = self._clock()
+                self.request_stop("end_phrase")
+                return "stopping"
             if self._state != HandoffState.HOST_ACTIVE:
                 self._record(
-                    "host_end_conversation_tool_ignored",
+                    "host_tool_call_ignored",
                     session_id=session_id,
                     reason="late_event",
                 )
-                return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
-            try:
-                payload = (
-                    json.loads(arguments)
-                    if isinstance(arguments, str)
-                    and len(arguments) <= MAX_TOOL_ARGUMENT_CHARS
-                    else None
-                )
-            except json.JSONDecodeError:
-                payload = None
-            if payload != {}:
-                self._record(
-                    "host_end_conversation_tool_ignored",
-                    session_id=session_id,
-                    reason="invalid_arguments",
-                )
-                return "accepted"
-            self._record("host_end_conversation_tool", session_id=session_id)
+                return "stopping"
+            self._record("host_tool_call_started", session_id=session_id)
             self._last_activity_at = self._clock()
-            self.request_stop("end_phrase")
-            return "stopping"
-        output = _calculator_output(name, arguments)
-        self._enqueue("tool_result", session_id, call_id=call_id, output=output)
-        self._record("host_tool_call", session_id=session_id, result="completed")
-        self._last_activity_at = self._clock()
-        return "accepted"
+
+        output = _realtime_tool_output(
+            name,
+            arguments,
+            provider_config=self._tool_provider_config,
+            http_client=self._tool_http_client,
+        )
+
+        with self._lock:
+            if session_id != self._session_id or self._state != HandoffState.HOST_ACTIVE:
+                self._record(
+                    "host_tool_result_ignored",
+                    session_id=session_id,
+                    reason="late_or_stale",
+                )
+                return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
+            self._enqueue("tool_result", session_id, call_id=call_id, output=output)
+            self._record("host_tool_call", session_id=session_id, result="completed")
+            self._last_activity_at = self._clock()
+            return "accepted"
 
     def command_after(self, command_id: int, *, host_id: str | None = None) -> dict[str, object] | None:
         with self._lock:
@@ -721,21 +770,79 @@ def _normalize_end_phrase(value: str) -> str:
     return "".join(text.split())
 
 
-def _calculator_output(name: object, arguments: object) -> str:
-    """Execute only the existing safe calculator and return bounded JSON output."""
+def _realtime_tool_output(
+    name: object,
+    arguments: object,
+    *,
+    provider_config: object,
+    http_client: object | None,
+) -> str:
+    """Execute one allowlisted existing tool and return bounded JSON output."""
 
-    if name != "calculator":
+    if name not in {"calculator", "weather"}:
         return json.dumps({"status": "error", "answer": "Unsupported Realtime tool."})
     if not isinstance(arguments, str) or len(arguments) > MAX_TOOL_ARGUMENT_CHARS:
-        return json.dumps({"status": "error", "answer": "Calculator arguments were invalid."})
+        return _invalid_tool_arguments(name)
     try:
         payload = json.loads(arguments)
     except json.JSONDecodeError:
         payload = None
-    if not isinstance(payload, dict) or set(payload) != {"expression"}:
-        return json.dumps({"status": "error", "answer": "Calculator arguments were invalid."})
-    expression = payload.get("expression")
-    if not isinstance(expression, str) or not expression.strip() or len(expression) > MAX_CALCULATOR_EXPRESSION_CHARS:
-        return json.dumps({"status": "error", "answer": "Calculator expression was invalid."})
-    result = execute_route(ToolRoute("calculator", "safe_calculator", {"expression": expression.strip()}))
-    return json.dumps({"status": result.status, "answer": result.answer}, ensure_ascii=False)
+    if name == "calculator":
+        if not isinstance(payload, dict) or set(payload) != {"expression"}:
+            return _invalid_tool_arguments(name)
+        expression = payload.get("expression")
+        if (
+            not isinstance(expression, str)
+            or not expression.strip()
+            or len(expression) > MAX_CALCULATOR_EXPRESSION_CHARS
+        ):
+            return json.dumps({"status": "error", "answer": "Calculator expression was invalid."})
+        result = execute_route(
+            ToolRoute("calculator", "safe_calculator", {"expression": expression.strip()})
+        )
+        return _bounded_tool_output(result.status, result.answer)
+
+    if not isinstance(payload, dict) or not set(payload).issubset({"location", "intent"}):
+        return _invalid_tool_arguments(name)
+    intent = payload.get("intent")
+    location = payload.get("location")
+    if intent not in {"current", "today", "tomorrow"}:
+        return _invalid_tool_arguments(name)
+    if location is not None and (
+        not isinstance(location, str)
+        or not location.strip()
+        or len(location) > MAX_WEATHER_LOCATION_CHARS
+    ):
+        return _invalid_tool_arguments(name)
+    params = {"intent": str(intent), "query": "realtime weather request"}
+    if isinstance(location, str):
+        params["location"] = location.strip()
+    result = execute_route(
+        ToolRoute("weather", "weather_provider", params),
+        provider_config=provider_config,
+        http_client=http_client,
+    )
+    return _bounded_tool_output(result.status, result.answer, data=result.data)
+
+
+def _invalid_tool_arguments(name: object) -> str:
+    label = "Weather" if name == "weather" else "Calculator"
+    return json.dumps({"status": "error", "answer": f"{label} arguments were invalid."})
+
+
+def _bounded_tool_output(
+    status: str,
+    answer: str,
+    *,
+    data: object | None = None,
+) -> str:
+    payload: dict[str, object] = {"status": status, "answer": answer}
+    if isinstance(data, dict):
+        payload["data"] = data
+    output = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if len(output) <= MAX_TOOL_OUTPUT_CHARS:
+        return output
+    return json.dumps(
+        {"status": "error", "answer": "Realtime tool output was too large."},
+        separators=(",", ":"),
+    )

@@ -121,6 +121,33 @@ def build_realtime_session_config(settings: object) -> dict[str, object]:
         },
         {
             "type": "function",
+            "name": "weather",
+            "description": (
+                "Get current, today, or tomorrow weather from the configured provider. "
+                "Pass a location only when the user explicitly names one; otherwise omit it "
+                "so the server uses its configured default location. Translate an explicit "
+                "non-English place into its common provider-friendly English name when known, "
+                "for example 东京 or 東京 becomes Tokyo."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "Explicit city or place named by the user.",
+                    },
+                    "intent": {
+                        "type": "string",
+                        "enum": ["current", "today", "tomorrow"],
+                        "description": "Requested weather time horizon.",
+                    },
+                },
+                "required": ["intent"],
+            },
+        },
+        {
+            "type": "function",
             "name": "end_conversation",
             "description": "End the current voice session only when the user clearly and unambiguously wants to leave, stop, say goodbye, or end this conversation. Do not use when the user merely mentions, quotes, translates, or asks you to say a farewell phrase.",
             "parameters": {
@@ -213,6 +240,8 @@ def build_server(
     real_microphone: bool = False,
     wake_after_arm: bool = False,
     end_phrases: tuple[str, ...] = DEFAULT_REALTIME_END_PHRASES,
+    tool_provider_config: object | None = None,
+    tool_http_client: object | None = None,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
@@ -222,6 +251,8 @@ def build_server(
         lease,
         open_wake_on_init=not wake_after_arm,
         end_phrases=end_phrases,
+        tool_provider_config=tool_provider_config,
+        tool_http_client=tool_http_client,
     )
     return server
 

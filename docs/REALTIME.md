@@ -33,15 +33,22 @@ semantic `end_conversation` tool call, an exact configured transcription
 fallback phrase, idle or maximum duration, explicit stop, transport error, or
 Ctrl+C. Browser media is closed before Python restores wake ownership.
 
-Realtime advertises exactly two local functions:
+Realtime advertises exactly three allowlisted local functions:
 
 - `calculator`, backed by the same safe bounded parser as the pipeline;
+- `weather`, backed by the existing Open-Meteo provider, with
+  `DEFAULT_LOCATION=Singapore` when the user does not name a location;
 - `end_conversation`, a constrained no-argument semantic close control.
 
-Valid calculator calls return one correlated `function_call_output` and request
-spoken continuation in the same conversation. Weather, FX, stocks, shell
-access, arbitrary routing, and pipeline history mutation are excluded. These
-capabilities are outside the Realtime tool boundary.
+Valid calculator and weather calls return one correlated
+`function_call_output` and request spoken continuation in the same
+conversation. Weather accepts current, today, and tomorrow intent plus an
+optional explicit place. Python owns the fixed-provider request, timeout, and
+structured failure boundary; the browser remains a content-blind loopback
+relay. Provider work does not hold the lifecycle lock, and a late result cannot
+cross into a stopped or replacement session. FX, stocks, shell access, and
+arbitrary routing remain outside the Realtime tool boundary. Pipeline history
+mutation also remains excluded.
 
 ## Language
 
@@ -116,8 +123,8 @@ python -m src.realtime.fake_smoke
 ```
 
 This verifies wake, exclusive handoff, connection, two turns, interruption,
-calculator output, closing, and wake recovery without browser, audio, network,
-OpenAI, or wall-clock sleep.
+calculator output, mocked default-Singapore weather output, closing, and wake
+recovery without browser, audio, network, OpenAI, or wall-clock sleep.
 
 ## Private fixtures
 
