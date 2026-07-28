@@ -39,6 +39,8 @@ TIMING = {
     "local_description_ms": 0,
     "negotiation_ms": 5,
     "session_configuration_ms": 2,
+    "data_channel_open_ms": 1,
+    "session_created_after_data_channel_open_ms": 1,
     "total_browser_ready_ms": 12,
 }
 
@@ -59,7 +61,7 @@ def reports() -> tuple[dict[str, object], dict[str, object]]:
         event(14, "host_microphone_acquired"),
         event(27, "host_handoff_timing", **TIMING),
         event(29, "host_session_configured"),
-        event(30, "ack_started", None),
+        event(30, "ack_started", None, ack_asset_duration_ms=5),
         event(40, "ack_completed", None),
         event(42, "host_connected"),
     ]
@@ -93,7 +95,7 @@ class RT001ContractTests(unittest.TestCase):
     def test_scenario_matches_authoritative_no_human_matrix(self):
         scenario = load_scenario()
         self.assertEqual(scenario["id"], "RT001")
-        self.assertEqual(scenario["version"], 7)
+        self.assertEqual(scenario["version"], 8)
         self.assertEqual(scenario["human_actions"], [])
         self.assertEqual(scenario["evidence"]["required"], ["offline", "live_host"])
         self.assertNotIn("response", json.dumps(scenario["oracles"]))
@@ -154,6 +156,8 @@ class RT001OracleTests(unittest.TestCase):
         self.assertTrue(result["connected"])
         self.assertTrue(result["recovered_to_wake"])
         self.assertEqual(result["timing_ms"]["acknowledgement_ms"], 10)
+        self.assertEqual(result["timing_ms"]["acknowledgement_asset_ms"], 5)
+        self.assertEqual(result["timing_ms"]["acknowledgement_player_overhead_ms"], 5)
         self.assertEqual(result["timing_ms"]["handoff_dispatch_ms"], 5)
         self.assertEqual(result["timing_ms"]["wake_to_ready_ms"], 32)
 
@@ -212,6 +216,11 @@ class RT001OracleTests(unittest.TestCase):
                 lambda timing: timing.__setitem__("audio_context_creation_ms", 20),
                 "audio analysis subphases did not match",
             ),
+            (
+                "readiness-mismatch",
+                lambda timing: timing.__setitem__("data_channel_open_ms", 2),
+                "readiness timing subphases did not match",
+            ),
         ):
             with self.subTest(name=name):
                 observation = passing_observation()
@@ -221,6 +230,25 @@ class RT001OracleTests(unittest.TestCase):
                     if item["type"] == "host_handoff_timing"
                 )
                 mutate(timing)
+                self.assert_failure(observation, expected)
+
+    def test_acknowledgement_asset_duration_is_required_and_bounded(self):
+        for name, value, expected in (
+            ("missing", None, "missing a valid asset duration"),
+            ("boolean", True, "missing a valid asset duration"),
+            ("longer-than-wall", 11, "wall time was shorter"),
+        ):
+            with self.subTest(name=name):
+                observation = passing_observation()
+                ack_started = next(
+                    item
+                    for item in observation["final_report"]["events"]
+                    if item["type"] == "ack_started"
+                )
+                if value is None:
+                    ack_started.pop("ack_asset_duration_ms")
+                else:
+                    ack_started["ack_asset_duration_ms"] = value
                 self.assert_failure(observation, expected)
 
     def test_normal_path_rejects_a_valid_but_enabled_audio_analyser(self):
@@ -347,9 +375,11 @@ class FakeRT001Host:
                 "local_description_ms": 0,
                 "negotiation_ms": 1,
                 "session_configuration_ms": 1,
+                "data_channel_open_ms": 0,
+                "session_created_after_data_channel_open_ms": 1,
             })
             self.add("host_session_configured")
-            self.add("ack_started", None)
+            self.add("ack_started", None, ack_asset_duration_ms=1)
             self.add("ack_completed", None)
             self.add("host_connected")
             self.state = "host_active"

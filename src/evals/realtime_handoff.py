@@ -206,6 +206,16 @@ def _timing_breakdown(events: list[object], session_id: str) -> dict[str, int]:
             raise RealtimeScenarioError(f"RT001 timing interval {start} to {end} was invalid")
         return value
 
+    ack_asset_duration_ms = by_type["ack_started"].get("ack_asset_duration_ms")
+    if (
+        isinstance(ack_asset_duration_ms, bool)
+        or not isinstance(ack_asset_duration_ms, int)
+        or not 1 <= ack_asset_duration_ms <= 60_000
+    ):
+        raise RealtimeScenarioError("RT001 ack_started is missing a valid asset duration")
+    acknowledgement_ms = elapsed("ack_started", "ack_completed")
+    if acknowledgement_ms < ack_asset_duration_ms:
+        raise RealtimeScenarioError("RT001 acknowledgement wall time was shorter than its asset")
     handoff_to_configured = elapsed("handoff_queued", "host_session_configured")
     if browser_values["total_browser_ready_ms"] > handoff_to_configured:
         raise RealtimeScenarioError("RT001 browser timing exceeded coordinator handoff-to-ready time")
@@ -214,7 +224,9 @@ def _timing_breakdown(events: list[object], session_id: str) -> dict[str, int]:
         "wake_to_handoff_ms": elapsed("wake_confirmed", "handoff_queued"),
         "handoff_to_configured_ms": handoff_to_configured,
         "configured_to_ack_start_ms": elapsed("host_session_configured", "ack_started"),
-        "acknowledgement_ms": elapsed("ack_started", "ack_completed"),
+        "acknowledgement_asset_ms": ack_asset_duration_ms,
+        "acknowledgement_ms": acknowledgement_ms,
+        "acknowledgement_player_overhead_ms": acknowledgement_ms - ack_asset_duration_ms,
         "ack_to_input_ready_ms": elapsed("ack_completed", "host_connected"),
         "handoff_dispatch_ms": handoff_to_configured - browser_values["total_browser_ready_ms"],
         "handoff_to_ready_ms": handoff_to_ready,

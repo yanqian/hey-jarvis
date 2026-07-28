@@ -48,10 +48,21 @@ HANDOFF_TIMING_FIELDS = frozenset(
         *HANDOFF_PHASE_TIMING_FIELDS,
         *PEER_SETUP_TIMING_FIELDS,
         *AUDIO_ANALYSIS_TIMING_FIELDS,
+        "data_channel_open_ms",
+        "session_created_after_data_channel_open_ms",
         "total_browser_ready_ms",
     }
 )
-SAFE_EVENT_FIELDS = frozenset({"type", "at_ms", "session_id", "reason", *HANDOFF_TIMING_FIELDS})
+SAFE_EVENT_FIELDS = frozenset(
+    {
+        "type",
+        "at_ms",
+        "session_id",
+        "reason",
+        "ack_asset_duration_ms",
+        *HANDOFF_TIMING_FIELDS,
+    }
+)
 SAFE_EVENT_TYPES = frozenset(
     {
         "wake_confirmed",
@@ -135,6 +146,14 @@ def validate_handoff_timing_event(
     ):
         raise RealtimeScenarioError(
             f"{context} audio analysis subphases did not match the aggregate"
+        )
+    readiness_total = (
+        values["data_channel_open_ms"]
+        + values["session_created_after_data_channel_open_ms"]
+    )
+    if readiness_total != values["session_configuration_ms"]:
+        raise RealtimeScenarioError(
+            f"{context} readiness timing subphases did not match the aggregate"
         )
     return values
 
@@ -235,6 +254,10 @@ def sanitize_report(report: dict[str, object]) -> dict[str, object]:
                 value = event.get(field)
                 if isinstance(value, int) and not isinstance(value, bool):
                     safe[field] = value
+        if event.get("type") == "ack_started":
+            duration = event.get("ack_asset_duration_ms")
+            if isinstance(duration, int) and not isinstance(duration, bool) and 1 <= duration <= 60_000:
+                safe["ack_asset_duration_ms"] = duration
         safe_events.append(safe)
     state = report.get("state")
     return {

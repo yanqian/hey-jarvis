@@ -15,7 +15,7 @@ from .audio_input import open_microphone_stream
 from .config import SUPPORTED_BACKENDS, Settings
 from .config import collect_diagnostics, format_diagnostics, load_settings, wake_acknowledgement_missing_message
 from .openai_client import build_openai_client
-from .player import MacOSPlayer
+from .player import MacOSPlayer, PlaybackError, benchmark_audio_playback
 from .recorder import RecordingResult
 from .realtime.controller import RealtimeSessionController
 from .state_machine import AssistantState, VoiceAssistantStateMachine
@@ -134,6 +134,56 @@ def run_prepare_acknowledgement(
         str(resolved_settings.wake_acknowledgement_audio_path),
     )
     print(f"Prepared wake acknowledgement audio: {resolved_settings.wake_acknowledgement_audio_path}")
+    return 0
+
+
+def run_acknowledgement_benchmark(
+    *,
+    iterations: int = 5,
+    settings: Settings | None = None,
+    player: MacOSPlayer | None = None,
+    output: TextIO | None = None,
+) -> int:
+    """Report bounded afplay process timings without inferring acoustic onset."""
+
+    resolved_settings = settings or load_settings()
+    active_player = player or MacOSPlayer(logger=logging.getLogger(LOGGER_NAME))
+    try:
+        benchmark = benchmark_audio_playback(
+            active_player,
+            resolved_settings.wake_acknowledgement_audio_path,
+            iterations=iterations,
+        )
+    except PlaybackError as exc:
+        print(f"ack_playback_benchmark status=error reason={exc}", file=output)
+        return 1
+
+    print(
+        "ack_playback_benchmark "
+        f"status=ok asset_duration_ms={benchmark.asset_duration_ms} "
+        f"iterations={len(benchmark.trials)} acoustic_onset=unmeasured",
+        file=output,
+    )
+    for trial in benchmark.trials:
+        sample = "cold_candidate" if trial.index == 1 else "warm_candidate"
+        print(
+            "ack_playback_trial "
+            f"index={trial.index} sample={sample} "
+            f"process_start_call_ms={trial.process_start_call_ms} "
+            f"process_lifetime_ms={trial.process_lifetime_ms} "
+            f"total_wall_ms={trial.total_wall_ms} "
+            f"derived_overhead_ms={trial.derived_overhead_ms}",
+            file=output,
+        )
+    print(
+        "ack_playback_summary "
+        f"median_process_start_call_ms={benchmark.median_process_start_call_ms} "
+        f"median_process_lifetime_ms={benchmark.median_process_lifetime_ms} "
+        f"median_total_wall_ms={benchmark.median_total_wall_ms} "
+        f"median_derived_overhead_ms={benchmark.median_derived_overhead_ms} "
+        "acoustic_onset=unmeasured",
+        file=output,
+    )
     return 0
 
 
@@ -319,6 +369,11 @@ def run_realtime_forever(settings: Settings) -> int:
     server_thread = threading.Thread(target=server.serve_forever, name="realtime-host", daemon=True)
     server_thread.start()
     player = MacOSPlayer(logger=logger)
+    acknowledgement_duration_ms = (
+        player.duration_ms(settings.wake_acknowledgement_audio_path)
+        if settings.realtime_acknowledgement_mode == "local"
+        else None
+    )
 
     def play_acknowledgement() -> None:
         if settings.realtime_acknowledgement_mode == "local":
@@ -328,6 +383,7 @@ def run_realtime_forever(settings: Settings) -> int:
         coordinator=server.coordinator,
         wake_detector=detector,
         play_acknowledgement=play_acknowledgement,
+        acknowledgement_duration_ms=acknowledgement_duration_ms,
         idle_timeout_seconds=settings.realtime_idle_timeout_seconds,
         max_duration_seconds=settings.realtime_max_duration_seconds,
         wake_confirmation_frames=settings.wake_confirmation_frames,
@@ -390,6 +446,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="generate the configured wake acknowledgement audio file once",
     )
     mode.add_argument(
+        "--benchmark-acknowledgement",
+        action="store_true",
+        help="measure local acknowledgement afplay process timing without microphone or OpenAI",
+    )
+    mode.add_argument(
         "--wake-debug",
         action="store_true",
         help="print live microphone wake-word scores without OpenAI or playback",
@@ -415,6 +476,13 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="write live wake-debug microphone PCM to a 16 kHz mono WAV file",
     )
+    parser.add_argument(
+        "--benchmark-iterations",
+        type=int,
+        default=5,
+        metavar="N",
+        help="number of acknowledgement benchmark trials, from 1 to 20 (default: 5)",
+    )
     return parser
 
 
@@ -424,6 +492,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.wake_debug_output and not args.wake_debug:
         parser.error("--wake-debug-output requires --wake-debug")
+    if args.benchmark_iterations != 5 and not args.benchmark_acknowledgement:
+        parser.error("--benchmark-iterations requires --benchmark-acknowledgement")
     if args.dry_run:
         return run_dry_run()
     if args.diagnose:
@@ -436,6 +506,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_prepare_wake_word()
     if args.prepare_acknowledgement:
         return run_prepare_acknowledgement()
+    if args.benchmark_acknowledgement:
+        return run_acknowledgement_benchmark(iterations=args.benchmark_iterations)
     if args.text is not None:
         return run_text_debug(args.text)
     if args.wake_debug:

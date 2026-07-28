@@ -29,6 +29,7 @@ from src.config import (
 from src.main import (
     build_parser,
     main,
+    run_acknowledgement_benchmark,
     run_assistant_forever,
     run_prepare_acknowledgement,
     run_text_debug,
@@ -178,7 +179,56 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertIn("--wake-file", help_text)
         self.assertIn("--wake-debug-output", help_text)
         self.assertIn("--prepare-acknowledgement", help_text)
+        self.assertIn("--benchmark-acknowledgement", help_text)
+        self.assertIn("--benchmark-iterations", help_text)
         self.assertIn("--text", help_text)
+
+    def test_acknowledgement_benchmark_output_is_bounded_and_privacy_safe(self):
+        class Trial:
+            index = 1
+            process_start_call_ms = 3
+            process_lifetime_ms = 497
+            total_wall_ms = 500
+            derived_overhead_ms = 20
+
+        class Benchmark:
+            asset_duration_ms = 480
+            trials = (Trial(),)
+            median_process_start_call_ms = 3
+            median_process_lifetime_ms = 497
+            median_total_wall_ms = 500
+            median_derived_overhead_ms = 20
+
+        output = StringIO()
+        settings = make_settings(
+            wake_acknowledgement_audio_path=Path("/private/voice/secret-ack.mp3")
+        )
+        with patch("src.main.benchmark_audio_playback", return_value=Benchmark()):
+            result = run_acknowledgement_benchmark(
+                iterations=1,
+                settings=settings,
+                player=object(),
+                output=output,
+            )
+
+        text = output.getvalue()
+        self.assertEqual(result, 0)
+        self.assertIn("asset_duration_ms=480", text)
+        self.assertIn("sample=cold_candidate", text)
+        self.assertIn("process_start_call_ms=3", text)
+        self.assertIn("process_lifetime_ms=497", text)
+        self.assertIn("derived_overhead_ms=20", text)
+        self.assertIn("acoustic_onset=unmeasured", text)
+        self.assertNotIn("secret-ack", text)
+        self.assertNotIn("嗯", text)
+
+    def test_main_dispatches_acknowledgement_benchmark(self):
+        with patch("src.main.run_acknowledgement_benchmark", return_value=0) as run:
+            self.assertEqual(
+                main(["--benchmark-acknowledgement", "--benchmark-iterations", "3"]),
+                0,
+            )
+        run.assert_called_once_with(iterations=3)
 
     def test_prepare_acknowledgement_uses_existing_tts_boundary_once(self):
         client = FakePreparationClient()

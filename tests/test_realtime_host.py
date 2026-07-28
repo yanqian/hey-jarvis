@@ -489,7 +489,10 @@ class RealtimeHostTests(unittest.TestCase):
             "local_description_ms",
             "negotiation_ms",
             "session_configuration_ms",
+            "data_channel_open_ms",
+            "session_created_after_data_channel_open_ms",
             "total_browser_ready_ms",
+            "dc.onopen",
             "track.enabled=false;inputTrack=track",
             'hostEvent("session_configured")',
             'command.type==="enable_input"',
@@ -769,6 +772,8 @@ class RealtimeHostTests(unittest.TestCase):
             "local_description_ms": 8,
             "negotiation_ms": 900,
             "session_configuration_ms": 100,
+            "data_channel_open_ms": 40,
+            "session_created_after_data_channel_open_ms": 60,
             "total_browser_ready_ms": 1320,
         }
         coordinator.host_event(
@@ -800,6 +805,7 @@ class RealtimeHostTests(unittest.TestCase):
             ({**timing, "total_browser_ready_ms": 1}, "match"),
             ({**timing, "local_description_ms": 40}, "subphases"),
             ({**timing, "audio_context_creation_ms": 40}, "Audio analysis"),
+            ({**timing, "data_channel_open_ms": 50}, "readiness"),
         )
         for detail, expected in invalid:
             with self.subTest(expected=expected):

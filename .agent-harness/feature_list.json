@@ -1698,6 +1698,125 @@
       "depends_on": [
         "F074"
       ]
+    },
+    {
+      "id": "F076",
+      "title": "Attribute post-answer Realtime and acknowledgement latency",
+      "description": "Split the remaining post-SDP-answer readiness interval at data-channel open and distinguish acknowledgement asset duration from end-to-end playback without changing the two-stage interaction.",
+      "acceptance": [
+        "Browser timing records bounded data-channel-open and session-created timestamps, reports negotiation-to-data-channel-open and data-channel-open-to-session-created phases, and reconciles them exactly to the existing session_configuration_ms total.",
+        "RT001 reports the configured acknowledgement asset duration separately from acknowledgement wall time and derives bounded player/device overhead without retaining audio or exposing paths, transcripts, answers, credentials, SDP, ICE, or provider payloads.",
+        "Malformed, negative, excessive, missing, duplicated, or inconsistent timing evidence fails closed; compatibility fixtures and unrelated RT002-RT004 behavior remain accepted.",
+        "Focused browser/coordinator/player/timing/privacy tests, JavaScript syntax, full project tests, Realtime fake smoke, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing acknowledgement order, input gating, media settings, or pre-wake behavior.",
+        "One authorized target-Mac run records the new readiness and acknowledgement breakdown and states observations without claiming a stable SLO."
+      ],
+      "evals": [
+        {
+          "scenario": "Realtime readiness and acknowledgement latency attribution",
+          "required_evidence": [
+            "offline",
+            "live_host"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F075"
+      ]
+    },
+    {
+      "id": "F077",
+      "title": "Measure acknowledgement playback lifecycle",
+      "description": "Add a repeatable privacy-safe local benchmark that separates acknowledgement asset duration, afplay process-start call time, process lifetime, and derived wall-time overhead without changing Realtime input gating.",
+      "acceptance": [
+        "A bounded CLI benchmark validates the configured acknowledgement asset, measures its metadata duration once, executes repeated local afplay trials, and reports per-trial plus summary process-start call time, process lifetime, total wall time, and derived overhead using a monotonic clock.",
+        "Benchmark output distinguishes directly observed process boundaries from unknown acoustic onset, does not call the full derived difference startup latency, and exposes no audio content, path, transcript, answer, credential, SDP, ICE, or provider payload.",
+        "Invalid iteration counts, missing or invalid assets, afplay start/wait failures, negative or excessive timings, and inconsistent summaries fail closed with actionable diagnostics; deterministic tests use fake clocks/processes and require no speaker, microphone, network, credential, or OpenAI call.",
+        "Active Realtime acknowledgement order and input gating remain unchanged; focused CLI/player/privacy/documentation tests, full project tests, Realtime fake smoke, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass.",
+        "One authorized target-Mac run records a bounded cold/warm sample for the current 嗯 asset and states only observable timing conclusions, with any acoustic-onset claim explicitly deferred unless separately measured."
+      ],
+      "evals": [
+        {
+          "scenario": "Acknowledgement playback lifecycle benchmark",
+          "required_evidence": [
+            "offline",
+            "live_host"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F076"
+      ]
+    },
+    {
+      "id": "F078",
+      "title": "Make the short acknowledgement reproducible",
+      "description": "Align active defaults with the current 嗯 acknowledgement and add acknowledgement-specific TTS and duration validation so preparation cannot silently install a long ready cue.",
+      "acceptance": [
+        "The checked-in active default and operator guidance use 嗯 while preserving historical evidence, and acknowledgement-specific TTS speed plus maximum-duration settings are validated independently from normal answer TTS settings.",
+        "The preparation command generates to a temporary file, measures duration through the supported macOS audio metadata boundary, and atomically installs the asset only when its duration is positive and within the configured ceiling; generation or validation failure preserves the prior asset.",
+        "Runtime diagnostics report a bounded acknowledgement duration status and actionable regeneration guidance without exposing audio content or unrelated configuration secrets.",
+        "Focused config/OpenAI/preparation/player/diagnostic/documentation tests, full project tests, pipeline and Realtime fake smokes, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing normal answer voice/speed, Realtime input gating, or media processing.",
+        "The target Mac prepares and plays a natural audible 嗯 within the configured duration ceiling, and a user-led Realtime check confirms the cue remains understandable and the post-cue question receives a normal answer."
+      ],
+      "evals": [
+        {
+          "scenario": "Short acknowledgement preparation and playback",
+          "required_evidence": [
+            "offline",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F076",
+        "F077"
+      ]
+    },
+    {
+      "id": "F079",
+      "title": "Reduce acknowledgement playback overhead",
+      "description": "Use F077 benchmark evidence to select and implement a lower-overhead local acknowledgement playback boundary while preserving the audible-ready input gate and deterministic cleanup.",
+      "acceptance": [
+        "F077 evidence identifies the selected playback implementation and compares it against the current afplay path using the same bounded benchmark without claiming unmeasured acoustic onset.",
+        "The active acknowledgement player completes only after the cue is finished, surfaces start/runtime failures, and preserves the existing rule that Realtime input opens only after configured-session readiness and acknowledgement completion.",
+        "Fallback, timeout, Ctrl+C, stale-session, stop, and playback-error paths never open input early and restore wake ownership only after browser media cleanup.",
+        "Focused player/controller/privacy tests, full project tests, Realtime fake smoke, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing the acknowledgement asset, normal answer playback, media processing, or pre-wake behavior.",
+        "One user-led built-in-device run confirms the cue remains audible and understandable, the post-cue question receives a normal answer, cleanup restores wake ownership, and the bounded comparison records the latency effect without an SLO claim."
+      ],
+      "evals": [
+        {
+          "scenario": "Low-overhead acknowledgement playback",
+          "required_evidence": [
+            "offline",
+            "live_host",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F077",
+        "F078"
+      ]
     }
   ]
 }

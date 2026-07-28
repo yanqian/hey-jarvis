@@ -126,6 +126,7 @@ class RealtimeControllerTests(unittest.TestCase):
             coordinator=coordinator,
             wake_detector=detector,
             play_acknowledgement=play_ack,
+            acknowledgement_duration_ms=200,
             idle_timeout_seconds=1.0,
             max_duration_seconds=30.0,
             clock=clock,
@@ -150,6 +151,8 @@ class RealtimeControllerTests(unittest.TestCase):
             self.assertLess(types.index(before), types.index(after))
         markers = {event["type"]: event["at_ms"] for event in events}
         self.assertEqual(markers["ack_completed"] - markers["ack_started"], 350)
+        ack_started = next(event for event in events if event["type"] == "ack_started")
+        self.assertEqual(ack_started["ack_asset_duration_ms"], 200)
 
     def test_max_duration_wins_despite_continuing_activity(self):
         clock, _lease, coordinator, detector = build_runtime()

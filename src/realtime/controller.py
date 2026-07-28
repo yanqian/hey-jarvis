@@ -29,6 +29,7 @@ class RealtimeSessionController:
         coordinator: HandoffCoordinator,
         wake_detector: WakeDetector,
         play_acknowledgement: Callable[[], None],
+        acknowledgement_duration_ms: int | None = None,
         idle_timeout_seconds: float,
         max_duration_seconds: float,
         clock: Callable[[], float] = time.monotonic,
@@ -41,6 +42,9 @@ class RealtimeSessionController:
         self.coordinator = coordinator
         self.wake_detector = wake_detector
         self.play_acknowledgement = play_acknowledgement
+        if acknowledgement_duration_ms is not None and not 1 <= acknowledgement_duration_ms <= 60_000:
+            raise ValueError("acknowledgement_duration_ms must be between 1 and 60000")
+        self.acknowledgement_duration_ms = acknowledgement_duration_ms
         self.idle_timeout_seconds = idle_timeout_seconds
         self.max_duration_seconds = max_duration_seconds
         self.clock = clock
@@ -61,7 +65,10 @@ class RealtimeSessionController:
             if not self._wait_until_not(HandoffState.HOST_STARTING, self.connect_timeout_seconds):
                 self.coordinator.request_stop("connect_timeout")
             if self.coordinator.state == HandoffState.HOST_READY:
-                self.coordinator.record_local_timing_marker("ack_started")
+                self.coordinator.record_local_timing_marker(
+                    "ack_started",
+                    ack_asset_duration_ms=self.acknowledgement_duration_ms,
+                )
                 self.play_acknowledgement()
                 self.coordinator.record_local_timing_marker("ack_completed")
                 self.coordinator.enable_host_input()

@@ -65,6 +65,8 @@ HANDOFF_TIMING_FIELDS = frozenset(
         *HANDOFF_PHASE_TIMING_FIELDS,
         *PEER_SETUP_TIMING_FIELDS,
         *AUDIO_ANALYSIS_TIMING_FIELDS,
+        "data_channel_open_ms",
+        "session_created_after_data_channel_open_ms",
         "total_browser_ready_ms",
     }
 )
@@ -228,13 +230,29 @@ class HandoffCoordinator:
                 self._wake_lease.close()
                 self._record("wake_microphone_closed", reason="pre_capture_acknowledgement")
 
-    def record_local_timing_marker(self, marker: str) -> None:
+    def record_local_timing_marker(
+        self,
+        marker: str,
+        *,
+        ack_asset_duration_ms: int | None = None,
+    ) -> None:
         """Record one privacy-safe local wake/ack boundary."""
 
         with self._lock:
             if marker not in LOCAL_TIMING_MARKERS:
                 raise HandoffError("Local timing marker was invalid")
-            self._record(marker)
+            if ack_asset_duration_ms is not None:
+                if marker != "ack_started":
+                    raise HandoffError("Acknowledgement duration belongs only on ack_started")
+                if (
+                    isinstance(ack_asset_duration_ms, bool)
+                    or not isinstance(ack_asset_duration_ms, int)
+                    or not 1 <= ack_asset_duration_ms <= MAX_HANDOFF_TIMING_MS
+                ):
+                    raise HandoffError("Acknowledgement duration was invalid")
+                self._record(marker, ack_asset_duration_ms=ack_asset_duration_ms)
+            else:
+                self._record(marker)
 
     def restore_wake_microphone(self, reason: str) -> None:
         with self._lock:
@@ -621,6 +639,12 @@ def _sanitize_handoff_timing(detail: dict[str, object]) -> dict[str, int]:
         > len(AUDIO_ANALYSIS_TIMING_FIELDS)
     ):
         raise HandoffError("Audio analysis timing subphases did not match the aggregate")
+    readiness_total = (
+        safe["data_channel_open_ms"]
+        + safe["session_created_after_data_channel_open_ms"]
+    )
+    if readiness_total != safe["session_configuration_ms"]:
+        raise HandoffError("Realtime readiness timing subphases did not match the aggregate")
     return safe
 
 

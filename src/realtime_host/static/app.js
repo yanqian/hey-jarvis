@@ -3,7 +3,7 @@
 const AUDIO_CONSTRAINTS={echoCancellation:{exact:true},noiseSuppression:true,autoGainControl:true,channelCount:1};
 const REMOTE_AUDIO_VOLUME=0.1;
 const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
-let armed=false,lastCommand=0,pc=null,dc=null,stream=null,inputTrack=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null,sessionCreatedAt=null,transportReported=false;
+let armed=false,lastCommand=0,pc=null,dc=null,stream=null,inputTrack=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null,sessionCreatedAt=null,dataChannelOpenedAt=null,transportReported=false,configurationReportStarted=false;
 let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
@@ -116,7 +116,10 @@ async function arm(){
 function elapsedMs(start,end){return Math.max(0,Math.round(end-start));}
 function handoffTimingSummary(readyAt){
   const timing=handoffTiming;
-  if(!timing)throw new Error("handoff timing is unavailable");
+  if(!timing||dataChannelOpenedAt===null||sessionCreatedAt===null)throw new Error("handoff timing is unavailable");
+  if(dataChannelOpenedAt<timing.negotiationCompleted||sessionCreatedAt<dataChannelOpenedAt)throw new Error("Realtime readiness timing was misordered");
+  const dataChannelOpenMs=elapsedMs(timing.negotiationCompleted,dataChannelOpenedAt);
+  const sessionCreatedAfterDataChannelOpenMs=elapsedMs(dataChannelOpenedAt,sessionCreatedAt);
   const summary={
     command_to_token_ms:elapsedMs(timing.commandReceived,timing.tokenStarted),
     token_ms:elapsedMs(timing.tokenStarted,timing.tokenAcquired),
@@ -134,7 +137,9 @@ function handoffTimingSummary(readyAt){
     offer_creation_ms:elapsedMs(timing.peerConnectionReady,timing.offerCreated),
     local_description_ms:elapsedMs(timing.offerCreated,timing.negotiationStarted),
     negotiation_ms:elapsedMs(timing.negotiationStarted,timing.negotiationCompleted),
-    session_configuration_ms:elapsedMs(timing.negotiationCompleted,readyAt),
+    data_channel_open_ms:dataChannelOpenMs,
+    session_created_after_data_channel_open_ms:sessionCreatedAfterDataChannelOpenMs,
+    session_configuration_ms:dataChannelOpenMs+sessionCreatedAfterDataChannelOpenMs,
     total_browser_ready_ms:elapsedMs(timing.commandReceived,readyAt),
   };
   const topLevelPhases=["command_to_token_ms","token_ms","microphone_ms","peer_setup_ms","negotiation_ms","session_configuration_ms"];
@@ -149,12 +154,13 @@ async function forwardToolCall(item){
 }
 
 async function reportConfiguredSession(){
-  if(sessionCreatedAt===null||!transportReported)return;
+  if(sessionCreatedAt===null||dataChannelOpenedAt===null||!transportReported||configurationReportStarted)return;
+  configurationReportStarted=true;
   const readyAt=Math.max(sessionCreatedAt,handoffTiming.negotiationCompleted);
-  sessionCreatedAt=null;
   await hostEvent("session_created");
   await hostEvent("handoff_timing",handoffTimingSummary(readyAt));
   await hostEvent("session_configured");
+  sessionCreatedAt=null;dataChannelOpenedAt=null;
   $("status").textContent="Configured · waiting for audible ready acknowledgement";
 }
 
@@ -185,7 +191,7 @@ async function handleServerEvent(event){
 
 async function start(command){
   if(!armed||pc)throw new Error("host is not ready for start");
-  handoffTiming={commandReceived:performance.now()};sessionCreatedAt=null;transportReported=false;
+  handoffTiming={commandReceived:performance.now()};sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   sessionId=command.session_id;$("status").textContent="Python released wake microphone · connecting";
   await hostEvent("microphone_requested");
   handoffTiming.tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived;
@@ -204,6 +210,7 @@ async function start(command){
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};
   pc.addTrack(track,stream);
   dc=pc.createDataChannel("oai-events");
+  dc.onopen=()=>{dataChannelOpenedAt=performance.now();reportConfiguredSession().catch(()=>{});};
   dc.onmessage=event=>{let data;try{data=JSON.parse(event.data)}catch{return}handleServerEvent(data).catch(()=>{});};
   dc.onclose=()=>{if(sessionId)stop("data_channel_closed").catch(()=>{});};
   handoffTiming.peerConnectionReady=performance.now();
@@ -230,7 +237,7 @@ async function stop(reason="command"){
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}inputTrack=null;
-  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;handoffTiming=null;sessionCreatedAt=null;transportReported=false;
+  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;handoffTiming=null;sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   $("long").disabled=true;$("stop").disabled=true;log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
   $("status").textContent="Armed · Python wake microphone restored";

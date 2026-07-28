@@ -15,7 +15,12 @@ The first-turn ready contract is audible: wait until the local “在呢”
 acknowledgement finishes, then speak. After wake, Python queues the Realtime
 handoff immediately. Chrome acquires its audio track disabled, negotiates, and
 posts its SDP to the loopback host. The host creates one already-configured
-Realtime call; `session.created` is therefore the configuration barrier. Only
+Realtime call; `session.created` is therefore the configuration barrier. The
+browser separately records SDP-answer-to-data-channel-open and
+data-channel-open-to-`session.created`; those two bounded phases reconcile to
+the existing session-configuration total. RT001 also records the prepared
+acknowledgement asset duration separately from wall-clock playback so player
+and device overhead are not mistaken for spoken audio. Only
 then does Python play “在呢”; after playback it sends one session-scoped
 input-enable command. `host_connected` therefore means `input_ready`, not
 merely that a transport exists. Speech before “在呢” is intentionally not

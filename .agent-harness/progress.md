@@ -266,11 +266,31 @@ No feature is currently in progress.
 
 ## Next Feature
 
-No later feature is selected.
+F078 - Make the short acknowledgement reproducible.
+
+F076 is evaluator-approved. Its fresh-restart five-session follow-up measured
+a tight 849–930 ms readiness range (860 ms median), versus a 2,702 ms median in
+the earlier long-running three-session sample. The difference is almost
+entirely DataChannel establishment; service age alone is not proven causal.
+The earlier slow sample makes transport-time ACK overlap unsafe for the
+audible-ready contract, so that proposal has been withdrawn. Revised F077
+first adds a bounded local benchmark that separates observable `afplay`
+process-start and process-lifetime phases from asset duration without changing
+the gate. F078 makes the short `嗯` reproducible, and F079 will optimize the
+active player only from F077 evidence.
 
 ## Recently Completed
 
-F074 - Gate Realtime input behind an audible ready acknowledgement.
+F077 - Measure acknowledgement playback lifecycle.
+
+F077 passed provider-native fast coding, two five-trial target-Mac playback
+samples, final recovery verification, and separate cold-start evaluator
+approval. The benchmark shows `afplay` process creation at only 1–5 ms; the
+approximately 0.88-second median difference occurs while `afplay` remains
+alive, although acoustic onset and the split among decode, output setup,
+buffering, drain, and shutdown remain unmeasured. Approval is recorded as
+`EVAL_PASS: F077` in
+`.agent-harness/runs/20260728T120000Z-F077-evaluation-pass.md`.
 
 F074 passed live and evaluator acceptance: speech after “在呢” receives normal
 answers, no speech is submitted before input readiness, and cleanup restores

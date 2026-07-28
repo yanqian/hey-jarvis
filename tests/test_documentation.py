@@ -111,8 +111,8 @@ class DocumentationTests(unittest.TestCase):
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
         self.assertIn("No feature is currently in progress.", current_feature)
-        self.assertIn("No later feature is selected.", next_feature)
-        self.assertIn("F074 - Gate Realtime input", recently_completed)
+        self.assertIn("F078 - Make the short acknowledgement reproducible", next_feature)
+        self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
         self.assertIn("F061", known_issues)
         self.assertIn("passed the synchronized RT003 run", known_issues)
@@ -141,6 +141,8 @@ class DocumentationTests(unittest.TestCase):
             "--fake-backend",
             "--prepare-wake-word",
             "--prepare-acknowledgement",
+            "--benchmark-acknowledgement",
+            "--benchmark-iterations",
             "--text",
             "--wake-debug",
             "--wake-file",

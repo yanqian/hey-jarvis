@@ -42,6 +42,8 @@ def timing(audio_context_ms: int):
         "local_description_ms": 0,
         "negotiation_ms": 1,
         "session_configuration_ms": 1,
+        "data_channel_open_ms": 0,
+        "session_created_after_data_channel_open_ms": 1,
         "total_browser_ready_ms": audio_context_ms + 4,
     }
 
