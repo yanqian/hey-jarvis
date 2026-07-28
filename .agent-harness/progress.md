@@ -177,14 +177,18 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F081 - Bridge the existing weather tool into Realtime.
+F083 - Bridge the FX tool into Realtime.
 
-F081 advertises a strict Realtime weather function and reuses the existing
-Open-Meteo provider outside the coordinator lifecycle lock. Default Singapore
-and explicit Japan-Tokyo weather passed user-led built-in-device acceptance;
-semantic ending restored wake ownership. Offline verification passes with 364
-tests and separate cold-start approval is recorded as `EVAL_PASS: F081` in
-`.agent-harness/runs/20260728T080314Z-F081-evaluation-pass.md`.
+F083 advertises a strict bounded `fx` function and reuses the existing
+Frankfurter ToolRoute, provider configuration, defaults, reference date,
+rounding, caveat, timeout, and structured-error behavior. The user accepted the
+provider-backed Chinese conversion and same-session follow-up; duplicate calls
+were de-duplicated, semantic ending restored wake ownership, and offline
+verification passes with 368 tests. Coding and live evidence are recorded in
+`.agent-harness/runs/F083-fast-coding.md` and
+`.agent-harness/runs/F083-live-acceptance.md`; separate cold-start approval is
+recorded as `EVAL_PASS: F083` in
+`.agent-harness/runs/20260728T090340Z-F083-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -265,16 +269,41 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F081 completed through evaluator-gated
-fast work, user-led Realtime acceptance, and separate cold-start evaluator
+No feature is currently in progress. F083 completed through evaluator-gated
+fast work, user-led Realtime FX acceptance, and separate cold-start evaluator
 approval. Coding and live evidence are recorded in
+`.agent-harness/runs/F083-fast-coding.md` and
+`.agent-harness/runs/F083-live-acceptance.md`; approval is recorded in
+`.agent-harness/runs/20260728T090340Z-F083-evaluation-pass.md`.
+
+F082 completed through evaluator-gated fast work, user-led Realtime local-time
+acceptance, and separate cold-start evaluator approval. Coding and live
+evidence are recorded in `.agent-harness/runs/F082-fast-coding.md` and
+`.agent-harness/runs/F082-live-acceptance.md`; approval is recorded in
+`.agent-harness/runs/20260728T084611Z-F082-evaluation-pass.md`.
+
+F081 completed through evaluator-gated fast work, user-led Realtime acceptance,
+and separate cold-start evaluator approval. Coding and live evidence are in
 `.agent-harness/runs/F081-fast-coding.md` and
-`.agent-harness/runs/F081-live-attempts.md`; approval is recorded in
+`.agent-harness/runs/F081-live-attempts.md`; approval is in
 `.agent-harness/runs/20260728T080314Z-F081-evaluation-pass.md`.
+
+F078 is blocked after the user rejected its 3.0-speed 384 ms candidate as too
+fast to understand. The rejected candidate was never installed over the last
+accepted acknowledgement asset. F080 now owns the conservative correction:
+retain local `嗯` on `alloy`, remove the rejected speed choice, and align
+Realtime to `alloy` at output volume `0.5`. The user has explicitly deferred
+F078 and F080 while the remaining existing tools are bridged into Realtime;
+F079 remains deferred behind F080.
 
 ## Next Feature
 
-F078 - Make the short acknowledgement reproducible.
+F084 - Bridge the stock quote tool into Realtime.
+
+F083 FX is complete. F084 is the final existing structured provider tool still
+outside Realtime and will reuse the credentialed Finnhub stock-quote boundary.
+News remains excluded because no news tool is implemented. F078, F080, and
+dependent F079 are deferred until this tool bridge sequence is complete.
 
 F076 is evaluator-approved. Its fresh-restart five-session follow-up measured
 a tight 849–930 ms readiness range (860 ms median), versus a 2,702 ms median in
@@ -284,8 +313,10 @@ The earlier slow sample makes transport-time ACK overlap unsafe for the
 audible-ready contract, so that proposal has been withdrawn. Revised F077
 first adds a bounded local benchmark that separates observable `afplay`
 process-start and process-lifetime phases from asset duration without changing
-the gate. F078 makes the short `嗯` reproducible, and F079 will optimize the
-active player only from F077 evidence.
+the gate. F080 is intentionally a low-risk configuration and asset-baseline
+correction: it does not move ACK into Realtime, replace `afplay`, or alter the
+audible-ready gate. F079 remains planned after F080 so playback overhead is
+optimized only against an accepted, understandable voice baseline.
 
 ## Recently Completed
 

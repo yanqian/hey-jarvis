@@ -18,6 +18,7 @@ from typing import Callable, Mapping
 from src.audio_input import open_microphone_stream
 from src.config import ConfigError, DEFAULT_REALTIME_END_PHRASES, load_settings
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffError, SoundDeviceWakeLease
+from src.tools.router import FX_SUPPORTED_CURRENCIES
 
 
 DEFAULT_HOST = "127.0.0.1"
@@ -144,6 +145,50 @@ def build_realtime_session_config(settings: object) -> dict[str, object]:
                     },
                 },
                 "required": ["intent"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "local_time",
+            "description": (
+                "Get the current local date, time, and timezone from the host. "
+                "Use only for the host's local time; this tool does not accept a location or timezone."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {},
+            },
+        },
+        {
+            "type": "function",
+            "name": "fx",
+            "description": (
+                "Convert an amount between supported currencies using the latest available "
+                "Frankfurter reference rate. Omit base or quote only when the user does not "
+                "specify it so the server can apply its configured currency defaults."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "amount": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1_000_000_000,
+                        "description": "Positive amount to convert; omit to use 1.",
+                    },
+                    "base": {
+                        "type": "string",
+                        "enum": list(FX_SUPPORTED_CURRENCIES),
+                        "description": "Source currency code explicitly named by the user.",
+                    },
+                    "quote": {
+                        "type": "string",
+                        "enum": list(FX_SUPPORTED_CURRENCIES),
+                        "description": "Target currency code explicitly named by the user.",
+                    },
+                },
             },
         },
         {

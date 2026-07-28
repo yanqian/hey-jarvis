@@ -1778,10 +1778,10 @@
         }
       ],
       "passes": false,
-      "status": "todo",
-      "attempts": 0,
-      "last_error": "",
-      "priority": "P1",
+      "status": "blocked",
+      "attempts": 1,
+      "last_error": "User rejected the 3.0-speed 384 ms candidate as too fast to understand. F080 supersedes that candidate with a conservative shared-alloy voice profile before F078 can be reconsidered.",
+      "priority": "P2",
       "depends_on": [
         "F076",
         "F077"
@@ -1812,10 +1812,40 @@
       "status": "todo",
       "attempts": 0,
       "last_error": "",
-      "priority": "P1",
+      "priority": "P2",
       "depends_on": [
         "F077",
-        "F078"
+        "F080"
+      ]
+    },
+    {
+      "id": "F080",
+      "title": "Align acknowledgement and Realtime voice profile",
+      "description": "Apply a conservative voice-consistency correction by keeping the local 嗯 acknowledgement on alloy, changing Realtime output to alloy at volume 0.5, and removing the rejected 3.0-speed acknowledgement candidate without changing the two-stage interaction or playback architecture.",
+      "acceptance": [
+        "Checked-in active configuration, examples, diagnostics, and operator guidance use Realtime voice alloy and output volume 0.5, and the validated session configuration delivered to OpenAI preserves those exact values.",
+        "Acknowledgement preparation continues to use alloy for 嗯, no active default or prepared asset uses the rejected 3.0-speed candidate, and any replacement cue must remain naturally understandable under a conservative independently validated acknowledgement speed while preserving the last accepted asset on preparation or validation failure.",
+        "The implementation explicitly preserves local acknowledgement playback, configured-session readiness before acknowledgement, input enablement only after acknowledgement completion, and existing model, WebRTC transport, echo/noise processing, VAD, interruption, timeout, privacy, and cleanup behavior.",
+        "Focused configuration, OpenAI request-shape, Realtime server/browser, diagnostics, documentation, and regression tests, JavaScript syntax, full project tests, pipeline and Realtime fake smokes, and final ./init.sh pass without requiring a live device, credential, network call, or replacement playback engine.",
+        "One user-led Mac built-in-speaker/microphone run confirms the alloy 嗯 remains understandable, the following alloy Realtime answer is perceptually closer in voice and usable at volume 0.5, deliberate interruption still works, and ending restores wake ownership without claiming identical synthesis or universal device loudness."
+      ],
+      "evals": [
+        {
+          "scenario": "Shared-alloy acknowledgement and Realtime acceptance",
+          "required_evidence": [
+            "offline",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P2",
+      "depends_on": [
+        "F075",
+        "F077"
       ]
     },
     {
@@ -1847,6 +1877,96 @@
         "F024",
         "F056",
         "F075"
+      ]
+    },
+    {
+      "id": "F082",
+      "title": "Bridge local time tool into Realtime",
+      "description": "Advertise a strict no-network local-time function in Realtime and reuse the existing injected-clock ToolRoute execution path for a same-conversation spoken answer.",
+      "acceptance": [
+        "The unified Realtime session advertises one strict local-time function with no model-controlled timezone or free-form arguments, while calculator, weather, and end-conversation behavior remain unchanged.",
+        "Realtime execution constructs the existing time ToolRoute, reuses execute_route and an injectable clock, returns the host-local date, time, and timezone in one correlated bounded result, and does not introduce network access or arbitrary timezone lookup.",
+        "Malformed, oversized, unknown, duplicate, late, and stale calls remain allowlisted, session-scoped, de-duplicated, content-redacted, and unable to enter a stopped or replacement session.",
+        "Focused schema/coordinator/privacy tests, full project tests, JavaScript syntax, Realtime fake smoke, and final ./init.sh pass without live network, credential, browser permission, microphone, or speaker.",
+        "One user-led built-in-device Realtime run confirms a Chinese local-time question receives a concise correct host-local answer, ordinary follow-up remains usable, and ending restores wake ownership."
+      ],
+      "evals": [
+        {
+          "scenario": "Realtime host-local time",
+          "required_evidence": [
+            "offline",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F022",
+        "F081"
+      ]
+    },
+    {
+      "id": "F083",
+      "title": "Bridge FX tool into Realtime",
+      "description": "Advertise a strict Realtime foreign-exchange conversion function and safely reuse the existing Frankfurter provider, supported currencies, defaults, freshness, and caveat boundaries.",
+      "acceptance": [
+        "The unified Realtime session advertises one strict FX function with bounded positive amount and supported base/quote currencies, while all previously accepted Realtime tools remain unchanged.",
+        "Realtime FX execution constructs the existing FX ToolRoute and reuses execute_route, ProviderConfig, Frankfurter, timeout, defaults, reference-rate date, rounding, caveat, and structured provider-error behavior without invented fallback.",
+        "Malformed, unsupported-currency, same-currency, oversized, provider-failure, duplicate, late, and stale calls remain bounded, allowlisted, correlated, session-scoped, de-duplicated, content-redacted, and non-blocking for lifecycle cleanup.",
+        "Focused schema/coordinator/provider/privacy tests, full project tests, JavaScript syntax, Realtime fake smoke, and final ./init.sh pass with injected HTTP and without live network, credential, browser permission, microphone, or speaker.",
+        "One user-led built-in-device Realtime run confirms a Chinese amount/base/quote request receives a concise provider-backed conversion with reference-date/caveat semantics, follow-up remains usable, and ending restores wake ownership."
+      ],
+      "evals": [
+        {
+          "scenario": "Realtime foreign-exchange conversion",
+          "required_evidence": [
+            "offline",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F025",
+        "F081"
+      ]
+    },
+    {
+      "id": "F084",
+      "title": "Bridge stock quote tool into Realtime",
+      "description": "Advertise a strict Realtime stock-quote function and safely reuse the existing credentialed Finnhub provider, conservative ticker, freshness, and financial-caveat boundaries.",
+      "acceptance": [
+        "The unified Realtime session advertises one strict stock-quote function with one bounded conservative ticker symbol, while all previously accepted Realtime tools remain unchanged and no trading action is exposed.",
+        "Realtime stock execution constructs the existing stock ToolRoute and reuses execute_route, ProviderConfig, Finnhub credential handling, timeout, quote fields, timestamp, delayed-data/non-advice caveats, and structured missing-key/provider errors without exposing or inventing data.",
+        "Malformed, unknown-symbol, missing-key, oversized, provider-failure, duplicate, late, and stale calls remain bounded, allowlisted, correlated, session-scoped, de-duplicated, content-redacted, and non-blocking for lifecycle cleanup.",
+        "Focused schema/coordinator/provider/privacy tests, full project tests, JavaScript syntax, Realtime fake smoke, and final ./init.sh pass with injected HTTP and fake credentials, without live network, browser permission, microphone, or speaker.",
+        "With a configured Finnhub key, one user-led built-in-device Realtime run confirms an explicit ticker request receives a concise provider-backed quote with freshness and non-advice caveats, follow-up remains usable, and ending restores wake ownership; missing-key behavior is separately verified without live data."
+      ],
+      "evals": [
+        {
+          "scenario": "Realtime stock quote",
+          "required_evidence": [
+            "offline",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F026",
+        "F081"
       ]
     }
   ]

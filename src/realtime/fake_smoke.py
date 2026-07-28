@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from src.realtime.controller import RealtimeSessionController
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffState
@@ -46,7 +47,7 @@ class _Detector:
         pass
 
 
-class _WeatherClient:
+class _ToolClient:
     def __init__(self) -> None:
         self.responses = [
             {
@@ -70,6 +71,12 @@ class _WeatherClient:
                     "rain": 0.0,
                 }
             },
+            {
+                "date": "2026-07-28",
+                "base": "USD",
+                "quote": "SGD",
+                "rate": 1.35,
+            },
         ]
 
     def get_json(self, _url: str, *, params=None, timeout_seconds: float):
@@ -86,6 +93,8 @@ class FakeSmokeResult:
     barge_in: bool
     calculator_output: bool
     weather_output: bool
+    local_time_output: bool
+    fx_output: bool
     end_phrase: bool
     closed: bool
     recovered_to_wake: bool
@@ -102,6 +111,8 @@ class FakeSmokeResult:
                 self.barge_in,
                 self.calculator_output,
                 self.weather_output,
+                self.local_time_output,
+                self.fx_output,
                 self.end_phrase,
                 self.closed,
                 self.recovered_to_wake,
@@ -120,7 +131,15 @@ def run_fake_smoke() -> FakeSmokeResult:
         session_ids=lambda: "fake-session",
         end_phrases=("goodbye",),
         tool_provider_config=ProviderConfig(default_location="Singapore"),
-        tool_http_client=_WeatherClient(),
+        tool_http_client=_ToolClient(),
+        tool_now_provider=lambda: datetime(
+            2026,
+            7,
+            28,
+            16,
+            42,
+            tzinfo=timezone(timedelta(hours=8), name="+08"),
+        ),
     )
     coordinator.host_event("armed")
     stage = 0
@@ -131,10 +150,13 @@ def run_fake_smoke() -> FakeSmokeResult:
     barge_in = False
     calculator_output = False
     weather_output = False
+    local_time_output = False
+    fx_output = False
 
     def sleep(seconds: float) -> None:
         nonlocal stage, user_turns, assistant_completions
-        nonlocal connected, exclusive_handoff, barge_in, calculator_output, weather_output
+        nonlocal connected, exclusive_handoff, barge_in
+        nonlocal calculator_output, weather_output, local_time_output, fx_output
         clock.advance(max(seconds, 0.1))
         session_id = coordinator.session_id
         if coordinator.state == HandoffState.HOST_STARTING:
@@ -195,6 +217,45 @@ def run_fake_smoke() -> FakeSmokeResult:
                 and weather_payload["status"] == "success"
                 and weather_payload["data"]["location"].startswith("Singapore")
             )
+            coordinator.host_event(
+                "tool_call",
+                session_id,
+                call_id="fake-local-time-call",
+                name="local_time",
+                arguments="{}",
+            )
+            time_command = coordinator.command_after(
+                int(weather_command["command_id"])
+            )
+            time_payload = (
+                json.loads(str(time_command["output"])) if time_command else {}
+            )
+            local_time_output = bool(
+                time_command
+                and time_command["type"] == "tool_result"
+                and time_payload["status"] == "success"
+                and time_payload["data"]["time"] == "16:42"
+                and time_payload["data"]["timezone"] == "+08"
+            )
+            coordinator.host_event(
+                "tool_call",
+                session_id,
+                call_id="fake-fx-call",
+                name="fx",
+                arguments=json.dumps(
+                    {"amount": 100, "base": "USD", "quote": "SGD"}
+                ),
+            )
+            fx_command = coordinator.command_after(int(time_command["command_id"]))
+            fx_payload = json.loads(str(fx_command["output"])) if fx_command else {}
+            fx_output = bool(
+                fx_command
+                and fx_command["type"] == "tool_result"
+                and fx_payload["status"] == "success"
+                and fx_payload["data"]["base"] == "USD"
+                and fx_payload["data"]["quote"] == "SGD"
+                and fx_payload["data"]["converted_amount"] == 135.0
+            )
             coordinator.host_event("response_created", session_id)
             coordinator.host_event("response_done", session_id, reason="completed")
             assistant_completions += 1
@@ -230,6 +291,8 @@ def run_fake_smoke() -> FakeSmokeResult:
         barge_in=barge_in,
         calculator_output=calculator_output,
         weather_output=weather_output,
+        local_time_output=local_time_output,
+        fx_output=fx_output,
         end_phrase="host_end_conversation_tool" in event_types,
         closed=stage == 3,
         recovered_to_wake=result.recovered_to_wake and lease.is_open,

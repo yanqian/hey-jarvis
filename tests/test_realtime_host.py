@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import threading
 import unittest
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from io import BytesIO
 from types import SimpleNamespace
@@ -467,6 +468,180 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertNotIn("temperature", json.dumps(output))
         self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
 
+    def test_realtime_local_time_reuses_injected_host_clock_and_rejects_arguments(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(
+            lease,
+            session_ids=lambda: "session-1",
+            tool_now_provider=lambda: datetime(
+                2026,
+                7,
+                28,
+                16,
+                42,
+                tzinfo=timezone(timedelta(hours=8), name="+08"),
+            ),
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        cursor = self.activate_session(coordinator, session_id)
+        coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="time-success",
+            name="local_time",
+            arguments="{}",
+        )
+        command = coordinator.command_after(cursor)
+        output = json.loads(command["output"])
+        self.assertEqual(output["status"], "success")
+        self.assertEqual(output["data"]["date"], "2026-07-28")
+        self.assertEqual(output["data"]["time"], "16:42")
+        self.assertEqual(output["data"]["timezone"], "+08")
+        self.assertNotIn("time-success", json.dumps(coordinator.report()))
+
+        coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="time-invalid",
+            name="local_time",
+            arguments=json.dumps({"timezone": "Asia/Tokyo"}),
+        )
+        invalid = json.loads(
+            coordinator.command_after(command["command_id"])["output"]
+        )
+        self.assertEqual(invalid["status"], "error")
+        self.assertIn("Local time arguments were invalid", invalid["answer"])
+
+    def test_realtime_fx_reuses_provider_conversion_defaults_and_redacts_content(self):
+        cases = (
+            (
+                {"amount": 100, "base": "USD", "quote": "SGD"},
+                {"date": "2026-07-28", "base": "USD", "quote": "SGD", "rate": 1.35},
+                100.0,
+                "USD",
+                "SGD",
+                135.0,
+                "",
+            ),
+            (
+                {},
+                {"date": "2026-07-28", "base": "USD", "quote": "SGD", "rate": 1.35},
+                1.0,
+                "USD",
+                "SGD",
+                1.35,
+                "Defaulted base to USD. Defaulted quote to SGD.",
+            ),
+        )
+        for index, (
+            arguments,
+            response,
+            amount,
+            base,
+            quote,
+            converted,
+            default_note,
+        ) in enumerate(cases):
+            with self.subTest(arguments=arguments):
+                lease = FakeLease()
+                client = FakeJsonClient([response])
+                coordinator = HandoffCoordinator(
+                    lease,
+                    session_ids=lambda: "session-1",
+                    tool_provider_config=ProviderConfig(
+                        default_base_currency="USD",
+                        http_timeout_seconds=2.5,
+                    ),
+                    tool_http_client=client,
+                )
+                coordinator.host_event("armed")
+                session_id = coordinator.begin_handoff()
+                cursor = self.activate_session(coordinator, session_id)
+                call_id = f"fx-private-{index}"
+                coordinator.host_event(
+                    "tool_call",
+                    session_id,
+                    call_id=call_id,
+                    name="fx",
+                    arguments=json.dumps(arguments),
+                )
+                output = json.loads(coordinator.command_after(cursor)["output"])
+                self.assertEqual(output["status"], "success")
+                self.assertEqual(output["data"]["amount"], amount)
+                self.assertEqual(output["data"]["base"], base)
+                self.assertEqual(output["data"]["quote"], quote)
+                self.assertEqual(output["data"]["converted_amount"], converted)
+                self.assertEqual(output["data"]["date"], "2026-07-28")
+                self.assertIn("Frankfurter reference rate", output["answer"])
+                self.assertIn("Not a bank cash or trade quote", output["answer"])
+                if default_note:
+                    self.assertIn(default_note, output["answer"])
+                self.assertIn("/USD/SGD", client.calls[0][0])
+                report_text = json.dumps(coordinator.report())
+                self.assertNotIn(call_id, report_text)
+                self.assertNotIn(str(converted), report_text)
+
+    def test_realtime_fx_rejects_invalid_and_same_currency_without_inventing_a_rate(self):
+        cases = (
+            ({"amount": -1, "base": "USD", "quote": "SGD"}, "FX arguments were invalid."),
+            ({"amount": 1_000_000_001, "base": "USD", "quote": "SGD"}, "FX arguments were invalid."),
+            ({"amount": 1, "base": "CHF", "quote": "SGD"}, "FX arguments were invalid."),
+            ({"amount": 1, "base": "usd", "quote": "SGD"}, "FX arguments were invalid."),
+            ({"amount": 1, "base": "USD", "quote": "USD"}, "base and quote are both USD"),
+            ({"amount": 1, "base": "USD", "quote": "SGD", "extra": True}, "FX arguments were invalid."),
+        )
+        for index, (arguments, expected) in enumerate(cases):
+            with self.subTest(arguments=arguments):
+                lease = FakeLease()
+                client = FakeJsonClient([])
+                coordinator = HandoffCoordinator(
+                    lease,
+                    session_ids=lambda: "session-1",
+                    tool_http_client=client,
+                )
+                coordinator.host_event("armed")
+                session_id = coordinator.begin_handoff()
+                cursor = self.activate_session(coordinator, session_id)
+                coordinator.host_event(
+                    "tool_call",
+                    session_id,
+                    call_id=f"fx-invalid-{index}",
+                    name="fx",
+                    arguments=json.dumps(arguments),
+                )
+                output = json.loads(coordinator.command_after(cursor)["output"])
+                self.assertEqual(output["status"], "error")
+                self.assertIn(expected, output["answer"])
+                self.assertNotIn("rate", output.get("data", {}))
+                self.assertEqual(client.calls, [])
+                self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
+    def test_realtime_fx_provider_failure_returns_bounded_structured_error(self):
+        lease = FakeLease()
+        client = FakeJsonClient([ProviderError("timeout", "request timed out")])
+        coordinator = HandoffCoordinator(
+            lease,
+            session_ids=lambda: "session-1",
+            tool_http_client=client,
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        cursor = self.activate_session(coordinator, session_id)
+        coordinator.host_event(
+            "tool_call",
+            session_id,
+            call_id="fx-failure",
+            name="fx",
+            arguments=json.dumps({"amount": 100, "base": "USD", "quote": "SGD"}),
+        )
+        output = json.loads(coordinator.command_after(cursor)["output"])
+        self.assertEqual(output["status"], "error")
+        self.assertEqual(output["data"]["provider_error"], "timeout")
+        self.assertNotIn("rate", output["data"])
+        self.assertLessEqual(len(json.dumps(output)), 4096)
+        self.assertEqual(coordinator.state, HandoffState.HOST_ACTIVE)
+
     def test_slow_realtime_weather_does_not_hold_lifecycle_lock_or_enqueue_late_result(self):
         started = threading.Event()
         release = threading.Event()
@@ -775,7 +950,7 @@ class RealtimeHostTests(unittest.TestCase):
         )
         self.assertEqual(
             [tool["name"] for tool in session["tools"]],
-            ["calculator", "weather", "end_conversation"],
+            ["calculator", "weather", "local_time", "fx", "end_conversation"],
         )
         weather = session["tools"][1]
         self.assertEqual(weather["parameters"]["required"], ["intent"])
@@ -783,6 +958,28 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertEqual(
             weather["parameters"]["properties"]["intent"]["enum"],
             ["current", "today", "tomorrow"],
+        )
+        local_time = session["tools"][2]
+        self.assertEqual(local_time["parameters"]["properties"], {})
+        self.assertFalse(local_time["parameters"]["additionalProperties"])
+        fx = session["tools"][3]
+        self.assertFalse(fx["parameters"]["additionalProperties"])
+        self.assertEqual(
+            fx["parameters"]["properties"]["amount"],
+            {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1_000_000_000,
+                "description": "Positive amount to convert; omit to use 1.",
+            },
+        )
+        self.assertEqual(
+            fx["parameters"]["properties"]["base"]["enum"],
+            ["USD", "SGD", "CNY", "EUR", "JPY", "HKD", "GBP", "AUD"],
+        )
+        self.assertEqual(
+            fx["parameters"]["properties"]["quote"]["enum"],
+            ["USD", "SGD", "CNY", "EUR", "JPY", "HKD", "GBP", "AUD"],
         )
         self.assertIn("# Language", session["instructions"])
         self.assertIn("concise, natural Simplified Chinese", session["instructions"])

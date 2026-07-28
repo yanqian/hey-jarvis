@@ -1728,6 +1728,94 @@ one inseparable information-architecture correction with a shared Markdown
 verification surface. Rewriting developer-process history or changing product
 behavior would have separate audiences and verification boundaries and remains
 out of scope.
+
+### Shared Alloy Acknowledgement and Realtime Voice Profile
+
+Goal: make the local `嗯` acknowledgement and the following Realtime answer
+sound perceptually closer through a conservative shared voice profile, while
+preserving the accepted two-stage interaction and avoiding a new live-generated
+acknowledgement dependency.
+
+Included scope: keep acknowledgement synthesis on the built-in `alloy` voice;
+remove the rejected 3.0-speed acknowledgement candidate from active defaults;
+retain an independently validated conservative acknowledgement speed and
+failure-safe asset preparation; change the Realtime voice to `alloy`; change
+Realtime output volume to `0.5`; update configuration examples, diagnostics,
+operator guidance, and focused automated contracts; and perform one user-led
+Mac built-in-device acceptance run.
+
+Excluded scope: generating the acknowledgement inside each Realtime session;
+capturing or caching Realtime output as a new asset; moving acknowledgement
+playback from local `afplay` into the browser; replacing the playback engine;
+claiming byte-identical or acoustically identical synthesis across TTS and
+Realtime; changing the acknowledgement text; changing the Realtime model,
+WebRTC transport, audible-ready ordering, input gate, echo cancellation, noise
+reduction, VAD, interruption, timeouts, microphone ownership, privacy, cleanup,
+or pre-wake connection behavior; and establishing loudness across rooms,
+speakers, or devices.
+
+Core flows: after confirmed wake and configured Realtime readiness, the
+assistant plays the accepted local `嗯` generated through the `alloy` TTS
+profile at an understandable speed. Only after acknowledgement completion does
+the browser enable microphone input. The user's question receives a Realtime
+answer using `alloy` at configured output volume `0.5`; ordinary follow-up,
+deliberate barge-in, semantic ending, browser-media cleanup, and return to local
+wake ownership continue unchanged. If acknowledgement preparation fails
+generation, duration, or intelligibility validation, the last accepted asset
+remains installed.
+
+Constraints: the 3.0-speed 384 ms candidate is a recorded failed human
+acceptance result and must not become active; `alloy` and `0.5` must be explicit
+validated configuration rather than browser-only literals; offline tests must
+not require a microphone, speaker, browser permission, OpenAI credential, or
+network call; live evidence may establish only subjective improvement on the
+target Mac; and configuration or preparation failures must fail closed without
+weakening the audible-ready gate.
+
+Ambiguities or assumptions: the currently accepted local `嗯` was produced
+through the existing `gpt-4o-mini-tts`/`alloy` path and remains preferable to
+the rejected 3.0-speed candidate. The exact conservative preparation speed may
+reuse the normal configured TTS speed or an acknowledgement-specific value,
+but it must be below the rejected setting, validated independently, and pass a
+human intelligibility check. Sharing the name `alloy` should reduce the largest
+voice mismatch, but separate TTS and Realtime models plus local and WebRTC
+playback paths can still sound different. Volume `0.5` is a requested target
+Mac setting, not a universal loudness baseline.
+
+Required capabilities: existing TTS and Realtime configuration boundaries,
+failure-safe acknowledgement preparation and duration inspection, unified
+Realtime session construction, deterministic request/configuration fakes,
+JavaScript syntax checking, Mac built-in microphone and speakers, an armed
+Chrome host, usable OpenAI credential and network, fresh explicit
+microphone/OpenAI/cost authorization for final live verification, final project
+recovery, fast coding evidence, and separate cold-start Evaluator Agent
+approval.
+
+Implementation paths: `src/config.py`, `src/openai_client.py`, `src/main.py`,
+`src/realtime_host/server.py`, `src/realtime_host/static/app.js`,
+`.env.example`, `docs/CONFIGURATION.md`, `docs/REALTIME.md`,
+`docs/TROUBLESHOOTING.md`, `MANUAL_TESTING.md`, focused tests under `tests/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: configuration defaults, override validation, TTS
+request-shape, acknowledgement preservation on failure, unified Realtime
+session voice/volume, browser consumption of configured output volume,
+diagnostic redaction, documentation ownership, and unchanged input-gate tests;
+JavaScript syntax; full unittest discovery; pipeline and Realtime fake smokes;
+final `./init.sh`; one user-led built-in-device run covering understandable
+acknowledgement, perceived voice continuity, usable volume, deliberate
+interruption, semantic ending, and wake recovery; fast coding evidence; and
+separate evaluator approval.
+
+Decomposition decision: F080 intentionally keeps acknowledgement and Realtime
+voice/volume changes together because they form one perceptual consistency
+correction and share the same configuration plus live listening surface.
+Playback-engine latency remains F079 because it has a separate process-lifecycle
+benchmark, implementation risk, and acceptance boundary. F078 remains blocked
+as durable evidence of the rejected 3.0-speed approach rather than being
+silently rewritten.
+
 ### Realtime Weather Tool Bridge
 
 Goal: let a user ask current, today, or tomorrow weather questions during an
@@ -1814,3 +1902,82 @@ independent user value and provider execution cannot safely ship without its
 non-blocking lifecycle and stale-result boundary. Additional tool categories
 have distinct schemas, credentials, provider semantics, and live verification
 surfaces, so they remain separate future features.
+
+### Complete Realtime Integration for Existing Structured Tools
+
+Goal: make every structured tool already implemented in the pipeline available
+inside the continuous Realtime voice conversation, so local time, foreign
+exchange conversion, and stock quotes work through the same safe function-call
+bridge already used by calculator and weather.
+
+Included scope: add one strict Realtime function for local system time, one for
+Frankfurter reference-rate conversion, and one for Finnhub stock quotes; reuse
+the existing `ToolRoute`, `execute_route`, `ProviderConfig`, injected clock and
+HTTP boundaries, provider parsing, timeout, credential, caveat, and structured
+error behavior; preserve one correlated `function_call_output` followed by
+`response.create`; extend deterministic schema, coordinator, privacy,
+documentation, fake-smoke, and user-led acceptance coverage.
+
+Excluded scope: adding news, web search, arbitrary browsing, MCP, shell access,
+new providers, new currencies or stock aliases, portfolio or trading actions,
+financial advice, historical charts, non-local timezone lookup, pipeline tool
+changes, a second Chat Completions naturalization call, and changes to Realtime
+model, voice, volume, acknowledgement, WebRTC, VAD, interruption, timeout,
+microphone ownership, privacy, or cleanup.
+
+Core flows: “现在几点” calls the no-network local-time tool and receives a
+Chinese answer for the host's local timezone. “100 美元换新币” calls the existing
+Frankfurter route with amount/base/quote and receives a reference-rate answer
+with date and caveat. “AAPL 现在多少钱” calls the existing Finnhub route and
+receives a delayed-market-data quote and non-advice caveat when
+`FINNHUB_API_KEY` is configured; a missing key returns the existing bounded
+not-configured result rather than invented data. Each call remains usable in
+the same conversation, and semantic ending restores wake ownership.
+
+Constraints: advertise only implemented allowlisted tools; validate and bound
+all model-supplied arguments before constructing a route; execute network work
+outside the coordinator lifecycle lock; de-duplicate calls by session and call
+identity; prevent late results from crossing stopped or replacement sessions;
+never retain arguments, symbols, amounts, currencies, answers, provider bodies,
+call IDs, or credentials in sanitized lifecycle evidence; never turn provider
+failure into model-invented live facts; and keep automated verification free of
+live network, credentials, browser permission, microphone, and speaker.
+
+Ambiguities or assumptions: “remaining tools” means the three implemented
+pipeline categories not yet exposed in Realtime: local time, FX, and stock.
+News remains an unsupported realtime-sensitive category because no news
+provider is implemented. Local time means the host's existing local timezone,
+not arbitrary world-time lookup. Existing supported currencies, conservative
+stock-symbol parsing, provider freshness semantics, and caveats remain
+authoritative. F078, F079, and F080 are deliberately deferred until these tool
+bridges are completed.
+
+Required capabilities: the accepted F081 allowlisted asynchronous dispatcher;
+the existing local-time, Frankfurter, and Finnhub implementations; deterministic
+clock and HTTP fixtures; existing redacted provider configuration including
+optional `FINNHUB_API_KEY`; JavaScript syntax checking; full project recovery;
+fast coding evidence; and separate cold-start evaluator approval. Final
+user-visible FX and stock acceptance requires provider network access, and a
+successful stock quote additionally requires a configured Finnhub key.
+
+Implementation paths: `src/realtime_host/server.py`,
+`src/realtime_host/coordinator.py`, `src/realtime/fake_smoke.py`, existing
+modules under `src/tools/`, `docs/REALTIME.md`, `MANUAL_TESTING.md`, focused
+tests under `tests/`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: strict function schemas and allowlist; injected local
+time; default and explicit FX pairs, supported-currency validation, provider
+failure, freshness, and caveat; configured, missing-key, unknown-symbol, and
+provider-failure stock behavior; malformed, oversized, duplicate, late, stale,
+and privacy cases; unchanged calculator/weather/end-conversation regressions;
+JavaScript syntax; focused and full tests; Realtime fake smoke; final
+`./init.sh`; user-led built-in-device conversations for each accepted tool;
+fast coding evidence; and independent evaluator approval.
+
+Decomposition decision: F082, F083, and F084 are separate because local time is
+clock-only, FX uses a credential-free external provider with currency-pair
+semantics, and stock uses a credentialed external provider with market-data and
+financial-caveat semantics. Each can independently succeed, fail, or be
+deferred and has a distinct live verification boundary. News is not planned as
+a bridge because there is no existing implemented news tool.

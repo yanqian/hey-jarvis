@@ -12,10 +12,12 @@ import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Callable, Protocol
 
 from src.tools import ProviderConfig, ToolRoute, execute_route
+from src.tools.router import FX_SUPPORTED_CURRENCIES
 
 
 MAX_EVIDENCE_EVENTS = 200
@@ -25,6 +27,7 @@ MAX_NORMALIZED_END_PHRASE_CHARS = 64
 MAX_TOOL_ARGUMENT_CHARS = 512
 MAX_CALCULATOR_EXPRESSION_CHARS = 200
 MAX_WEATHER_LOCATION_CHARS = 100
+MAX_FX_AMOUNT = 1_000_000_000
 MAX_TOOL_OUTPUT_CHARS = 4096
 MAX_INPUT_LEVEL_SAMPLE_COUNT = 10
 MAX_FIXTURE_AUDIO_BYTES = 384_000
@@ -167,6 +170,7 @@ class HandoffCoordinator:
         end_phrases: tuple[str, ...] = (),
         tool_provider_config: object | None = None,
         tool_http_client: object | None = None,
+        tool_now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self._wake_lease = wake_lease
         self._clock = clock
@@ -196,6 +200,7 @@ class HandoffCoordinator:
         self._handled_tool_calls: set[str] = set()
         self._tool_provider_config = tool_provider_config or ProviderConfig()
         self._tool_http_client = tool_http_client
+        self._tool_now_provider = tool_now_provider
         if open_wake_on_init:
             if not self._wake_lease.is_open:
                 self._wake_lease.open()
@@ -587,6 +592,7 @@ class HandoffCoordinator:
             arguments,
             provider_config=self._tool_provider_config,
             http_client=self._tool_http_client,
+            now_provider=self._tool_now_provider,
         )
 
         with self._lock:
@@ -776,10 +782,11 @@ def _realtime_tool_output(
     *,
     provider_config: object,
     http_client: object | None,
+    now_provider: Callable[[], datetime] | None,
 ) -> str:
     """Execute one allowlisted existing tool and return bounded JSON output."""
 
-    if name not in {"calculator", "weather"}:
+    if name not in {"calculator", "weather", "local_time", "fx"}:
         return json.dumps({"status": "error", "answer": "Unsupported Realtime tool."})
     if not isinstance(arguments, str) or len(arguments) > MAX_TOOL_ARGUMENT_CHARS:
         return _invalid_tool_arguments(name)
@@ -801,6 +808,50 @@ def _realtime_tool_output(
             ToolRoute("calculator", "safe_calculator", {"expression": expression.strip()})
         )
         return _bounded_tool_output(result.status, result.answer)
+
+    if name == "local_time":
+        if payload != {}:
+            return _invalid_tool_arguments(name)
+        result = execute_route(
+            ToolRoute("time", "local_time", {"timezone": "local"}),
+            now_provider=now_provider,
+        )
+        return _bounded_tool_output(result.status, result.answer, data=result.data)
+
+    if name == "fx":
+        if not isinstance(payload, dict) or not set(payload).issubset(
+            {"amount", "base", "quote"}
+        ):
+            return _invalid_tool_arguments(name)
+        amount = payload.get("amount")
+        if amount is not None and (
+            isinstance(amount, bool)
+            or not isinstance(amount, (int, float))
+            or not math.isfinite(amount)
+            or amount <= 0
+            or amount > MAX_FX_AMOUNT
+        ):
+            return _invalid_tool_arguments(name)
+        params = {"query": "realtime foreign exchange request"}
+        if amount is not None:
+            params["amount"] = str(amount)
+        for currency_name in ("base", "quote"):
+            currency = payload.get(currency_name)
+            if currency is None:
+                continue
+            if (
+                not isinstance(currency, str)
+                or currency != currency.strip().upper()
+                or currency not in FX_SUPPORTED_CURRENCIES
+            ):
+                return _invalid_tool_arguments(name)
+            params[currency_name] = currency
+        result = execute_route(
+            ToolRoute("fx", "fx_provider", params),
+            provider_config=provider_config,
+            http_client=http_client,
+        )
+        return _bounded_tool_output(result.status, result.answer, data=result.data)
 
     if not isinstance(payload, dict) or not set(payload).issubset({"location", "intent"}):
         return _invalid_tool_arguments(name)
@@ -826,7 +877,12 @@ def _realtime_tool_output(
 
 
 def _invalid_tool_arguments(name: object) -> str:
-    label = "Weather" if name == "weather" else "Calculator"
+    label = {
+        "calculator": "Calculator",
+        "weather": "Weather",
+        "local_time": "Local time",
+        "fx": "FX",
+    }.get(name, "Tool")
     return json.dumps({"status": "error", "answer": f"{label} arguments were invalid."})
 
 

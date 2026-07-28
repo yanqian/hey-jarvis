@@ -106,13 +106,19 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F081 - Bridge the existing weather tool into Realtime", last_completed)
-        self.assertIn("EVAL_PASS: F081", last_completed)
+        self.assertIn("F083 - Bridge the FX tool into Realtime", last_completed)
+        self.assertIn("EVAL_PASS: F083", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
-        self.assertIn("No feature is currently in progress.", current_feature)
-        self.assertIn("F078 - Make the short acknowledgement reproducible", next_feature)
+        self.assertIn("F078 is blocked", current_feature)
+        self.assertIn("F080 now owns the conservative correction", current_feature)
+        self.assertIn("No feature is currently in progress", current_feature)
+        self.assertIn("F083-live-acceptance.md", current_feature)
+        self.assertIn("F084 - Bridge the stock quote tool into Realtime", next_feature)
+        self.assertIn("F083 FX is complete", next_feature)
+        self.assertIn("credentialed Finnhub stock-quote boundary", next_feature)
+        self.assertIn("dependent F079 are deferred", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
         self.assertIn("F061", known_issues)
@@ -205,13 +211,15 @@ class DocumentationTests(unittest.TestCase):
         for phrase in (
             "pipeline remains the default",
             "once per Chrome host launch",
-            "exactly three allowlisted local functions",
+            "exactly five allowlisted local functions",
             "`calculator`",
             "`weather`",
+            "`local_time`",
+            "`fx`",
             "`end_conversation`",
             "`function_call_output`",
             "DEFAULT_LOCATION=Singapore",
-            "FX, stocks",
+            "Stocks, shell access",
             "Pre-wake",
             "unified WebRTC call interface",
             "never an API credential",
@@ -342,7 +350,8 @@ class DocumentationTests(unittest.TestCase):
         ):
             self.assertIn(phrase, readme)
 
-        self.assertIn("FX, stocks", realtime)
+        self.assertIn("Stocks, shell access", realtime)
+        self.assertIn("`fx`", realtime)
         self.assertIn("weather", realtime)
         self.assertIn("outside the Realtime tool boundary", realtime)
 
