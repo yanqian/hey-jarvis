@@ -4,6 +4,20 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F085 has been completed through evaluator-gated fast work after a user-observed
+Realtime session closed 15.024 seconds after its last completed response. The
+default idle window is now 60 seconds, the local `.env` test profile is aligned,
+and coordinator playback state prevents idle closure between
+`host_playback_started` and `host_playback_stopped`; the existing 600-second
+maximum duration remains authoritative if playback-stop evidence never
+arrives. Playback stop restarts the full idle window, and playback state resets
+across cleanup and fresh handoff. Focused configuration, coordinator,
+controller, and documentation coverage passes with 64 tests; final recovery
+passes with 380 project tests plus pipeline and Realtime fake smokes. Coding
+evidence is recorded in `.agent-harness/runs/F085-fast-coding.md`, and separate
+cold-start approval is recorded as `EVAL_PASS: F085` in
+`.agent-harness/runs/20260730T071947Z-F085-evaluation-pass.md`.
+
 F075 has been completed through evaluator-gated fast work, three user-led
 built-in-device sessions, and separate cold-start evaluator approval. The
 browser now sends SDP only to the loopback host; Python combines it with the
@@ -177,19 +191,15 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F084 - Bridge the stock quote tool into Realtime.
+F085 - Keep Realtime idle timeout after playback.
 
-F084 advertises one strict bounded `stock` function and reuses the existing
-Finnhub ToolRoute, optional credential, timeout, quote fields, timestamp,
-delayed-data warning, non-advice caveat, and structured-error behavior. The
-user accepted provider-backed stock behavior and same-session follow-up;
-duplicate calls were de-duplicated, semantic ending restored wake ownership,
-and offline verification passes with 371 tests. Coding and live evidence are
-recorded in `.agent-harness/runs/F084-fast-coding.md` and
-`.agent-harness/runs/F084-live-acceptance.md`; after repairing the explicit
-normalized SPEC feature mapping, separate cold-start approval is recorded as
-`EVAL_PASS: F084` in
-`.agent-harness/runs/20260728T094830Z-F084-evaluation-pass.md`.
+F085 raises the default Realtime idle window to 60 seconds, prevents idle
+closure while assistant playback is active, restarts the full idle window after
+playback stops, and preserves the 600-second maximum-duration safety bound.
+Focused and full recovery verification pass with 380 project tests. Coding
+evidence is recorded in `.agent-harness/runs/F085-fast-coding.md`, and separate
+cold-start approval is recorded as `EVAL_PASS: F085` in
+`.agent-harness/runs/20260730T071947Z-F085-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -270,8 +280,21 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F084 is evaluator-approved, completing
-the planned Realtime bridge sequence for all existing structured tools.
+F080 is evaluator-approved after fast coding and user-led target-Mac
+acceptance. The implementation keeps the accepted local alloy `嗯` asset,
+removes the rejected 3.0-speed preparation default, and aligns Realtime output
+to alloy at volume 0.5 without changing the local acknowledgement gate or
+playback architecture. The user reported that the voices are closer than
+before and volume 0.5 is suitable, while explicitly noting that the local `嗯`
+sounds male and the Realtime conversation sounds female. Coding and live
+evidence are recorded in `.agent-harness/runs/F080-fast-coding-and-live.md`;
+approval is recorded as `EVAL_PASS: F080` in
+`.agent-harness/runs/20260728T102811Z-F080-evaluation-pass.md`.
+F084 remains evaluator-approved, completing the planned Realtime bridge
+sequence for all existing structured tools.
+F085 is evaluator-approved. Realtime now uses a 60-second post-playback idle
+window, suppresses idle closure while assistant playback is active, and keeps
+the 600-second maximum-duration bound authoritative.
 
 F083 completed through evaluator-gated fast work, user-led Realtime FX
 acceptance, and separate cold-start evaluator approval. Coding and live
@@ -291,19 +314,27 @@ and separate cold-start evaluator approval. Coding and live evidence are in
 `.agent-harness/runs/F081-live-attempts.md`; approval is in
 `.agent-harness/runs/20260728T080314Z-F081-evaluation-pass.md`.
 
-F078 is blocked after the user rejected its 3.0-speed 384 ms candidate as too
-fast to understand. The rejected candidate was never installed over the last
-accepted acknowledgement asset. F080 now owns the conservative correction:
-retain local `嗯` on `alloy`, remove the rejected speed choice, and align
-Realtime to `alloy` at output volume `0.5`. The user has explicitly deferred
-F078 and F080 while the remaining existing tools are bridged into Realtime;
-F079 remains deferred behind F080.
+F078 is evaluator-approved. The exact user-accepted 480 ms runtime cue is now
+the canonical project asset; offline preparation, exact digest recovery,
+failure preservation, full tests, and prior live post-cue evidence are
+recorded in `.agent-harness/runs/F078-fast-coding-and-live.md`. Approval is in
+`.agent-harness/runs/20260728T160225Z-F078-evaluation-pass.md`.
+
+F079 is evaluator-approved. It implements an acknowledgement-only
+exact-duration `afplay -t` path without changing normal answer playback or the
+audible-ready gate. A formal three-trial-per-mode target-Mac A/B measured
+1,378 ms legacy versus 635 ms bounded median total wall time. Full recovery
+passed with 378 tests. The user confirmed the bounded cue was complete, clear,
+and not truncated. A freshly authorized Realtime session accepted one
+post-cue question, produced a normal answer, ended semantically, stopped
+browser media, and restored Python wake ownership. Coding and live evidence
+are in `.agent-harness/runs/F079-fast-coding-and-live.md`; approval is recorded
+in `.agent-harness/runs/20260728T161532Z-F079-evaluation-pass.md`.
 
 ## Next Feature
 
-No feature is selected. News remains excluded because no news tool is
-implemented. F078, F080, and dependent F079 remain explicitly deferred pending
-the user's next direction.
+No unfinished features remain: all 85 feature entries are evaluator-approved.
+News remains excluded because no news tool is implemented.
 
 F076 is evaluator-approved. Its fresh-restart five-session follow-up measured
 a tight 849–930 ms readiness range (860 ms median), versus a 2,702 ms median in

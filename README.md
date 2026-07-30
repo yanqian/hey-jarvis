@@ -77,7 +77,7 @@ Before wake, audio remains local to the Python wake detector.
 | `python -m src.main --fake-backend` | Exercise the full pipeline state machine with fakes |
 | `python -m src.realtime.fake_smoke` | Exercise the Realtime lifecycle without browser, audio, or network |
 | `python -m src.main --diagnose` | Check local runtime readiness |
-| `python -m src.main --benchmark-acknowledgement` | Measure local ACK player process timing |
+| `python -m src.main --benchmark-acknowledgement` | Compare legacy and duration-bounded ACK player timing |
 | `python -m src.main --text "2 + 2"` | Inspect routing without microphone or OpenAI |
 | `python -m src.main --wake-debug` | Inspect live microphone levels and wake scores |
 | `python -m src.main --wake-file tmp/wake-debug.wav` | Replay a saved wake WAV |

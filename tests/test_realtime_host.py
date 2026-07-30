@@ -1060,7 +1060,7 @@ class RealtimeHostTests(unittest.TestCase):
     def test_unified_session_uses_complete_validated_configuration(self):
         settings = SimpleNamespace(
             realtime_model="model-test",
-            realtime_voice="marin",
+            realtime_voice="alloy",
             realtime_server_vad_enabled=True,
             realtime_server_vad_threshold=0.8,
             realtime_input_noise_reduction="far_field",
@@ -1070,7 +1070,7 @@ class RealtimeHostTests(unittest.TestCase):
         session = server.build_realtime_session_config(settings)
         self.assertEqual(session["model"], "model-test")
         self.assertEqual(session["output_modalities"], ["audio"])
-        self.assertEqual(session["audio"]["output"], {"voice": "marin"})
+        self.assertEqual(session["audio"]["output"], {"voice": "alloy"})
         self.assertEqual(
             session["audio"]["input"],
             {
@@ -1204,6 +1204,70 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertNotIn("must-not-survive", json.dumps(report))
         self.assertIn("host_playback_started", [event["type"] for event in report["events"]])
         self.assertIn("host_playback_stopped", [event["type"] for event in report["events"]])
+
+    def test_idle_timeout_waits_for_playback_stop_and_restarts_full_window(self):
+        now = [0.0]
+        lease = FakeLease()
+        ids = iter(("session-1", "session-2"))
+        coordinator = HandoffCoordinator(
+            lease,
+            clock=lambda: now[0],
+            session_ids=lambda: next(ids),
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        self.activate_session(coordinator, session_id)
+
+        coordinator.host_event("playback_started", session_id)
+        coordinator.host_event("playback_started", session_id)
+        now[0] = 120.0
+        self.assertIsNone(
+            coordinator.timeout_reason(idle_seconds=60.0, max_duration_seconds=600.0)
+        )
+
+        coordinator.host_event("playback_stopped", session_id)
+        now[0] = 179.999
+        self.assertIsNone(
+            coordinator.timeout_reason(idle_seconds=60.0, max_duration_seconds=600.0)
+        )
+        now[0] = 180.0
+        self.assertEqual(
+            coordinator.timeout_reason(idle_seconds=60.0, max_duration_seconds=600.0),
+            "idle_timeout",
+        )
+
+        coordinator.request_stop("idle_timeout")
+        coordinator.host_event("stopped", session_id)
+        next_session_id = coordinator.begin_handoff()
+        self.activate_session(coordinator, next_session_id)
+        now[0] = 240.0
+        self.assertEqual(
+            coordinator.timeout_reason(idle_seconds=60.0, max_duration_seconds=600.0),
+            "idle_timeout",
+        )
+
+    def test_max_duration_still_closes_when_playback_stop_is_missing(self):
+        now = [0.0]
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(
+            lease,
+            clock=lambda: now[0],
+            session_ids=lambda: "session-1",
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        self.activate_session(coordinator, session_id)
+        coordinator.host_event("playback_started", session_id)
+
+        now[0] = 599.999
+        self.assertIsNone(
+            coordinator.timeout_reason(idle_seconds=60.0, max_duration_seconds=600.0)
+        )
+        now[0] = 600.0
+        self.assertEqual(
+            coordinator.timeout_reason(idle_seconds=60.0, max_duration_seconds=600.0),
+            "max_duration",
+        )
 
     def test_report_is_bounded_and_redacts_content_and_tool_secrets(self):
         coordinator, _lease = self.build_coordinator()

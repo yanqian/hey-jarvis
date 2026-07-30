@@ -11,7 +11,7 @@ wake phrase; Python closes its wake microphone before Chrome obtains WebRTC
 media. Follow-up turns and barge-in then remain inside one session without
 another wake.
 
-The first-turn ready contract is audible: wait until the local “在呢”
+The first-turn ready contract is audible: wait until the local “嗯”
 acknowledgement finishes, then speak. After wake, Python queues the Realtime
 handoff immediately. Chrome acquires its audio track disabled, negotiates, and
 posts its SDP to the loopback host. The host creates one already-configured
@@ -21,9 +21,10 @@ data-channel-open-to-`session.created`; those two bounded phases reconcile to
 the existing session-configuration total. RT001 also records the prepared
 acknowledgement asset duration separately from wall-clock playback so player
 and device overhead are not mistaken for spoken audio. Only
-then does Python play “在呢”; after playback it sends one session-scoped
+then does Python play “嗯” through the exact metadata-duration-bounded local
+path; after process completion it sends one session-scoped
 input-enable command. `host_connected` therefore means `input_ready`, not
-merely that a transport exists. Speech before “在呢” is intentionally not
+merely that a transport exists. Speech before “嗯” is intentionally not
 buffered by this version.
 
 ## Lifecycle and ownership
@@ -32,6 +33,10 @@ The pipeline remains the default. A Realtime session can close through a
 semantic `end_conversation` tool call, an exact configured transcription
 fallback phrase, idle or maximum duration, explicit stop, transport error, or
 Ctrl+C. Browser media is closed before Python restores wake ownership.
+The idle window defaults to 60 seconds and restarts after confirmed assistant
+playback stops. Idle closure is suppressed while assistant playback is active;
+the maximum session duration remains authoritative if a playback-stop event is
+missing.
 
 Realtime advertises exactly six allowlisted local functions:
 
@@ -95,7 +100,8 @@ bounded local troubleshooting events, not production telemetry.
 The accepted built-in speaker/microphone profile uses:
 
 ```text
-REALTIME_OUTPUT_VOLUME=0.1
+REALTIME_VOICE=alloy
+REALTIME_OUTPUT_VOLUME=0.5
 REALTIME_SERVER_VAD_THRESHOLD=0.8
 REALTIME_INPUT_NOISE_REDUCTION=far_field
 ```
@@ -108,11 +114,13 @@ prefers the standardized `all` mode when the active track advertises it.
 Sanitized host evidence records the requested mode, actual browser setting,
 and remote playback-buffer start/stop separately from response generation.
 
-The checked-in 0.1 gain remains conservative until the F073 built-in-speaker
-acceptance run establishes a louder baseline. For a local trial, increase
-`REALTIME_OUTPUT_VOLUME` gradually and repeat both a normal answer and a
-deliberate barge-in. Do not treat headphones alone as built-in-speaker proof.
-Server-managed interruption remains enabled.
+The local acknowledgement and Realtime answer both use the `alloy` voice
+profile, though their separate synthesis models and playback paths are not
+expected to sound identical. The checked-in `0.5` gain is the target-Mac
+profile, not a universal device-loudness guarantee. If local hardware requires
+another gain, repeat both a normal answer and a deliberate barge-in. Do not
+treat headphones alone as built-in-speaker proof. Server-managed interruption
+remains enabled.
 
 Normal sessions do not create the optional Web Audio input-level analyser.
 That analyser is enabled for exactly the next wake-triggered session only by

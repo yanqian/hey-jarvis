@@ -187,6 +187,7 @@ class HandoffCoordinator:
         self._input_enable_requested = False
         self._connected_at: float | None = None
         self._last_activity_at: float | None = None
+        self._assistant_playback_active = False
         self._handoff_timing_received = False
         self._input_level_diagnostics_next = False
         self._next_command_id = 1
@@ -317,6 +318,7 @@ class HandoffCoordinator:
             self._input_enable_requested = False
             self._connected_at = None
             self._last_activity_at = self._clock()
+            self._assistant_playback_active = False
             self._handoff_timing_received = False
             self._seen_transcription_items.clear()
             self._handled_tool_calls.clear()
@@ -356,6 +358,8 @@ class HandoffCoordinator:
             now = self._clock()
             if now - self._connected_at >= max_duration_seconds:
                 return "max_duration"
+            if self._assistant_playback_active:
+                return None
             if self._last_activity_at is not None and now - self._last_activity_at >= idle_seconds:
                 return "idle_timeout"
             return None
@@ -477,6 +481,10 @@ class HandoffCoordinator:
             elif event_type == "session_configured":
                 self._session_configured = True
                 self._state = HandoffState.HOST_READY
+            if event_type == "playback_started":
+                self._assistant_playback_active = True
+            elif event_type == "playback_stopped":
+                self._assistant_playback_active = False
             if event_type in {
                 "fixture_submitted",
                 "speech_started",
@@ -641,6 +649,7 @@ class HandoffCoordinator:
         self._input_enable_requested = False
         self._connected_at = None
         self._last_activity_at = None
+        self._assistant_playback_active = False
         self._handoff_timing_received = False
         self._seen_transcription_items.clear()
         self._handled_tool_calls.clear()

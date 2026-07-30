@@ -106,17 +106,17 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F084 - Bridge the stock quote tool into Realtime", last_completed)
-        self.assertIn("EVAL_PASS: F084", last_completed)
+        self.assertIn("F085 - Keep Realtime idle timeout after playback", last_completed)
+        self.assertIn("EVAL_PASS: F085", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
-        self.assertIn("F078 is blocked", current_feature)
-        self.assertIn("F080 now owns the conservative correction", current_feature)
-        self.assertIn("No feature is currently in progress", current_feature)
-        self.assertIn("F084 is evaluator-approved", current_feature)
-        self.assertIn("No feature is selected", next_feature)
-        self.assertIn("dependent F079 remain explicitly deferred", next_feature)
+        self.assertIn("F079 is evaluator-approved", current_feature)
+        self.assertIn("F080 is evaluator-approved", current_feature)
+        self.assertIn("F084 remains evaluator-approved", current_feature)
+        self.assertIn("F085 is evaluator-approved", current_feature)
+        self.assertIn("No unfinished features remain", next_feature)
+        self.assertIn("all 85 feature entries", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
         self.assertIn("F061", known_issues)
@@ -234,7 +234,8 @@ class DocumentationTests(unittest.TestCase):
             "current audio turn",
             "Mandarin Chinese",
             "English receives English",
-            "REALTIME_OUTPUT_VOLUME=0.1",
+            "REALTIME_VOICE=alloy",
+            "REALTIME_OUTPUT_VOLUME=0.5",
             "REALTIME_SERVER_VAD_THRESHOLD=0.8",
             "REALTIME_INPUT_NOISE_REDUCTION=far_field",
             "playback-buffer",

@@ -25,19 +25,19 @@ python -m src.main --prepare-acknowledgement
 
 ## Wake acknowledgement playback benchmark
 
-To compare the current local `afplay` path before changing the player, run:
+To compare the legacy local `afplay` path with the active duration-bounded
+acknowledgement path, run:
 
 ```bash
 python -m src.main --benchmark-acknowledgement --benchmark-iterations 5
 ```
 
-The command plays the prepared acknowledgement once per trial. Run it first
-after a fresh terminal/service start, then repeat it without changing the
-output device. The first trial is labelled `cold_candidate`; later trials are
-labelled `warm_candidate`. Record the asset duration, process-start call time,
-process lifetime, total wall time, and derived overhead. The benchmark does
-not use the microphone, OpenAI, or the network and does not print the asset
-path or audio content.
+The command plays the prepared acknowledgement once per trial for each mode.
+The first trial in each mode is labelled `cold_candidate`; later trials are
+labelled `warm_candidate`. Record both mode summaries and
+`bounded_minus_legacy_median_total_wall_ms`. The benchmark does not use the
+microphone, OpenAI, or the network and does not print the asset path or audio
+content.
 
 `process_start_call_ms` measures only how long the `afplay` process creation
 call takes. `process_lifetime_ms` runs from process creation until `afplay`
@@ -45,6 +45,9 @@ exits and includes audio-device work, decoding, playback, buffering, and
 shutdown. `derived_overhead_ms` is total wall time minus metadata duration; it
 is not proven playback-start latency. Actual acoustic onset remains
 `unmeasured` unless a separate loopback measurement is performed.
+The bounded path passes the exact positive `afinfo` metadata duration to
+`afplay -t`; it does not shorten the accepted cue. The comparison is
+diagnostic and reports `slo=unset`.
 
 ## Wake acknowledgement overlap
 
@@ -144,7 +147,7 @@ collapses to only the final 240ms, record that as a regression.
 
 If a transcript is missing the first syllable, such as spoken `一加一等于几`
 being transcribed as `加一等于几`, inspect the preceding `armed_trigger` log.
-The normal expectation is that immediate speech after `在呢` retains its first
+The normal expectation is that immediate speech after `嗯` retains its first
 syllable in `tmp/input.wav`. Inspect the acknowledgement guard summary for a
 non-zero preserved count and the later `armed_trigger` for
 `baseline_ready=true`, `baseline_chunks`, and `baseline_seconds`.
@@ -187,10 +190,10 @@ ACK_GUARD_QUIET_RMS=900
 ACK_GUARD_MAX_BUFFER_SECONDS=1.50
 ```
 
-Manual case 1: say only `Hey Jarvis`, allow `在呢` to play, and remain silent.
+Manual case 1: say only `Hey Jarvis`, allow `嗯` to play, and remain silent.
 Confirm the guard summary is followed by `armed_summary ...
 result=no_speech_timeout` and no `State RECORDING` line. Manual case 2: say
-`Hey Jarvis`, then begin `一加一等于几` immediately after `在呢`. Confirm
+`Hey Jarvis`, then begin `一加一等于几` immediately after `嗯`. Confirm
 `tmp/input.wav` contains the full question under normal timing, the guard log
 reports any preserved boundary chunks, and `armed_trigger` shows
 `baseline_ready=true` before recording starts.
@@ -223,7 +226,7 @@ request cases behave unchanged. Then install `webrtcvad`, set
 2. Play unrelated background human speech without intentionally saying the wake
    phrase. There should be no wake, ARMED recording, chat, or TTS. If the wake
    model itself fires, capture both wake and ARMED VAD diagnostics.
-3. Say `Hey Jarvis` and ask a normal question shortly after `在呢`. The first
+3. Say `Hey Jarvis` and ask a normal question shortly after `嗯`. The first
    syllable should remain in `tmp/input.wav`; `armed_trigger` should show
    `baseline_ready=true`, `vad_ok=true`, and its VAD ratio.
 4. With `RECORDING_VAD_ENABLED=1`, first speak continuously until the
@@ -259,7 +262,7 @@ The MVP is acceptable when:
 
 | ID | Area | Steps | Expected result |
 | --- | --- | --- | --- |
-| M001 | Full MVP loop | Start `python -m src.main`, say `Hey Jarvis`, wait for the acknowledgement such as `在呢`, then ask `what is two plus two?` | Assistant wakes, plays acknowledgement, drains microphone residue, records, transcribes, answers, plays audio, and returns to `WAIT_WAKE`. |
+| M001 | Full MVP loop | Start `python -m src.main`, say `Hey Jarvis`, wait for the `嗯` acknowledgement, then ask `what is two plus two?` | Assistant wakes, plays acknowledgement, drains microphone residue, records, transcribes, answers, plays audio, and returns to `WAIT_WAKE`. |
 | M002 | Consecutive loops | After M001 completes, say `Hey Jarvis`, wait for acknowledgement, then ask `what is the capital of France?` without restarting. | Second loop completes and returns to `WAIT_WAKE`. |
 | M003 | Long question | Ask a 10-15 second question with natural speech. | Recording includes the full question and does not stop before the question is complete. |
 | M004 | Short question | Ask `Hey Jarvis, time?` or `Hey Jarvis, hello?` | Assistant records enough audio to transcribe or returns cleanly to `WAIT_WAKE` on empty transcription. |
@@ -294,7 +297,7 @@ The MVP is acceptable when:
 | M040 | Drain microphone during acknowledgement | Start the real assistant, wake it five times, and inspect each ACK_PLAYING sequence while the local acknowledgement plays. | Each sequence logs a completed playback microphone drain before the post-ACK boundary; playback-time chunks never enter the recorded WAV, no playback process is left running, and the post-ACK boundary starts from current rather than queued acknowledgement audio. |
 | M041 | Immediate speech after synchronized acknowledgement | On the real macOS path, say `Hey Jarvis` and begin `一加一等于几` immediately when the acknowledgement ends; repeat five times, then repeat once with silence and once with only a short click/tail sound. | Successful drains log `synchronized live handoff`; the full question prefix reaches `tmp/input.wav` without mandatory quiet suppression, five normal loops complete, and silence or a single tail sound returns locally without recording or OpenAI. |
 | M047 | Stable knowledge versus realtime boundary | With `OPENAI_API_KEY` configured, ask `中国古代人的语言交流跟现在中国哪个省份的方言类似？`, then ask another broad stable question such as `粤语为什么保留入声？`, and finally ask `今天有什么新闻`. | Stable questions receive concise qualified best-effort answers in Chinese and do not stop at an internet-required refusal merely because comparison or uncertainty is involved. The assistant does not claim it browsed or checked sources. The current-news question uses the existing structured realtime refusal/provider boundary rather than model memory. |
-| M057 | Realtime five-cycle acceptance | Set `BACKEND=realtime` and `REALTIME_OUTPUT_VOLUME=0.1`, launch once, click **Arm hands-free audio** once, and complete at least five real built-in-microphone/speaker wake cycles without another click. Across the cycles perform two-turn conversation, deliberately speak over a long answer, invoke `calculator`, and close using end phrase, idle timeout, explicit stop, or a bounded failure/cleanup path. After every close verify the Chrome microphone indicator clears and a new real `Hey Jarvis` still wakes. | Record per cycle: actual echo cancellation/noise suppression/auto gain/sample rate/channel count/output volume; wake-to-connected and response timing; self-echo false-interruption count; deliberate interruption result; errors; exit reason; microphone indicator cleared; and next-wake result. Pass requires 48 kHz mono with browser processing enabled on the tested Mac, no self-echo false interruption, prompt deliberate barge-in, bounded errors, and restoration to `WAIT_WAKE`. Do not record transcript text, credentials, or audio in committed evidence. If normal answers cancel themselves, lower `REALTIME_OUTPUT_VOLUME`; do not hide the failure or add client truncation. |
+| M057 | Realtime five-cycle acceptance | Set `BACKEND=realtime`, `REALTIME_VOICE=alloy`, and `REALTIME_OUTPUT_VOLUME=0.5`, launch once, click **Arm hands-free audio** once, and complete at least five real built-in-microphone/speaker wake cycles without another click. Across the cycles perform two-turn conversation, deliberately speak over a long answer, invoke `calculator`, and close using end phrase, idle timeout, explicit stop, or a bounded failure/cleanup path. After every close verify the Chrome microphone indicator clears and a new real `Hey Jarvis` still wakes. | Record per cycle: actual echo cancellation/noise suppression/auto gain/sample rate/channel count/output volume; wake-to-connected and response timing; self-echo false-interruption count; deliberate interruption result; errors; exit reason; microphone indicator cleared; and next-wake result. Pass requires 48 kHz mono with browser processing enabled on the tested Mac, no self-echo false interruption, prompt deliberate barge-in, bounded errors, and restoration to `WAIT_WAKE`. Do not record transcript text, credentials, or audio in committed evidence. If normal answers cancel themselves, lower `REALTIME_OUTPUT_VOLUME`; do not hide the failure or add client truncation. |
 | M067 | F073 Mac built-in-speaker echo acceptance | Use the Mac built-in microphone and speakers, set `REALTIME_INPUT_NOISE_REDUCTION=far_field` and a trial `REALTIME_OUTPUT_VOLUME=0.3`, then run one normal question followed by one long answer that you deliberately interrupt once. Headphones are a control only, not a pass. | Pass requires the normal answer to remain continuous with no playback-correlated false `host_speech_started`/cancel chain; the deliberate utterance must produce `host_speech_started`, cancel the active answer, and receive a continuation; sanitized evidence must include requested/actual echo cancellation, far-field reduction, output volume, playback-buffer start/stop, media cleanup, and restored wake ownership. Do not retain transcript text, audio, credentials, SDP, or provider bodies. |
 | M058 | Pipeline timing and current-turn language | Start with a fresh process. Ask `中国为什么参与朝鲜战争`, then `人脸识别的英文怎么读`, then `Why did China enter the Korean War?`. Inspect the successful loop logs after each answer. | The first answer is entirely concise Simplified Chinese. The second includes the requested English term or pronunciation but explains it in Chinese. The third is English even after Chinese history. Each loop logs ordered `pipeline_timing` stages and one `response_timing` summary; compare `recording`, `ready_to_play`, and the individual transcription/answer/TTS/playback durations to locate delay. No answer body, raw audio, API key, or provider secret appears in the timing lines. |
 | M059 | RT003 assisted near-end barge-in eval | Configure and launch `BACKEND=realtime`, click **Arm hands-free audio** once, use the built-in microphone/speaker without headphones, ensure the private `wake` fixture exists, and run `python -m src.evals.realtime_barge_in live`. Be ready to speak, then press Enter at the readiness gate; only then does the runner wake, establish the session, and promptly request the long answer without spending session idle time on operator coordination. After the exact `response.created` marker, wait until counting is audible and immediately speak one natural interruption utterance. That utterance doubles as audible confirmation, so there is no second terminal/chat round trip. | A passing product run observes real near-end speech, reports the old answer as `cancelled` within 1000ms, waits for the continuation to complete, performs bounded stop/cleanup, and restores `wake_owned` with the wake microphone open. Closed input, operator cancellation, an answer ending before valid near-end speech, any missing event, excessive latency, early session close, or cleanup failure exits non-zero and still saves a precise sanitized FAIL result under `tmp/realtime-evals/`; it must not be relabeled as passing. Same-Mac replay alone is not accepted as live-near-end evidence. |
@@ -305,11 +308,13 @@ The MVP is acceptable when:
 | M064 | RT004 automatic close and next-wake recovery eval | With fresh explicit microphone/OpenAI/cost authorization, launch and Arm the Realtime host once, ensure the private `wake` fixture exists, and run `python -m src.evals.realtime_close_recovery live` without speaking. | The command automatically connects session A, explicitly stops, proves `host_stopped` precedes `wake_microphone_reopened`, replays the same wake without another Arm action, connects a distinct session B, and repeats bounded cleanup to final `wake_owned`. Version 2 additionally requires one complete handoff timing report per session and returns both Web Audio subphase breakdowns plus the first-minus-second audio-analysis duration for a same-page cold-start comparison. Missing, stale, reused, misordered, malformed timing, timeout, concurrent-ownership, or cleanup evidence exits non-zero with sanitized FAIL evidence. |
 | M065 | Realtime semantic farewell closure | With fresh explicit microphone/OpenAI/cost authorization, start and Arm Realtime on the built-in microphone/speaker, wake once, and clearly say only `再见`. In separate sessions, mention or request the phrase without ending, such as `“再见”是什么意思` or `请说“再见”`. | The direct farewell produces `host_end_conversation_tool`, immediately enters the existing stop path, then records `host_stopped` and `wake_microphone_reopened` with final `wake_owned`; it does not wait for `idle_timeout` or deliver a substantive farewell reply. Mention/quotation requests remain active ordinary turns. Reports contain no transcript, audio, tool arguments, or credentials. |
 | M066 | Realtime current-turn bilingual response | With fresh explicit microphone/OpenAI/cost authorization, start and Arm Realtime on the built-in microphone/speaker. Wake once, wait for connection, ask one normal Mandarin Chinese question, then in the same session ask one normal English question, and finally say `再见`. | A human confirms the first answer is concise natural Simplified Chinese and the second answer is English despite the prior Chinese turn. The same session identity completes both response turns, farewell still closes through `host_end_conversation_tool`, and cleanup restores `wake_owned`. Durable evidence records only lifecycle order and the bounded human language verdict; it contains no transcript, answer, audio, tool content, or credential. |
-| M074 | Realtime audible input-ready handoff | Start and Arm Realtime on the Mac built-in microphone/speaker. Say `Hey Jarvis`, remain silent until the local “在呢” finishes, then immediately ask one normal question. Repeat three times, then end one session with `结束对话`. | No `host_speech_started` occurs before `host_connected`; each question begun after “在呢” receives one normal audible answer; evidence orders `handoff_queued -> host_session_configured -> ack_started -> ack_completed -> host_connected`; closing stops browser media before restoring `wake_owned`. Speech begun before “在呢” is outside this feature and need not be preserved. |
+| M074 | Realtime audible input-ready handoff | Start and Arm Realtime on the Mac built-in microphone/speaker. Say `Hey Jarvis`, remain silent until the local “嗯” finishes, then immediately ask one normal question. Repeat three times, then end one session with `结束对话`. | No `host_speech_started` occurs before `host_connected`; each question begun after “嗯” receives one normal audible answer; evidence orders `handoff_queued -> host_session_configured -> ack_started -> ack_completed -> host_connected`; closing stops browser media before restoring `wake_owned`. Speech begun before “嗯” is outside this feature and need not be preserved. |
+| M078 | Canonical acknowledgement recovery | Move an existing `var/ack.mp3` aside, run `python -m src.main --prepare-acknowledgement` without an OpenAI key or network access, compare the SHA-256 of `assets/wake_acknowledgement_alloy.mp3` and the restored runtime asset, then play it locally and complete one Realtime post-cue question. | Hashes match exactly; preparation reports 480 ms and the accepted digest; the already accepted `嗯` is clear and audible; the post-cue question receives one normal answer; corrupt, changed, excessive, or near-silent replacement fixtures are rejected without replacing a prior runtime asset. |
 | M081 | Realtime weather tool | With `BACKEND=realtime`, `WEATHER_PROVIDER=open-meteo`, and `DEFAULT_LOCATION=Singapore`, launch and Arm the host on the Mac built-in microphone/speaker. Wake once and ask `今天天气怎么样`; in the same session ask for tomorrow's weather in Tokyo, then end with `再见`. | The first turn invokes exactly one weather function with no explicit location and produces a concise Chinese Singapore forecast. The second uses Tokyo explicitly. Both answers preserve provider facts without invented fallback, the session remains usable between turns, sanitized evidence contains no location, answer, arguments, call ID, provider body, or credential, and ending restores `wake_owned`. |
 | M082 | Realtime local time tool | With `BACKEND=realtime`, launch and Arm the host on the Mac built-in microphone/speaker. Wake once and ask `现在几点`; ask one ordinary follow-up, then end with `再见`. | Exactly one argument-free local-time function returns a concise Chinese answer matching the host's local date/time/timezone without network access. Follow-up remains usable, sanitized evidence contains no answer, arguments, call ID, or transcript, and ending restores `wake_owned`. |
 | M083 | Realtime foreign-exchange tool | With `BACKEND=realtime` and `FX_PROVIDER=frankfurter`, launch and Arm the host on the Mac built-in microphone/speaker. Wake once and ask `100 美元换新币`; ask one ordinary follow-up, then end with `再见`. | Exactly one FX function returns a concise Chinese USD-to-SGD conversion using the provider-backed reference rate, including its reference date and non-bank/non-trade caveat. Follow-up remains usable, sanitized evidence contains no amount, currencies, rate, answer, arguments, call ID, provider body, or credential, and ending restores `wake_owned`. |
 | M084 | Realtime stock quote tool | With `BACKEND=realtime`, `STOCK_PROVIDER=finnhub`, and `FINNHUB_API_KEY` configured, launch and Arm the host on the Mac built-in microphone/speaker. Wake once and ask `AAPL 现在多少钱`; ask one ordinary follow-up, then end with `再见`. | Exactly one stock function returns a concise Chinese AAPL quote backed by Finnhub, including quote time, delayed-data warning, and non-trading-advice caveat. Follow-up remains usable, sanitized evidence contains no ticker, price, answer, arguments, call ID, provider body, or credential, and ending restores `wake_owned`. |
+| M080 | Shared-alloy acknowledgement and Realtime voice | Use checked-in `REALTIME_VOICE=alloy`, `REALTIME_OUTPUT_VOLUME=0.5`, and the accepted local alloy `嗯` asset on the Mac built-in microphone/speaker. Wake once, confirm the cue is understandable, ask for a normal answer, deliberately interrupt a longer answer, then end semantically and wake again. | The local cue remains understandable; the following Realtime voice is perceptually closer and usable at gain 0.5 without claiming identical synthesis or universal loudness; deliberate interruption works; browser media closes before wake ownership returns; no rejected 3.0-speed cue is installed. |
 
 For M057, `/api/report` is the default evidence source. It is capped at 200
 sanitized events and omits transcript, audio, credentials, tool arguments and

@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import hashlib
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -40,6 +41,7 @@ from src.config import (
     DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
     DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
     DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS,
     DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
     DEFAULT_WAKE_DEBUG,
     DEFAULT_WAKE_BACKEND,
@@ -197,7 +199,12 @@ class ConfigTests(unittest.TestCase):
         self.assertIsNone(settings.finnhub_api_key)
         self.assertEqual(settings.wake_acknowledgement_enabled, DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED)
         self.assertEqual(settings.wake_acknowledgement_text, DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT)
+        self.assertEqual(DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT, "嗯")
         self.assertEqual(settings.wake_acknowledgement_audio_path, DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH)
+        self.assertEqual(
+            settings.wake_acknowledgement_max_duration_seconds,
+            DEFAULT_WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS,
+        )
         self.assertEqual(settings.wake_acknowledgement_drain_seconds, DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS)
         self.assertTrue(settings.ack_guard_enabled)
         self.assertEqual(settings.ack_guard_min_quiet_seconds, 0.16)
@@ -257,6 +264,7 @@ class ConfigTests(unittest.TestCase):
                 "WAKE_ACKNOWLEDGEMENT_ENABLED": "0",
                 "WAKE_ACKNOWLEDGEMENT_TEXT": "yes?",
                 "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "tmp/custom-ack.mp3",
+                "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS": "0.7",
                 "WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS": "0.8",
                 "ACK_GUARD_ENABLED": "0",
                 "ACK_GUARD_MIN_QUIET_SECONDS": "0.2",
@@ -316,6 +324,7 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(settings.wake_acknowledgement_enabled)
         self.assertEqual(settings.wake_acknowledgement_text, "yes?")
         self.assertEqual(settings.wake_acknowledgement_audio_path, Path("tmp/custom-ack.mp3"))
+        self.assertEqual(settings.wake_acknowledgement_max_duration_seconds, 0.7)
         self.assertEqual(settings.wake_acknowledgement_drain_seconds, 0.8)
         self.assertFalse(settings.ack_guard_enabled)
         self.assertEqual(settings.ack_guard_min_quiet_seconds, 0.2)
@@ -388,6 +397,7 @@ class ConfigTests(unittest.TestCase):
                     "WAKE_ACKNOWLEDGEMENT_ENABLED": "maybe",
                     "WAKE_ACKNOWLEDGEMENT_TEXT": "",
                     "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": "",
+                    "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS": "0",
                     "WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS": "-1",
                     "WAKE_DEBUG": "maybe",
                     "POST_PLAYBACK_WAKE_COOLDOWN_SECONDS": "2",
@@ -429,6 +439,10 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("WAKE_ACKNOWLEDGEMENT_ENABLED must be a boolean value", message)
         self.assertIn("WAKE_ACKNOWLEDGEMENT_TEXT must not be empty", message)
         self.assertIn("WAKE_ACKNOWLEDGEMENT_AUDIO_PATH must not be empty", message)
+        self.assertIn(
+            "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS must be at least 0.1",
+            message,
+        )
         self.assertIn("WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS must be at least 0.0", message)
         self.assertIn("WAKE_DEBUG must be a boolean value", message)
         self.assertIn("POST_PLAYBACK_QUIET_SECONDS must be at least 0.0", message)
@@ -456,6 +470,24 @@ class ConfigTests(unittest.TestCase):
                 with self.assertRaises(ConfigError) as caught:
                     load_settings(env={"TTS_SPEED": invalid_speed}, env_file=None)
 
+                self.assertIn(expected_message, str(caught.exception))
+
+    def test_acknowledgement_duration_range_is_validated(self):
+        for key, value, expected_message in (
+            (
+                "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS",
+                "0.09",
+                "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS must be at least 0.1",
+            ),
+            (
+                "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS",
+                "5.1",
+                "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS must be at most 5.0",
+            ),
+        ):
+            with self.subTest(key=key, value=value):
+                with self.assertRaises(ConfigError) as caught:
+                    load_settings(env={key: value}, env_file=None)
                 self.assertIn(expected_message, str(caught.exception))
 
     def test_blank_tts_instructions_are_ignored(self):
@@ -576,6 +608,70 @@ class ConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             ack_path = Path(tmp_dir) / "ack.mp3"
             ack_path.write_bytes(b"ack")
+            accepted_hash = hashlib.sha256(b"ack").hexdigest()
+            with patch("src.config.DEFAULT_WAKE_ACKNOWLEDGEMENT_SHA256", accepted_hash):
+                report = collect_diagnostics(
+                    env={
+                        "OPENAI_API_KEY": "sk-test",
+                        "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": str(ack_path),
+                    },
+                    env_file=None,
+                    python_version=(3, 12),
+                    afplay_path="/usr/bin/afplay",
+                    dependency_modules={"json": "json"},
+                    wake_word_model_paths={},
+                    acknowledgement_duration_reader=lambda path: 480,
+                    acknowledgement_hash_reader=lambda path: accepted_hash,
+                )
+
+        statuses = {check.name: check.status for check in report.checks}
+        messages = {check.name: check.message for check in report.checks}
+        self.assertEqual(statuses["wake_acknowledgement_audio"], "ok")
+        self.assertIn("480 ms", messages["wake_acknowledgement_audio"])
+        self.assertIn("800 ms", messages["wake_acknowledgement_audio"])
+        self.assertIn("SHA-256 matches", messages["wake_acknowledgement_audio"])
+        self.assertNotIn(str(ack_path), messages["wake_acknowledgement_audio"])
+
+    def test_diagnostics_reject_unreadable_or_excessive_acknowledgement_duration(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "private-ack.mp3"
+            ack_path.write_bytes(b"ack")
+            base_kwargs = {
+                "env": {
+                    "OPENAI_API_KEY": "sk-test",
+                    "WAKE_ACKNOWLEDGEMENT_AUDIO_PATH": str(ack_path),
+                    "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS": "0.8",
+                },
+                "env_file": None,
+                "python_version": (3, 12),
+                "afplay_path": "/usr/bin/afplay",
+                "dependency_modules": {"json": "json"},
+                "wake_word_model_paths": {},
+            }
+            excessive = collect_diagnostics(
+                **base_kwargs,
+                acknowledgement_duration_reader=lambda path: 801,
+            )
+            unreadable = collect_diagnostics(
+                **base_kwargs,
+                acknowledgement_duration_reader=lambda path: (_ for _ in ()).throw(
+                    RuntimeError("private detail")
+                ),
+            )
+
+        for report in (excessive, unreadable):
+            check = next(
+                item for item in report.checks if item.name == "wake_acknowledgement_audio"
+            )
+            self.assertEqual(check.status, "error")
+            self.assertIn("--prepare-acknowledgement", check.message)
+            self.assertNotIn("private-ack", check.message)
+            self.assertNotIn("private detail", check.message)
+
+    def test_diagnostics_reject_nonaccepted_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "private-ack.mp3"
+            ack_path.write_bytes(b"ack")
             report = collect_diagnostics(
                 env={
                     "OPENAI_API_KEY": "sk-test",
@@ -586,10 +682,16 @@ class ConfigTests(unittest.TestCase):
                 afplay_path="/usr/bin/afplay",
                 dependency_modules={"json": "json"},
                 wake_word_model_paths={},
+                acknowledgement_duration_reader=lambda path: 480,
+                acknowledgement_hash_reader=lambda path: hashlib.sha256(b"changed").hexdigest(),
             )
 
-        statuses = {check.name: check.status for check in report.checks}
-        self.assertEqual(statuses["wake_acknowledgement_audio"], "ok")
+        check = next(
+            item for item in report.checks if item.name == "wake_acknowledgement_audio"
+        )
+        self.assertEqual(check.status, "error")
+        self.assertIn("does not match the accepted", check.message)
+        self.assertNotIn(str(ack_path), check.message)
 
     def test_diagnostics_accept_present_wake_word_model_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

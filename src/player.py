@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 import math
 import re
 import statistics
@@ -108,11 +109,37 @@ class MacOSPlayer:
     def play(self, path: str | Path) -> None:
         play_audio(path, afplay_path=self.afplay_path, runner=self._runner, logger=self._logger)
 
+    def play_acknowledgement(self, path: str | Path) -> None:
+        """Play the complete cue through its duration-bounded process path."""
+
+        self.start_acknowledgement(path).wait()
+
     def start(self, path: str | Path) -> PlaybackHandle:
         """Start playback without blocking so callers can service microphone input."""
 
         audio_path = _require_audio_file(path)
-        command = [self.afplay_path, str(audio_path)]
+        return self._start_command([self.afplay_path, str(audio_path)])
+
+    def start_acknowledgement(self, path: str | Path) -> PlaybackHandle:
+        """Start the cue with an exact metadata-duration afplay limit."""
+
+        audio_path = _require_audio_file(path)
+        duration_ms = self.duration_ms(audio_path)
+        if (
+            isinstance(duration_ms, bool)
+            or not isinstance(duration_ms, int)
+            or not 1 <= duration_ms <= MAX_BENCHMARK_TIMING_MS
+        ):
+            raise PlaybackError("Acknowledgement duration was outside the supported range")
+        command = [
+            self.afplay_path,
+            "-t",
+            f"{duration_ms / 1000:.3f}",
+            str(audio_path),
+        ]
+        return self._start_command(command)
+
+    def _start_command(self, command: list[str]) -> PlaybackHandle:
         try:
             process = self._process_factory(
                 command,
@@ -138,13 +165,13 @@ class MacOSPlayer:
             logger=self._logger,
         )
 
-
 def benchmark_audio_playback(
     player: MacOSPlayer,
     path: str | Path,
     *,
     iterations: int = 5,
     clock: Callable[[], float] = time.monotonic,
+    bounded_acknowledgement: bool = False,
 ) -> PlaybackBenchmark:
     """Measure observable afplay process phases without inferring audible onset."""
 
@@ -169,10 +196,13 @@ def benchmark_audio_playback(
         raise PlaybackError("Acknowledgement benchmark asset duration was outside the supported range")
 
     trials: list[PlaybackBenchmarkTrial] = []
+    start_playback = (
+        player.start_acknowledgement if bounded_acknowledgement else player.start
+    )
     for index in range(1, iterations + 1):
         before_start = _benchmark_clock_value(clock)
         try:
-            handle = player.start(audio_path)
+            handle = start_playback(audio_path)
         except PlaybackError as exc:
             raise PlaybackError(f"Acknowledgement benchmark trial {index} could not start") from exc
         after_start = _benchmark_clock_value(clock)
@@ -291,6 +321,17 @@ def audio_duration_ms(
     if not 1 <= duration_ms <= 60_000:
         raise PlaybackError("Audio duration was outside the supported range")
     return duration_ms
+
+
+def audio_sha256(path: str | Path) -> str:
+    """Return a deterministic digest without exposing audio bytes or paths."""
+
+    audio_path = _require_audio_file(path)
+    digest = hashlib.sha256()
+    with audio_path.open("rb") as audio_file:
+        for chunk in iter(lambda: audio_file.read(64 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _require_audio_file(path: str | Path) -> Path:

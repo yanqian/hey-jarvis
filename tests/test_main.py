@@ -3,10 +3,11 @@ import struct
 import tempfile
 import unittest
 import wave
+import hashlib
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from src.config import (
     DEFAULT_CHAT_MODEL,
@@ -18,6 +19,7 @@ from src.config import (
     DEFAULT_TTS_VOICE,
     DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
     DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS,
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS,
     DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT,
     DEFAULT_WAKE_BACKEND,
     DEFAULT_WAKE_INFERENCE_FRAMEWORK,
@@ -135,16 +137,6 @@ class FakeStateMachine:
         raise KeyboardInterrupt
 
 
-class FakePreparationClient:
-    def __init__(self):
-        self.tts_calls = []
-
-    def text_to_speech(self, text, output_path):
-        self.tts_calls.append((text, Path(output_path)))
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(output_path).write_bytes(b"ack")
-
-
 EVENTS = []
 
 
@@ -214,10 +206,14 @@ class MainRuntimeTests(unittest.TestCase):
         text = output.getvalue()
         self.assertEqual(result, 0)
         self.assertIn("asset_duration_ms=480", text)
+        self.assertIn("mode=legacy", text)
+        self.assertIn("mode=bounded", text)
         self.assertIn("sample=cold_candidate", text)
         self.assertIn("process_start_call_ms=3", text)
         self.assertIn("process_lifetime_ms=497", text)
         self.assertIn("derived_overhead_ms=20", text)
+        self.assertIn("bounded_minus_legacy_median_total_wall_ms=0", text)
+        self.assertIn("slo=unset", text)
         self.assertIn("acoustic_onset=unmeasured", text)
         self.assertNotIn("secret-ack", text)
         self.assertNotIn("嗯", text)
@@ -230,26 +226,155 @@ class MainRuntimeTests(unittest.TestCase):
             )
         run.assert_called_once_with(iterations=3)
 
-    def test_prepare_acknowledgement_uses_existing_tts_boundary_once(self):
-        client = FakePreparationClient()
-
+    def test_prepare_acknowledgement_installs_validated_canonical_asset(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "accepted.mp3"
+            source_path.write_bytes(b"accepted-ack")
             ack_path = Path(tmp_dir) / "ack.mp3"
             output = StringIO()
-            with redirect_stdout(output):
-                result = run_prepare_acknowledgement(
-                    settings=make_settings(
-                        wake_acknowledgement_enabled=True,
-                        wake_acknowledgement_audio_path=ack_path,
-                    ),
-                    openai_client=client,
-                )
+            player = Mock()
+            player.duration_ms.return_value = 480
+            expected_sha256 = hashlib.sha256(b"accepted-ack").hexdigest()
+            result = run_prepare_acknowledgement(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=ack_path,
+                ),
+                player=player,
+                source_path=source_path,
+                expected_sha256=expected_sha256,
+                output=output,
+            )
 
             self.assertEqual(result, 0)
-            self.assertTrue(ack_path.is_file())
+            self.assertEqual(ack_path.read_bytes(), b"accepted-ack")
+            temporary_path = player.duration_ms.call_args.args[0]
+            self.assertNotEqual(temporary_path, ack_path)
+            self.assertFalse(temporary_path.exists())
 
-        self.assertEqual(client.tts_calls, [(DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT, ack_path)])
-        self.assertIn("Prepared wake acknowledgement audio:", output.getvalue())
+        self.assertIn("duration_ms=480", output.getvalue())
+        self.assertIn(f"sha256={expected_sha256}", output.getvalue())
+        self.assertIn(
+            f"configured_maximum_ms={round(DEFAULT_WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS * 1000)}",
+            output.getvalue(),
+        )
+
+    def test_prepare_acknowledgement_preserves_prior_asset_on_duration_failure(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "accepted.mp3"
+            source_path.write_bytes(b"accepted-ack")
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"prior-ack")
+            output = StringIO()
+            player = Mock()
+            player.duration_ms.return_value = 801
+            expected_sha256 = hashlib.sha256(b"accepted-ack").hexdigest()
+
+            result = run_prepare_acknowledgement(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=ack_path,
+                ),
+                player=player,
+                source_path=source_path,
+                expected_sha256=expected_sha256,
+                output=output,
+            )
+
+            self.assertEqual(result, 1)
+            self.assertEqual(ack_path.read_bytes(), b"prior-ack")
+            self.assertIn("prior asset was preserved", output.getvalue())
+
+    def test_prepare_acknowledgement_rejects_nonaccepted_asset(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "accepted.mp3"
+            source_path.write_bytes(b"near-silent-ack")
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"prior-ack")
+            output = StringIO()
+            player = Mock()
+            player.duration_ms.return_value = 480
+
+            result = run_prepare_acknowledgement(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=ack_path,
+                ),
+                player=player,
+                source_path=source_path,
+                output=output,
+            )
+
+            self.assertEqual(result, 1)
+            self.assertEqual(ack_path.read_bytes(), b"prior-ack")
+            self.assertIn("does not match the accepted clear audible cue", output.getvalue())
+
+    def test_prepare_acknowledgement_preserves_prior_asset_when_canonical_source_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"prior-ack")
+            output = StringIO()
+
+            result = run_prepare_acknowledgement(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=ack_path,
+                ),
+                player=Mock(),
+                source_path=Path(tmp_dir) / "missing.mp3",
+                output=output,
+            )
+
+            self.assertEqual(result, 1)
+            self.assertEqual(ack_path.read_bytes(), b"prior-ack")
+            self.assertIn("failed during canonical_source", output.getvalue())
+            self.assertNotIn(str(ack_path), output.getvalue())
+
+    def test_prepare_acknowledgement_preserves_prior_asset_on_copy_failure(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "accepted.mp3"
+            source_path.write_bytes(b"accepted-ack")
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"prior-ack")
+            output = StringIO()
+
+            with patch("src.main.shutil.copyfile", side_effect=OSError("private detail")):
+                result = run_prepare_acknowledgement(
+                    settings=make_settings(wake_acknowledgement_audio_path=ack_path),
+                    player=Mock(),
+                    source_path=source_path,
+                    expected_sha256=hashlib.sha256(b"accepted-ack").hexdigest(),
+                    output=output,
+                )
+
+            self.assertEqual(result, 1)
+            self.assertEqual(ack_path.read_bytes(), b"prior-ack")
+            self.assertIn("failed during canonical_copy", output.getvalue())
+            self.assertNotIn("private detail", output.getvalue())
+
+    def test_prepare_acknowledgement_preserves_prior_asset_on_atomic_install_failure(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "accepted.mp3"
+            source_path.write_bytes(b"accepted-ack")
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"prior-ack")
+            output = StringIO()
+            player = Mock()
+            player.duration_ms.return_value = 480
+
+            with patch("src.main.os.replace", side_effect=OSError("private detail")):
+                result = run_prepare_acknowledgement(
+                    settings=make_settings(wake_acknowledgement_audio_path=ack_path),
+                    player=player,
+                    source_path=source_path,
+                    expected_sha256=hashlib.sha256(b"accepted-ack").hexdigest(),
+                    output=output,
+                )
+
+            self.assertEqual(result, 1)
+            self.assertEqual(ack_path.read_bytes(), b"prior-ack")
+            self.assertIn("failed during atomic_install", output.getvalue())
+            self.assertNotIn("private detail", output.getvalue())
 
     def test_text_debug_prints_router_output_without_runtime_backends(self):
         output = StringIO()

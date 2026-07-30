@@ -742,7 +742,9 @@ class VoiceAssistantStateMachine:
         return None
 
     def _play_wake_acknowledgement(self) -> _AckPlaybackDrainResult:
-        start_playback = getattr(self.player, "start", None)
+        start_playback = getattr(self.player, "start_acknowledgement", None)
+        if not callable(start_playback):
+            start_playback = getattr(self.player, "start", None)
         if not callable(start_playback):
             self.player.play(self.settings.wake_acknowledgement_audio_path)
             self._logger.info(

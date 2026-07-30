@@ -14,7 +14,9 @@ class RealtimeConfigTests(unittest.TestCase):
     def test_pipeline_is_default_and_ignores_invalid_inactive_realtime_values(self):
         defaults = load_settings(env={}, env_file=None)
         self.assertEqual(defaults.backend, "pipeline")
-        self.assertEqual(defaults.realtime_output_volume, 0.1)
+        self.assertEqual(defaults.realtime_voice, "alloy")
+        self.assertEqual(defaults.realtime_output_volume, 0.5)
+        self.assertEqual(defaults.realtime_idle_timeout_seconds, 60.0)
         self.assertEqual(defaults.realtime_server_vad_threshold, 0.8)
         self.assertEqual(defaults.realtime_input_noise_reduction, "far_field")
         settings = load_settings(
@@ -118,6 +120,8 @@ class RealtimeConfigTests(unittest.TestCase):
             wake_word_model_paths={},
         )
         checks = {check.name: check for check in realtime.checks}
+        self.assertIn("voice=alloy", checks["realtime:model-voice"].message)
+        self.assertIn("output_volume=0.5", checks["realtime:model-voice"].message)
         for name in (
             "realtime:host-assets",
             "realtime:model-voice",

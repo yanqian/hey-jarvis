@@ -12,9 +12,9 @@ diagnostics.
 | `OPENAI_API_KEY` | placeholder | OpenAI credential for real transcription, chat, TTS, and Realtime. |
 | `BACKEND` | `pipeline` | `pipeline` or opt-in `realtime`. |
 | `REALTIME_MODEL` | `gpt-realtime-2.1` | Realtime model. |
-| `REALTIME_VOICE` | `marin` | Realtime output voice. |
-| `REALTIME_OUTPUT_VOLUME` | `0.1` | Browser playback gain from `0.1` to `1.0`. |
-| `REALTIME_IDLE_TIMEOUT_SECONDS` | `15` | Close an inactive session. |
+| `REALTIME_VOICE` | `alloy` | Realtime output voice, aligned with the local acknowledgement profile. |
+| `REALTIME_OUTPUT_VOLUME` | `0.5` | Browser playback gain from `0.1` to `1.0`; target-Mac profile, not a universal loudness guarantee. |
+| `REALTIME_IDLE_TIMEOUT_SECONDS` | `60` | Close an inactive session after playback finishes; active assistant playback is protected. |
 | `REALTIME_MAX_DURATION_SECONDS` | `600` | Hard session-duration bound. |
 | `REALTIME_SERVER_VAD_ENABLED` | `1` | Enable server turn detection. |
 | `REALTIME_SERVER_VAD_THRESHOLD` | `0.8` | Server speech activation threshold. |
@@ -26,8 +26,10 @@ diagnostics.
 | `REALTIME_BRIDGE_HOST` | `127.0.0.1` | Loopback host; keep local. |
 | `REALTIME_BRIDGE_PORT` | `8770` | Loopback host port. |
 
-`REALTIME_OUTPUT_VOLUME=0.1` remains the checked-in conservative gain while
-F073 validates a louder built-in-speaker level. The built-in Mac profile uses
+The shared target-Mac profile uses `alloy` for both the prepared local cue and
+Realtime output, with checked-in browser gain `0.5`. Separate synthesis models
+and playback paths mean the voices are perceptually closer, not identical.
+The built-in Mac profile uses
 `REALTIME_INPUT_NOISE_REDUCTION=far_field`; a close headset microphone should
 use `near_field`. The browser prefers standardized all-system-audio echo
 cancellation when advertised and otherwise requires ordinary echo
@@ -47,8 +49,9 @@ cancellation. Re-run manual acceptance if room, device, or volume changes.
 | `VAD_MODE` | `2` | WebRTC VAD aggressiveness, `0` through `3`. |
 | `WAKE_DEBUG` | `0` | Log wake score fields during normal listening. |
 | `WAKE_ACKNOWLEDGEMENT_ENABLED` | `1` | Play the prepared acknowledgement after wake. |
-| `WAKE_ACKNOWLEDGEMENT_TEXT` | `在呢` | Text used to generate acknowledgement audio. |
+| `WAKE_ACKNOWLEDGEMENT_TEXT` | `嗯` | Display and cancellation-cleanup identity for the accepted ready cue. |
 | `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` | `var/ack.mp3` | Prepared local file. |
+| `WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS` | `0.8` | Maximum accepted prepared cue duration. |
 | `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS` | `0.35` | Legacy fixed drain when guarding is disabled. |
 | `WAKE_CONFIRMATION_FRAMES` | `2` | Consecutive positive wake frames required. |
 
@@ -65,11 +68,21 @@ Acknowledgement guarding and post-playback suppression:
 | `POST_PLAYBACK_QUIET_RMS` | `500` |
 | `POST_PLAYBACK_MAX_SUPPRESSION_SECONDS` | `6.0` |
 
-The asynchronous `afplay` path drains microphone input while acknowledgement
+The acknowledgement-only asynchronous `afplay` path uses the exact positive
+`afinfo` metadata duration as its `-t` limit; normal answer playback remains
+unbounded and unchanged. Microphone input is drained while acknowledgement
 audio plays. A zero-overflow drain can preserve a bounded tail for ARMED
 pre-roll; playback-only audio cannot trigger recording. Unsafe handoffs use the
 quiet boundary. A question must continue after acknowledgement playback when
 the hardware path has no acoustic echo cancellation.
+
+`--prepare-acknowledgement` requires no OpenAI key or network call. It copies
+the user-accepted canonical asset from
+`assets/wake_acknowledgement_alloy.mp3` into a same-directory temporary file,
+checks positive bounded duration with `afinfo`, requires the exact SHA-256 of
+the accepted clear audible cue, and atomically replaces the configured runtime
+asset only after validation. Missing-source, hash, duration, copy, or install
+failure preserves the prior asset.
 
 ## ARMED and recording
 

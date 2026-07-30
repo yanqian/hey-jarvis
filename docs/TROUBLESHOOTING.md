@@ -44,13 +44,18 @@ scores.
 
 ### Acknowledgement audio is missing
 
-Set the OpenAI key, then run:
+Restore the checked-in accepted asset without an OpenAI key or network call:
 
 ```bash
 python -m src.main --prepare-acknowledgement
 ```
 
-The default `wake_acknowledgement_audio` path is `var/ack.mp3`.
+The canonical source is `assets/wake_acknowledgement_alloy.mp3` and the default
+runtime path is `var/ack.mp3`. Preparation and the
+`wake_acknowledgement_audio` diagnostic validate duration plus the exact
+accepted SHA-256 before atomic installation; a missing, corrupt, changed,
+excessive, or near-silent replacement preserves the prior runtime asset.
+`--diagnose` reports the bounded duration and integrity status.
 
 ## Microphone and wake word
 
@@ -105,6 +110,12 @@ microphone and reduce background noise.
 
 Run diagnostics and confirm `afplay` is available. The recovery and fake smoke
 paths do not require speakers.
+
+Acknowledgement playback reads its duration through `afinfo` and invokes
+`afplay -t` with that exact value. A duration-read, start, or runtime failure
+fails closed before Realtime input is enabled. Normal answer playback does not
+use this time limit. Use `--benchmark-acknowledgement` for the privacy-safe
+legacy/bounded comparison; acoustic onset remains unmeasured.
 
 If playback residue retriggers wake detection, increase
 `POST_PLAYBACK_WAKE_COOLDOWN_SECONDS` or `POST_PLAYBACK_QUIET_SECONDS`

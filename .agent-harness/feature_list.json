@@ -1760,13 +1760,13 @@
     {
       "id": "F078",
       "title": "Make the short acknowledgement reproducible",
-      "description": "Align active defaults with the current 嗯 acknowledgement and add acknowledgement-specific TTS and duration validation so preparation cannot silently install a long ready cue.",
+      "description": "Promote the accepted 480 ms alloy 嗯 to a canonical project asset and validate duration plus its exact accepted SHA-256 before atomic runtime installation.",
       "acceptance": [
-        "The checked-in active default and operator guidance use 嗯 while preserving historical evidence, and acknowledgement-specific TTS speed plus maximum-duration settings are validated independently from normal answer TTS settings.",
-        "The preparation command generates to a temporary file, measures duration through the supported macOS audio metadata boundary, and atomically installs the asset only when its duration is positive and within the configured ceiling; generation or validation failure preserves the prior asset.",
-        "Runtime diagnostics report a bounded acknowledgement duration status and actionable regeneration guidance without exposing audio content or unrelated configuration secrets.",
-        "Focused config/OpenAI/preparation/player/diagnostic/documentation tests, full project tests, pipeline and Realtime fake smokes, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing normal answer voice/speed, Realtime input gating, or media processing.",
-        "The target Mac prepares and plays a natural audible 嗯 within the configured duration ceiling, and a user-led Realtime check confirms the cue remains understandable and the post-cue question receives a normal answer."
+        "The exact user-accepted 480 ms alloy 嗯 is tracked as a canonical project asset while the rejected 3.0-speed, quiet, near-silent, and muffled candidates remain failure evidence and are never installed.",
+        "The preparation command requires no OpenAI credential or network call, copies the canonical asset to a same-directory temporary file, validates positive bounded duration and the exact accepted SHA-256 digest, and atomically installs it only after both checks pass.",
+        "Missing, corrupt, changed, excessive-duration, near-silent replacement, copy, hash, or install failure preserves the prior runtime asset and produces actionable privacy-safe diagnostics without audio content, paths, credentials, or provider details.",
+        "Focused config/preparation/player/diagnostic/documentation tests, full project tests, pipeline and Realtime fake smokes, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without changing normal answer TTS, Realtime input gating, media processing, or playback architecture.",
+        "The target Mac prepares the canonical asset with an exact source/runtime hash match, plays the already user-accepted clear audible 嗯, and a user-led Realtime check confirms the post-cue question receives a normal answer."
       ],
       "evals": [
         {
@@ -1777,10 +1777,10 @@
           ]
         }
       ],
-      "passes": false,
-      "status": "blocked",
-      "attempts": 1,
-      "last_error": "User rejected the 3.0-speed 384 ms candidate as too fast to understand. F080 supersedes that candidate with a conservative shared-alloy voice profile before F078 can be reconsidered.",
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
       "priority": "P2",
       "depends_on": [
         "F076",
@@ -1808,9 +1808,9 @@
           ]
         }
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
       "last_error": "",
       "priority": "P2",
       "depends_on": [
@@ -1838,9 +1838,9 @@
           ]
         }
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P2",
       "depends_on": [
@@ -1967,6 +1967,27 @@
       "depends_on": [
         "F026",
         "F081"
+      ]
+    },
+    {
+      "id": "F085",
+      "title": "Keep Realtime idle timeout after playback",
+      "description": "Prevent Realtime idle closure while assistant audio is still playing and provide a 60-second post-playback conversation window before clean wake recovery.",
+      "acceptance": [
+        "The default REALTIME_IDLE_TIMEOUT_SECONDS is 60 while valid operator overrides remain supported and the maximum session duration remains greater than the idle timeout.",
+        "Assistant playback start suppresses idle timeout without suppressing the hard maximum-duration bound, repeated playback-start events are safe, and delayed or missing playback-stop cannot cause a mid-answer idle close.",
+        "A confirmed playback stop restarts the full idle window; ordinary post-playback inactivity still closes with idle_timeout, tears browser media down, and restores wake ownership.",
+        "Playback state resets across handoff cleanup and a fresh session, while semantic farewell, explicit stop, transport-error cleanup, tool execution, privacy, and sanitized reporting remain unchanged.",
+        "Focused configuration, coordinator, lifecycle, and documentation tests plus full project tests, Realtime fake smoke, and final ./init.sh pass without live network, browser permission, microphone, or speaker."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F054",
+        "F073"
       ]
     }
   ]

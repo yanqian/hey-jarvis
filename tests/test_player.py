@@ -2,6 +2,7 @@ import logging
 import subprocess
 import tempfile
 import unittest
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,12 +10,21 @@ from src.player import (
     MacOSPlayer,
     PlaybackError,
     audio_duration_ms,
+    audio_sha256,
     benchmark_audio_playback,
     play_audio,
 )
 
 
 class PlayerTests(unittest.TestCase):
+    def test_audio_sha256_reports_exact_digest(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            audio_path = Path(tmp_dir) / "ack.mp3"
+            audio_path.write_bytes(b"fake-mp3")
+            digest = audio_sha256(audio_path)
+
+        self.assertEqual(digest, hashlib.sha256(b"fake-mp3").hexdigest())
+
     def test_benchmark_separates_observable_process_phases(self):
         class FakeHandle:
             def wait(self):
@@ -62,6 +72,42 @@ class PlayerTests(unittest.TestCase):
         self.assertEqual(result.trials[1].process_lifetime_ms, 478)
         self.assertEqual(result.median_total_wall_ms, 490)
         self.assertEqual(result.median_derived_overhead_ms, 10)
+
+    def test_bounded_benchmark_uses_acknowledgement_start_path(self):
+        class FakeHandle:
+            def wait(self):
+                return None
+
+        class FakePlayer:
+            def __init__(self):
+                self.start_calls = 0
+                self.bounded_calls = 0
+
+            def duration_ms(self, path):
+                return 480
+
+            def start(self, path):
+                self.start_calls += 1
+                return FakeHandle()
+
+            def start_acknowledgement(self, path):
+                self.bounded_calls += 1
+                return FakeHandle()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            audio_path = Path(tmp_dir) / "ack.mp3"
+            audio_path.write_bytes(b"fake-mp3")
+            player = FakePlayer()
+            benchmark_audio_playback(
+                player,
+                audio_path,
+                iterations=1,
+                clock=iter((0.0, 0.001, 0.500)).__next__,
+                bounded_acknowledgement=True,
+            )
+
+        self.assertEqual(player.start_calls, 0)
+        self.assertEqual(player.bounded_calls, 1)
 
     def test_benchmark_rejects_invalid_iterations_and_unsafe_timings(self):
         class FakeHandle:
@@ -168,6 +214,44 @@ class PlayerTests(unittest.TestCase):
         self.assertEqual(calls[0][1]["stdout"], subprocess.PIPE)
         self.assertEqual(calls[0][1]["stderr"], subprocess.PIPE)
         self.assertTrue(calls[0][1]["text"])
+
+    def test_acknowledgement_start_uses_exact_metadata_duration_limit(self):
+        calls = []
+
+        class FakeProcess:
+            returncode = 0
+
+            def poll(self):
+                return 0
+
+            def communicate(self):
+                return ("", "")
+
+        def fake_runner(command, **kwargs):
+            return SimpleNamespace(
+                returncode=0,
+                stdout="estimated duration: 0.480000 sec",
+                stderr="",
+            )
+
+        def fake_process_factory(command, **kwargs):
+            calls.append(command)
+            return FakeProcess()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            audio_path = Path(tmp_dir) / "ack.mp3"
+            audio_path.write_bytes(b"fake-mp3")
+            player = MacOSPlayer(
+                afplay_path="/usr/bin/afplay",
+                runner=fake_runner,
+                process_factory=fake_process_factory,
+            )
+            player.play_acknowledgement(audio_path)
+
+        self.assertEqual(
+            calls,
+            [["/usr/bin/afplay", "-t", "0.480", str(audio_path)]],
+        )
 
     def test_started_playback_failure_reports_stderr(self):
         class FakeProcess:

@@ -515,6 +515,40 @@ class StateMachineTests(unittest.TestCase):
         self.assertIn("failure_stage=none", log_output)
         self.assertIn("synchronized=false", log_output)
 
+    def test_ack_playback_prefers_duration_bounded_start_without_changing_answer_playback(self):
+        class BoundedPlayer(FakeAsyncPlayer):
+            def __init__(self):
+                super().__init__(running_polls=1)
+                self.legacy_started = []
+
+            def start(self, path):
+                self.legacy_started.append(Path(path))
+                return self.handle
+
+            def start_acknowledgement(self, path):
+                self.started.append(Path(path))
+                return self.handle
+
+        player = BoundedPlayer()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ack_path = Path(tmp_dir) / "ack.mp3"
+            ack_path.write_bytes(b"ack")
+            machine = VoiceAssistantStateMachine(
+                settings=make_settings(
+                    wake_acknowledgement_enabled=True,
+                    wake_acknowledgement_audio_path=str(ack_path),
+                ),
+                audio_source=FakeAudioSource([QUIET_CHUNK], fallback_chunk=QUIET_CHUNK),
+                wake_detector=FakeWakeDetector(),
+                openai_client=FakeOpenAIClient(),
+                player=player,
+            )
+
+            machine._play_wake_acknowledgement()
+
+        self.assertEqual(player.started, [ack_path])
+        self.assertEqual(player.legacy_started, [])
+
     def test_synchronized_ack_without_noise_seed_fails_closed(self):
         logger = logging.getLogger("tests.state_machine.synchronized_ack_no_noise")
         boundary = _PostAckBoundaryResult(

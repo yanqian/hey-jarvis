@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, replace
 import logging
+import os
+import shutil
 import tempfile
 import threading
 import wave
@@ -12,10 +14,14 @@ from pathlib import Path
 from typing import TextIO
 
 from .audio_input import open_microphone_stream
-from .config import SUPPORTED_BACKENDS, Settings
+from .config import (
+    DEFAULT_WAKE_ACKNOWLEDGEMENT_SHA256,
+    SUPPORTED_BACKENDS,
+    Settings,
+)
 from .config import collect_diagnostics, format_diagnostics, load_settings, wake_acknowledgement_missing_message
 from .openai_client import build_openai_client
-from .player import MacOSPlayer, PlaybackError, benchmark_audio_playback
+from .player import MacOSPlayer, PlaybackError, audio_sha256, benchmark_audio_playback
 from .recorder import RecordingResult
 from .realtime.controller import RealtimeSessionController
 from .state_machine import AssistantState, VoiceAssistantStateMachine
@@ -33,6 +39,9 @@ from .vad import build_vad_detector
 
 LOGGER_NAME = "hey_jarvis"
 WAKE_SCORE_PRECISION = 9
+CANONICAL_WAKE_ACKNOWLEDGEMENT_ASSET = (
+    Path(__file__).resolve().parent.parent / "assets" / "wake_acknowledgement_alloy.mp3"
+)
 
 
 @dataclass
@@ -123,17 +132,83 @@ def run_prepare_wake_word() -> int:
 def run_prepare_acknowledgement(
     *,
     settings: Settings | None = None,
-    openai_client: object | None = None,
+    player: MacOSPlayer | None = None,
+    source_path: str | Path = CANONICAL_WAKE_ACKNOWLEDGEMENT_ASSET,
+    expected_sha256: str = DEFAULT_WAKE_ACKNOWLEDGEMENT_SHA256,
+    output: TextIO | None = None,
 ) -> int:
-    """Generate the configured wake acknowledgement audio once."""
+    """Validate and atomically install the accepted wake acknowledgement."""
 
-    resolved_settings = settings or load_settings(require_openai_api_key=True)
-    client = openai_client or build_openai_client(settings=resolved_settings)
-    client.text_to_speech(
-        resolved_settings.wake_acknowledgement_text,
-        str(resolved_settings.wake_acknowledgement_audio_path),
+    resolved_settings = settings or load_settings(require_openai_api_key=False)
+    active_player = player or MacOSPlayer(logger=logging.getLogger(LOGGER_NAME))
+    source = Path(source_path)
+    destination = resolved_settings.wake_acknowledgement_audio_path
+    maximum_ms = round(resolved_settings.wake_acknowledgement_max_duration_seconds * 1000)
+    temporary_path: Path | None = None
+    stage = "canonical_source"
+    try:
+        if not source.is_file():
+            raise FileNotFoundError("accepted acknowledgement asset is missing")
+        stage = "canonical_integrity"
+        if audio_sha256(source) != expected_sha256:
+            print(
+                "Wake acknowledgement preparation rejected: "
+                "canonical asset does not match the accepted clear audible cue; "
+                "the prior asset was preserved",
+                file=output,
+            )
+            return 1
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            prefix=".ack-",
+            suffix=destination.suffix or ".mp3",
+            dir=destination.parent,
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+        stage = "canonical_copy"
+        shutil.copyfile(source, temporary_path)
+        if audio_sha256(temporary_path) != expected_sha256:
+            raise OSError("copied acknowledgement failed integrity verification")
+        stage = "duration_validation"
+        duration_ms = active_player.duration_ms(temporary_path)
+        if (
+            isinstance(duration_ms, bool)
+            or not isinstance(duration_ms, int)
+            or not 1 <= duration_ms <= maximum_ms
+        ):
+            print(
+                "Wake acknowledgement preparation rejected: "
+                f"duration_ms={duration_ms} configured_maximum_ms={maximum_ms}; "
+                "the prior asset was preserved",
+                file=output,
+            )
+            return 1
+        stage = "atomic_install"
+        os.replace(temporary_path, destination)
+        temporary_path = None
+    except Exception as exc:
+        cause = getattr(exc, "__cause__", None)
+        error_type = type(exc).__name__
+        cause_type = type(cause).__name__ if cause is not None else "none"
+        print(
+            f"Wake acknowledgement preparation failed during {stage}; "
+            f"error_type={error_type} cause_type={cause_type}; "
+            "the prior asset was preserved. Restore the checked-in accepted asset "
+            "or verify afinfo availability, then retry",
+            file=output,
+        )
+        return 1
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+    print(
+        "Prepared wake acknowledgement audio: "
+        f"duration_ms={duration_ms} configured_maximum_ms={maximum_ms} "
+        f"sha256={expected_sha256}",
+        file=output,
     )
-    print(f"Prepared wake acknowledgement audio: {resolved_settings.wake_acknowledgement_audio_path}")
     return 0
 
 
@@ -149,10 +224,16 @@ def run_acknowledgement_benchmark(
     resolved_settings = settings or load_settings()
     active_player = player or MacOSPlayer(logger=logging.getLogger(LOGGER_NAME))
     try:
-        benchmark = benchmark_audio_playback(
+        legacy = benchmark_audio_playback(
             active_player,
             resolved_settings.wake_acknowledgement_audio_path,
             iterations=iterations,
+        )
+        bounded = benchmark_audio_playback(
+            active_player,
+            resolved_settings.wake_acknowledgement_audio_path,
+            iterations=iterations,
+            bounded_acknowledgement=True,
         )
     except PlaybackError as exc:
         print(f"ack_playback_benchmark status=error reason={exc}", file=output)
@@ -160,28 +241,37 @@ def run_acknowledgement_benchmark(
 
     print(
         "ack_playback_benchmark "
-        f"status=ok asset_duration_ms={benchmark.asset_duration_ms} "
-        f"iterations={len(benchmark.trials)} acoustic_onset=unmeasured",
+        f"status=ok asset_duration_ms={legacy.asset_duration_ms} "
+        f"iterations_per_mode={len(legacy.trials)} acoustic_onset=unmeasured",
         file=output,
     )
-    for trial in benchmark.trials:
-        sample = "cold_candidate" if trial.index == 1 else "warm_candidate"
+    for mode, benchmark in (("legacy", legacy), ("bounded", bounded)):
+        for trial in benchmark.trials:
+            sample = "cold_candidate" if trial.index == 1 else "warm_candidate"
+            print(
+                "ack_playback_trial "
+                f"mode={mode} index={trial.index} sample={sample} "
+                f"process_start_call_ms={trial.process_start_call_ms} "
+                f"process_lifetime_ms={trial.process_lifetime_ms} "
+                f"total_wall_ms={trial.total_wall_ms} "
+                f"derived_overhead_ms={trial.derived_overhead_ms}",
+                file=output,
+            )
         print(
-            "ack_playback_trial "
-            f"index={trial.index} sample={sample} "
-            f"process_start_call_ms={trial.process_start_call_ms} "
-            f"process_lifetime_ms={trial.process_lifetime_ms} "
-            f"total_wall_ms={trial.total_wall_ms} "
-            f"derived_overhead_ms={trial.derived_overhead_ms}",
+            "ack_playback_summary "
+            f"mode={mode} "
+            f"median_process_start_call_ms={benchmark.median_process_start_call_ms} "
+            f"median_process_lifetime_ms={benchmark.median_process_lifetime_ms} "
+            f"median_total_wall_ms={benchmark.median_total_wall_ms} "
+            f"median_derived_overhead_ms={benchmark.median_derived_overhead_ms} "
+            "acoustic_onset=unmeasured",
             file=output,
         )
     print(
-        "ack_playback_summary "
-        f"median_process_start_call_ms={benchmark.median_process_start_call_ms} "
-        f"median_process_lifetime_ms={benchmark.median_process_lifetime_ms} "
-        f"median_total_wall_ms={benchmark.median_total_wall_ms} "
-        f"median_derived_overhead_ms={benchmark.median_derived_overhead_ms} "
-        "acoustic_onset=unmeasured",
+        "ack_playback_comparison "
+        f"bounded_minus_legacy_median_total_wall_ms="
+        f"{bounded.median_total_wall_ms - legacy.median_total_wall_ms} "
+        "acoustic_onset=unmeasured slo=unset",
         file=output,
     )
     return 0
@@ -378,7 +468,7 @@ def run_realtime_forever(settings: Settings) -> int:
 
     def play_acknowledgement() -> None:
         if settings.realtime_acknowledgement_mode == "local":
-            player.play(settings.wake_acknowledgement_audio_path)
+            player.play_acknowledgement(settings.wake_acknowledgement_audio_path)
 
     controller = RealtimeSessionController(
         coordinator=server.coordinator,

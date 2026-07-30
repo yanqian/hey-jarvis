@@ -8,7 +8,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 from .wake_word import (
     MACOS_ARM64_ONNX_ERROR,
@@ -66,8 +66,12 @@ DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS = PROVIDER_DEFAULT_TOOL_HTTP_TIMEOUT_SECONDS
 DEFAULT_LOCATION = PROVIDER_DEFAULT_LOCATION
 DEFAULT_BASE_CURRENCY = PROVIDER_DEFAULT_BASE_CURRENCY
 DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED = True
-DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT = "在呢"
+DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT = "嗯"
 DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH = Path("var/ack.mp3")
+DEFAULT_WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS = 0.8
+DEFAULT_WAKE_ACKNOWLEDGEMENT_SHA256 = (
+    "7a2729046e2b0acdbec345d3d825768ac0e30f9228994092382a885f82109b0c"
+)
 DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS = 0.35
 DEFAULT_ACK_GUARD_ENABLED = True
 DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS = 0.16
@@ -97,9 +101,9 @@ DEFAULT_CANCEL_PHRASES = ("取消", "没事", "不用了", "算了", "stop", "ca
 DEFAULT_BACKEND = "pipeline"
 SUPPORTED_BACKENDS = ("pipeline", "realtime")
 DEFAULT_REALTIME_MODEL = "gpt-realtime-2.1"
-DEFAULT_REALTIME_VOICE = "marin"
-DEFAULT_REALTIME_OUTPUT_VOLUME = 0.1
-DEFAULT_REALTIME_IDLE_TIMEOUT_SECONDS = 15.0
+DEFAULT_REALTIME_VOICE = "alloy"
+DEFAULT_REALTIME_OUTPUT_VOLUME = 0.5
+DEFAULT_REALTIME_IDLE_TIMEOUT_SECONDS = 60.0
 DEFAULT_REALTIME_MAX_DURATION_SECONDS = 600.0
 DEFAULT_REALTIME_SERVER_VAD_ENABLED = True
 DEFAULT_REALTIME_SERVER_VAD_THRESHOLD = 0.8
@@ -180,6 +184,9 @@ class Settings:
     wake_acknowledgement_enabled: bool = DEFAULT_WAKE_ACKNOWLEDGEMENT_ENABLED
     wake_acknowledgement_text: str = DEFAULT_WAKE_ACKNOWLEDGEMENT_TEXT
     wake_acknowledgement_audio_path: Path = DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH
+    wake_acknowledgement_max_duration_seconds: float = (
+        DEFAULT_WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS
+    )
     wake_acknowledgement_drain_seconds: float = DEFAULT_WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS
     ack_guard_enabled: bool = DEFAULT_ACK_GUARD_ENABLED
     ack_guard_min_quiet_seconds: float = DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS
@@ -541,6 +548,14 @@ def load_settings(
         DEFAULT_WAKE_ACKNOWLEDGEMENT_AUDIO_PATH,
         errors,
     )
+    wake_acknowledgement_max_duration_seconds = _float_value(
+        raw_env,
+        "WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS",
+        DEFAULT_WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS,
+        errors,
+        minimum=0.1,
+        maximum=5.0,
+    )
     wake_acknowledgement_drain_seconds = _float_value(
         raw_env,
         "WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS",
@@ -738,6 +753,7 @@ def load_settings(
         wake_acknowledgement_enabled=wake_acknowledgement_enabled,
         wake_acknowledgement_text=wake_acknowledgement_text,
         wake_acknowledgement_audio_path=wake_acknowledgement_audio_path,
+        wake_acknowledgement_max_duration_seconds=wake_acknowledgement_max_duration_seconds,
         wake_acknowledgement_drain_seconds=wake_acknowledgement_drain_seconds,
         ack_guard_enabled=ack_guard_enabled,
         ack_guard_min_quiet_seconds=ack_guard_min_quiet_seconds,
@@ -799,6 +815,8 @@ def collect_diagnostics(
     afplay_path: str | None = None,
     dependency_modules: Mapping[str, str] | None = None,
     wake_word_model_paths: Mapping[str, str | Path] | None = None,
+    acknowledgement_duration_reader: Callable[[Path], int] | None = None,
+    acknowledgement_hash_reader: Callable[[Path], str] | None = None,
     backend: str | None = None,
 ) -> DiagnosticReport:
     """Collect diagnostics, probing an optional runtime only when configured."""
@@ -898,7 +916,13 @@ def collect_diagnostics(
                 )
 
     checks.extend(_wake_word_model_checks(wake_word_model_paths, modules_to_check, settings))
-    checks.extend(_wake_acknowledgement_audio_checks(settings))
+    checks.extend(
+        _wake_acknowledgement_audio_checks(
+            settings,
+            duration_reader=acknowledgement_duration_reader,
+            hash_reader=acknowledgement_hash_reader,
+        )
+    )
     checks.append(
         DiagnosticCheck(
             "microphone_permission",
@@ -989,7 +1013,12 @@ def wake_acknowledgement_missing_message(settings: Settings) -> str | None:
     )
 
 
-def _wake_acknowledgement_audio_checks(settings: Settings | None) -> list[DiagnosticCheck]:
+def _wake_acknowledgement_audio_checks(
+    settings: Settings | None,
+    *,
+    duration_reader: Callable[[Path], int] | None = None,
+    hash_reader: Callable[[Path], str] | None = None,
+) -> list[DiagnosticCheck]:
     if settings is None:
         return []
     if not settings.wake_acknowledgement_enabled:
@@ -1003,11 +1032,66 @@ def _wake_acknowledgement_audio_checks(settings: Settings | None) -> list[Diagno
     missing_message = wake_acknowledgement_missing_message(settings)
     if missing_message is not None:
         return [DiagnosticCheck("wake_acknowledgement_audio", "error", missing_message)]
+    if duration_reader is None:
+        from .player import audio_duration_ms
+
+        duration_reader = audio_duration_ms
+    if hash_reader is None:
+        from .player import audio_sha256
+
+        hash_reader = audio_sha256
+    try:
+        duration_ms = duration_reader(settings.wake_acknowledgement_audio_path)
+    except Exception:
+        return [
+            DiagnosticCheck(
+                "wake_acknowledgement_audio",
+                "error",
+                "Wake acknowledgement duration could not be read; "
+                "run python -m src.main --prepare-acknowledgement to restore the accepted asset",
+            )
+        ]
+    maximum_ms = round(settings.wake_acknowledgement_max_duration_seconds * 1000)
+    if (
+        isinstance(duration_ms, bool)
+        or not isinstance(duration_ms, int)
+        or not 1 <= duration_ms <= maximum_ms
+    ):
+        return [
+            DiagnosticCheck(
+                "wake_acknowledgement_audio",
+                "error",
+                f"Wake acknowledgement duration is outside the configured 1–{maximum_ms} ms range; "
+                "run python -m src.main --prepare-acknowledgement to restore the accepted asset",
+            )
+        ]
+    try:
+        asset_hash = hash_reader(settings.wake_acknowledgement_audio_path)
+    except Exception:
+        return [
+            DiagnosticCheck(
+                "wake_acknowledgement_audio",
+                "error",
+                "Wake acknowledgement integrity could not be read; "
+                "run python -m src.main --prepare-acknowledgement to restore the accepted asset",
+            )
+        ]
+    if asset_hash != DEFAULT_WAKE_ACKNOWLEDGEMENT_SHA256:
+        return [
+            DiagnosticCheck(
+                "wake_acknowledgement_audio",
+                "error",
+                "Wake acknowledgement does not match the accepted clear audible asset; "
+                "run python -m src.main --prepare-acknowledgement to restore the accepted asset",
+            )
+        ]
     return [
         DiagnosticCheck(
             "wake_acknowledgement_audio",
             "ok",
-            f"Wake acknowledgement audio file is present at {settings.wake_acknowledgement_audio_path}",
+            f"Wake acknowledgement duration is {duration_ms} ms "
+            f"(configured maximum {maximum_ms} ms) and its SHA-256 matches "
+            "the accepted clear audible asset",
         )
     ]
 

@@ -1816,6 +1816,77 @@ benchmark, implementation risk, and acceptance boundary. F078 remains blocked
 as durable evidence of the rejected 3.0-speed approach rather than being
 silently rewritten.
 
+### Bounded Acknowledgement Playback Lifetime
+
+Goal: reduce the measured local acknowledgement player lifetime without
+opening Realtime input before the accepted cue finishes or changing normal
+answer playback.
+
+Included scope: add an acknowledgement-only macOS playback path that reads the
+accepted asset duration and passes that exact duration to `afplay` as a bounded
+time limit; keep the ordinary `afplay` path for answer audio; evolve the F077
+benchmark to compare both paths with the same asset, clocks, phase labels, and
+privacy bounds; preserve start/runtime error propagation and all Realtime
+acknowledgement, input-ready, browser-media cleanup, and wake-ownership
+ordering; update focused tests, documentation, and durable target-Mac evidence.
+
+Excluded scope: changing the acknowledgement bytes, duration, text, voice, or
+volume; truncating below metadata duration; replacing normal answer playback;
+opening input during the cue; overlapping acknowledgement with unconfigured
+Realtime input; changing microphone ownership, WebRTC, media processing, VAD,
+timeouts, interruption, cleanup, pre-wake behavior, or establishing an SLO.
+
+Core flows: after configured-session readiness, Python reads the canonical cue
+duration, starts `afplay` with an exact duration time limit, waits for process
+completion, records `ack_completed`, and only then enables browser input. The
+comparison command runs the legacy and bounded paths over the same asset and
+reports observable process-start, process-lifetime, wall, and derived-overhead
+values while keeping acoustic onset explicitly unmeasured. Any duration,
+start, runtime, timeout, stale-session, cancellation, or cleanup failure fails
+closed and never opens input early.
+
+Constraints: the time limit must equal the positive bounded `afinfo` duration,
+not a shorter perceptual guess; output remains privacy-safe; tests use fakes
+and require no speaker, microphone, credential, browser, or network; live
+evidence applies only to the target Mac and may claim only the observed sample
+difference; the accepted F078 asset and F080 voice/volume remain unchanged.
+
+Ambiguities or assumptions: F077 showed 1–5 ms process creation but roughly
+887–888 ms median wall-minus-asset difference, so the process lifetime rather
+than spawn call is the optimization boundary. A five-trial target-Mac spike
+with the exact metadata duration limit measured 0.62–1.13 seconds total versus
+F077's approximately 1.36-second median legacy path. `afplay -t` is expected
+to stop after the requested playback time, but neither benchmark proves
+acoustic onset or apportions remaining device/decode/drain overhead.
+
+Required capabilities: existing `afinfo` and `afplay`; a dedicated
+acknowledgement method that does not affect normal playback; injectable process
+and clock fakes; existing Realtime controller/coordinator ordering tests;
+target-Mac built-in speakers and microphone; an armed Chrome host, OpenAI
+credential, network, and fresh explicit microphone/OpenAI/cost authorization
+for any new live conversation; final project recovery; fast coding evidence;
+and a separate cold-start Evaluator Agent.
+
+Implementation paths: `src/player.py`, `src/main.py`, `src/state_machine.py`,
+`src/realtime/controller.py`, focused tests under `tests/`,
+`docs/CONFIGURATION.md`, `docs/REALTIME.md`, `docs/TROUBLESHOOTING.md`,
+`MANUAL_TESTING.md`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: exact duration-derived command construction; separate
+normal and acknowledgement playback methods; start, runtime, invalid-duration,
+timeout, fallback, cancellation, stale-session, and cleanup failure ordering;
+same-asset legacy/bounded benchmark comparison with privacy-safe output and no
+acoustic-onset claim; focused player, state-machine, controller, privacy, CLI,
+and documentation tests; full project tests; Realtime fake smoke; final
+`./init.sh`; target-Mac bounded comparison and user-led audible/post-cue
+acceptance; fast coding evidence; and separate evaluator approval.
+
+Decomposition decision: F079 is one playback-boundary optimization with one
+benchmark and ordering surface. Asset reproducibility remains completed F078;
+voice consistency remains completed F080; broader WebRTC latency optimization
+and numerical SLOs remain separate future work.
+
 ### Realtime Weather Tool Bridge
 
 Goal: let a user ask current, today, or tomorrow weather questions during an
@@ -1985,3 +2056,141 @@ semantics, and stock uses a credentialed external provider with market-data and
 financial-caveat semantics. Each can independently succeed, fail, or be
 deferred and has a distinct live verification boundary. News is not planned as
 a bridge because there is no existing implemented news tool.
+
+### Accepted Acknowledgement Asset Recovery Correction
+
+Feature mapping: this requirement correction updates F078 after explicit user
+approval and preserves its feature ID, prior failed attempt, ordering, and
+evidence.
+
+Goal: make the already user-accepted 480 ms local alloy `嗯` reproducible on a
+fresh checkout without depending on variable single-syllable TTS generation.
+
+Included scope: track the accepted audio as a project-owned canonical asset;
+make `--prepare-acknowledgement` copy it to a same-directory temporary file,
+validate duration and the exact accepted SHA-256 digest, and
+atomically install it; preserve the prior runtime asset on missing source,
+hash, duration, copy, or install failure; update diagnostics,
+configuration guidance, tests, and durable failure history.
+
+Excluded scope: further TTS candidate generation; synthetic chimes; changing
+the accepted audio content; changing Realtime voice or volume; replacing
+`afplay`; changing acknowledgement timing, input gating, WebRTC media
+processing, VAD, interruption, timeout, privacy, or cleanup; and treating
+temporary ffmpeg experiments as a runtime dependency or accepted asset.
+
+Core flows: on a fresh checkout the operator runs
+`python -m src.main --prepare-acknowledgement`; the command copies the
+checked-in accepted asset to a private temporary file, measures a positive
+duration within the configured ceiling, requires the exact digest of the
+accepted clear audible cue, and atomically installs `var/ack.mp3`. A missing,
+corrupt, changed, excessive, or near-silent replacement
+fails closed and leaves an existing runtime asset unchanged. Diagnostics apply
+the same duration and integrity boundaries.
+
+Constraints: retain the exact user-accepted asset bytes; do not install the
+rejected 3.0-speed candidate or the later quiet, near-silent, or muffled
+candidates; do not require an OpenAI credential or network call for
+preparation; avoid paths, audio content, credentials, or provider details in
+diagnostics; and keep automated verification free of microphone and speaker
+requirements.
+
+Ambiguities or assumptions: the current 480 ms runtime asset is the only
+user-accepted cue and may be promoted unchanged to the canonical project
+asset. The asset's perceived male quality remains acceptable for the local
+ready cue even though F080 records that Realtime alloy sounds more female.
+Exact digest validation is intentionally stricter than a variable decoded
+loudness threshold: only the already accepted clear audible bytes may install.
+
+Required capabilities: project-owned binary asset tracking; existing macOS
+`afinfo` and `afplay` boundaries; SHA-256 hashing; same-directory temporary
+files and atomic replacement; deterministic duration and integrity fixtures; final
+project recovery; user-led playback and Realtime acceptance; fast coding
+evidence; and separate cold-start evaluator approval.
+
+Implementation paths: `assets/wake_acknowledgement_alloy.mp3`,
+`src/main.py`, `src/player.py`, `src/config.py`, `.env.example`,
+`docs/CONFIGURATION.md`, `docs/TROUBLESHOOTING.md`, `MANUAL_TESTING.md`,
+focused tests under `tests/`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: exact source/runtime hash match after preparation;
+positive bounded duration; missing, corrupt, changed, excessive, near-silent
+replacement, copy, and atomic-install failure preservation; no
+credential requirement or network call; privacy-safe output; focused player,
+config, preparation, diagnostics, and documentation tests; full project tests;
+pipeline and Realtime fake smokes; final `./init.sh`; local playback and one
+user-led Realtime post-cue question; fast coding evidence; and independent
+evaluator approval.
+
+Decomposition decision: this correction remains within F078 because it replaces
+the unreliable preparation mechanism while preserving the same independently
+verifiable user-visible cue, runtime destination, and validation surface.
+Playback overhead remains F079.
+
+### Realtime Idle Timeout After Assistant Playback
+
+Feature mapping: F085.
+
+Goal: keep a natural Realtime conversation open while the assistant is still
+playing and give the user a practical pause after the answer before returning
+to wake listening.
+
+Included scope: raise the default Realtime idle timeout from 15 to 60 seconds;
+track whether browser output playback is active; keep the hard maximum session
+duration authoritative; suppress only the idle timeout while playback is
+active; resume the full idle window from a confirmed playback stop or another
+accepted activity event; document the behavior; and add deterministic
+coordinator, configuration, documentation, and recovery coverage.
+
+Excluded scope: changing semantic farewell handling, exact end phrases,
+explicit stop, transport-error cleanup, the 600-second maximum duration,
+Realtime model, voice, volume, acknowledgement, WebRTC negotiation, VAD,
+barge-in, microphone ownership, tool execution, privacy, or sanitized report
+content.
+
+Core flows: after a user turn, `output_audio_buffer.started` marks assistant
+playback active. Even if `response.done` arrives first or the matching playback
+stop event is delayed, idle timeout cannot close the session during playback.
+When `output_audio_buffer.stopped` arrives, the 60-second idle window starts
+again. If a playback-stop event never arrives, the existing maximum-duration
+bound still closes the session. Ordinary silence after playback closes with
+`idle_timeout`, tears browser media down, and restores wake ownership.
+
+Constraints: Realtime event ordering may place response completion before
+speaker-buffer completion; repeated playback-start events must remain
+idempotent; stale session state must be reset at each handoff and cleanup; the
+fix must not retain audio or transcript content; tests must not require live
+OpenAI access, Chrome permissions, microphone, or speaker; and current `.env`
+overrides remain operator-controlled.
+
+Ambiguities or assumptions: the user-reported close occurred 15.024 seconds
+after the last response completion under the checked-in 15-second setting and
+was a locally initiated idle close, not a provider or transport failure. A
+60-second default is assumed to be a reasonable natural-conversation pause.
+Maximum duration is intentionally still allowed to end a session whose browser
+never reports playback stopped, preventing an unbounded stuck session.
+
+Required capabilities: existing sanitized browser playback lifecycle events,
+coordinator monotonic clock injection, configuration validation, deterministic
+unit tests, full project recovery, fast coding evidence, and a separate
+cold-start Evaluator Agent.
+
+Implementation paths: `src/config.py`, `.env.example`,
+`src/realtime_host/coordinator.py`, `tests/test_realtime_config.py`,
+`tests/test_realtime_host.py`, `docs/CONFIGURATION.md`, `docs/REALTIME.md`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: default and overridden idle configuration; idle timeout
+after ordinary inactivity; no idle timeout during active playback; full idle
+window after playback stop; maximum-duration closure during missing
+playback-stop; state reset across cleanup and a fresh session; unchanged
+semantic/explicit/error cleanup; focused tests; full project tests; Realtime
+fake smoke; final `./init.sh`; fast coding evidence; and independent evaluator
+approval.
+
+Decomposition decision: F085 intentionally keeps the timeout default,
+playback-aware lifecycle guard, documentation, and tests together because they
+form one user-visible behavior with one coordinator/configuration verification
+surface. None of the pieces has independent product value.
