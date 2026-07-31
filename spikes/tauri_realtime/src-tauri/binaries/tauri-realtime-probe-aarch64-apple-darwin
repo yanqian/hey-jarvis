@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+HERE=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+exec "$HERE/../Resources/tauri-realtime-probe-runtime/tauri-realtime-probe-runtime"

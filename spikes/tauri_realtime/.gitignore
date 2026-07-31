@@ -1,0 +1,6 @@
+.env
+.venv/
+.build/
+node_modules/
+src-tauri/target/
+src-tauri/resources/tauri-realtime-probe-runtime/

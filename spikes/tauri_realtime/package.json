@@ -1,0 +1,22 @@
+{
+  "name": "hey-jarvis-tauri-realtime-spike",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "setup": "./scripts/setup.sh",
+    "build:sidecar": "./scripts/build-sidecar.sh",
+    "check:isolation": "python3 scripts/check_isolation.py",
+    "test:python": ".venv/bin/python -m unittest discover -s sidecar/tests -p 'test_*.py'",
+    "test:frontend": "node --check src/main.js",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test": "./scripts/offline-check.sh",
+    "dev": "npm run build:sidecar && tauri dev",
+    "build:app": "npm run build:sidecar && tauri build --bundles app"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  },
+  "dependencies": {}
+}

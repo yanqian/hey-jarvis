@@ -4,6 +4,49 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F086 isolated coding is complete and remains `in_progress` pending its
+explicitly authorized live device trial and separate evaluator. All spike code
+is under `spikes/tauri_realtime/`; the root product does not import or invoke
+it. Tauri 2 now bundles an isolated Python service, supervises it through a
+tracked external-binary launcher, and exposes a WKWebView-only Realtime trial
+surface with per-launch loopback authorization, bounded evidence, audio
+settings, interruption, cleanup, and Python microphone-reacquisition checks.
+The original PyInstaller `onefile` packaging was rejected after startup
+inspection exposed an orphan child on app exit; the accepted `onedir` app
+resource starts ready on attempt 0 and exits without a residual sidecar.
+Offline checks, Apple Silicon `.app` bundling, no-device GUI startup, and final
+root recovery pass; evidence is in
+`.agent-harness/runs/F086-fast-coding.md`.
+
+F086 live attempt 1 partially passed on 2026-07-31. WKWebView acquired a 48 kHz
+track with echo cancellation, connected the unified Realtime peer, processed a
+normal human turn, and produced strong deliberate-interruption evidence:
+active playback was cancelled, `speech_started` was recorded with
+`during_playback=true`, and a replacement response began. The Mac then
+automatically locked before audible user confirmation and the required
+`Stop and reacquire` action. The session was terminated to bound microphone
+and API use, exposing that external parent termination could orphan the
+sidecar. The sidecar now monitors its supervising parent and self-terminates;
+the new regression brings the isolated Python suite to 9 tests, and the app
+bundle rebuild passes. F086 is not live-accepted yet. Attempt evidence and the
+remaining unlocked rerun gate are recorded in
+`.agent-harness/runs/F086-live-attempt-1.md`.
+
+F086 live attempt 2 now passes every target-Mac gate. A normal human
+turn reached response generation; deliberate speech during playback cancelled
+the old response and the replacement response completed. The first
+reacquisition attempt exposed an unbounded PortAudio read, so the corrected
+probe now waits 300 ms after WebKit track release and uses callback capture
+with a hard two-second timeout. A fresh run reported
+`Python reacquisition PASS · 1280 frames`, recorded
+`media_released reason=user_stop`, and parent-loss cleanup removed the sidecar
+without a manual child kill. The user explicitly confirmed hearing both the
+normal answer and the replacement answer for “三加三” after deliberate
+interruption. Isolated Python coverage is now 10 tests and the app rebuild
+passes. F086 remains `in_progress` only for its separate cold-start evaluator.
+Evidence is in
+`.agent-harness/runs/F086-live-attempt-2.md`.
+
 F085 has been completed through evaluator-gated fast work after a user-observed
 Realtime session closed 15.024 seconds after its last completed response. The
 default idle window is now 60 seconds, the local `.env` test profile is aligned,
@@ -333,8 +376,20 @@ in `.agent-harness/runs/20260728T161532Z-F079-evaluation-pass.md`.
 
 ## Next Feature
 
-No unfinished features remain: all 85 feature entries are evaluator-approved.
-News remains excluded because no news tool is implemented.
+F086 - Validate an isolated Tauri Realtime host.
+
+F086 is planned as a self-contained capability spike under
+`spikes/tauri_realtime/`. It must not change or become a dependency of the
+accepted product runtime. The spike will test whether Tauri 2's macOS WKWebView
+can replace the development Chrome app-mode host for microphone capture,
+unified Realtime WebRTC, playback, interruption, cleanup, and Python
+microphone reacquisition. Isolated coding, reproducible Rust/Python setup,
+offline verification, app bundling, sidecar startup, and clean process
+shutdown now pass. The remaining gate is one explicitly authorized user-led
+built-in-microphone/speaker Realtime run, followed by the separate cold-start
+evaluator. A pass establishes target-Mac feasibility only and requires a
+separate future production-integration feature. News remains excluded because
+no news tool is implemented.
 
 F076 is evaluator-approved. Its fresh-restart five-session follow-up measured
 a tight 849–930 ms readiness range (860 ms median), versus a 2,702 ms median in

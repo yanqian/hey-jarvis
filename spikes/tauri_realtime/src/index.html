@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hey Jarvis · Tauri Realtime Spike</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">F086 · isolated capability spike</p>
+      <h1>Tauri WKWebView Realtime host</h1>
+      <p class="lede">
+        This app does not import or alter the Hey Jarvis product runtime. It tests one question:
+        can WKWebView preserve the accepted built-in microphone/speaker Realtime behavior?
+      </p>
+
+      <section class="status-card">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div>
+          <strong id="status">Starting isolated Python sidecar…</strong>
+          <p>Sidecar: <span id="sidecar">waiting</span></p>
+        </div>
+      </section>
+
+      <div class="controls">
+        <button id="start" disabled>Start WKWebView session</button>
+        <button id="long" disabled>Play long answer</button>
+        <button id="stop" class="secondary" disabled>Stop and reacquire</button>
+      </div>
+
+      <section>
+        <h2>Actual capture settings</h2>
+        <dl class="settings">
+          <div><dt>echoCancellation</dt><dd data-setting="echoCancellation">not reported</dd></div>
+          <div><dt>requested echo mode</dt><dd data-setting="echoCancellationRequested">not reported</dd></div>
+          <div><dt>“all” advertised</dt><dd data-setting="echoCancellationAllSupported">not reported</dd></div>
+          <div><dt>noiseSuppression</dt><dd data-setting="noiseSuppression">not reported</dd></div>
+          <div><dt>autoGainControl</dt><dd data-setting="autoGainControl">not reported</dd></div>
+          <div><dt>sampleRate</dt><dd data-setting="sampleRate">not reported</dd></div>
+          <div><dt>channelCount</dt><dd data-setting="channelCount">not reported</dd></div>
+          <div><dt>Python reacquisition</dt><dd id="reacquire">not run</dd></div>
+        </dl>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <h2>Sanitized evidence</h2>
+          <button id="refresh-report" class="quiet">Refresh report</button>
+        </div>
+        <pre id="events">Waiting for sidecar…</pre>
+        <pre id="report">Server report not loaded.</pre>
+      </section>
+
+      <section class="instructions">
+        <h2>Live trial</h2>
+        <ol>
+          <li>Use the Mac built-in microphone and speakers without headphones.</li>
+          <li>Start the session and confirm all actual capture settings are reported.</li>
+          <li>Speak one normal turn and hear the answer.</li>
+          <li>Play the long answer, then interrupt it naturally while it is speaking.</li>
+          <li>Stop and require Python microphone reacquisition to report PASS.</li>
+        </ol>
+      </section>
+
+      <audio id="remote-audio" autoplay></audio>
+    </main>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

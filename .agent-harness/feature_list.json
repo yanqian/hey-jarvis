@@ -1989,6 +1989,37 @@
         "F054",
         "F073"
       ]
+    },
+    {
+      "id": "F086",
+      "title": "Validate an isolated Tauri Realtime host",
+      "description": "Build a self-contained Tauri 2 and Python sidecar spike that determines whether macOS WKWebView can preserve the accepted Realtime microphone, playback, interruption, cleanup, and wake-microphone recovery behavior without coupling to the product runtime.",
+      "acceptance": [
+        "All spike source, manifests, setup, tests, fixtures, and documentation live under spikes/tauri_realtime; product src does not import the spike, root product commands do not require it, and dependency-free isolation checks reject product-module imports or runtime coupling.",
+        "The spike reproducibly declares and verifies its Node, Rust/Cargo, Tauri 2, Python, Apple Silicon macOS, and build prerequisites; it provides a minimal Tauri tray/window shell and an isolated Python sidecar/fake-session smoke without placing credentials in JavaScript, Rust, argv, logs, or reports.",
+        "WKWebView can request and release microphone capture, establish the isolated unified Realtime WebRTC path, report bounded actual echo-cancellation, noise-suppression, automatic-gain-control, sample-rate, and channel-count settings, and preserve localhost plus per-launch control isolation.",
+        "Deterministic frontend, Rust, Python, sidecar, lifecycle, privacy, and cleanup verification passes without live OpenAI or devices; a stop or failure tears WebRTC media down before the isolated Python probe reacquires its microphone lease, and final ./init.sh passes.",
+        "One explicitly authorized user-led Apple Silicon built-in-microphone/speaker run preserves sanitized evidence for audible playback, deliberate interruption, clean session stop, WKWebView microphone release, and Python microphone reacquisition; the evidence records an honest feasibility PASS or FAIL without changing production runtime."
+      ],
+      "evals": [
+        {
+          "scenario": "Tauri WKWebView Realtime host feasibility",
+          "required_evidence": [
+            "offline",
+            "live_user"
+          ]
+        }
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F073",
+        "F075",
+        "F085"
+      ]
     }
   ]
 }
