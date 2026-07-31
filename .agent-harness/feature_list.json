@@ -2052,9 +2052,9 @@
         "RT001-RT004, all six Realtime tools, acknowledgement/input gating, the 60-second post-playback idle window, stale/error cleanup, and wake-microphone reacquisition remain behaviorally compatible in deterministic tests and fake smokes.",
         "The full project suite and final ./init.sh pass, and one authorized Apple Silicon built-in-device app run proves wake, normal/follow-up/tool turns, deliberate interruption, semantic ending, media release, wake recovery, quit, and relaunch."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

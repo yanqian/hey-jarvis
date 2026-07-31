@@ -15,7 +15,9 @@ for path in \
   app/src/index.html \
   app/src/main.js \
   app/sidecar/fake_sidecar.py \
+  app/sidecar/product_sidecar.py \
   app/src-tauri/Cargo.toml \
+  app/src-tauri/Info.plist \
   app/src-tauri/src/lib.rs \
   app/src-tauri/src/protocol.rs \
   app/src-tauri/src/supervisor.rs \

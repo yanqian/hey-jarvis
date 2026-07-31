@@ -11,7 +11,7 @@ microphone-reacquisition, parent-loss cleanup, and separate evaluator gates.
 The spike remains isolated under `spikes/tauri_realtime/` and is feasibility
 evidence only.
 
-The next productization requirement has been normalized in `SPEC.md` and,
+The productization requirement has been normalized in `SPEC.md` and,
 after user confirmation, decomposed into F087-F093. The portfolio-grade,
 local-first architecture makes Rust/Tauri the native security and supervision
 boundary, WKWebView the Realtime media endpoint, and the packaged Python
@@ -19,8 +19,13 @@ sidecar the owner of reusable wake, coordination, tool, and OpenAI behavior.
 The CLI remains the simplest personal-use and recovery path. The friend beta
 uses user-provided Keychain credentials and a manually updated Apple Silicon
 macOS 14+ Developer ID-signed, hardened, notarized, stapled DMG. A hosted
-backend, accounts, billing, telemetry, and automatic updates are excluded. No
-implementation has started.
+backend, accounts, billing, telemetry, and automatic updates are excluded.
+F087 is complete at commit `95524d7`. F088 is evaluator-approved after
+provider-native coding and an authorized Apple Silicon live run recorded in
+`.agent-harness/runs/F088-fast-coding.md` and
+`.agent-harness/runs/F088-live-acceptance.md`; independent approval is recorded
+as `EVAL_PASS: F088` in
+`.agent-harness/runs/20260731T101439Z-F088-evaluation-pass.md`.
 
 F085 has been completed through evaluator-gated fast work after a user-observed
 Realtime session closed 15.024 seconds after its last completed response. The
@@ -209,17 +214,18 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F087 - Create the production Mac app shell and protocol.
+F088 - Integrate the accepted runtime into the Mac app.
 
-F087 establishes the product-owned Tauri 2 window/tray shell, single-instance
-behavior, provisional `com.heyjarvis.desktop` identity, Application Support
-discovery, protocol-only fake Python sidecar, and bounded Rust supervision.
-The strict versioned protocol and parent-loss behavior are covered by Rust,
-Python, isolation, build, and recovery checks without microphone, OpenAI, or
-signing access. Coding evidence is recorded in
-`.agent-harness/runs/20260731T075516Z-F087-fast-coding.md`, and independent
-cold-start approval is recorded as `EVAL_PASS: F087` in
-`.agent-harness/runs/20260731T075810Z-F087-evaluation-pass.md`.
+F088 integrates the accepted wake, Realtime, tool, privacy, and cleanup
+behavior behind the product sidecar protocol and WKWebView media surface while
+preserving the independent CLI path. Deterministic recovery passed with 388
+project tests, seven Mac App/sidecar tests, six Rust tests, and all smoke paths.
+The authorized Apple Silicon run passed wake, follow-up, weather, natural
+interruption, semantic ending, wake recovery, Quit cleanup, and relaunch.
+Coding and live evidence are recorded in `.agent-harness/runs/F088-fast-coding.md`
+and `.agent-harness/runs/F088-live-acceptance.md`; independent cold-start
+approval is recorded as `EVAL_PASS: F088` in
+`.agent-harness/runs/20260731T101439Z-F088-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -300,14 +306,12 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is in progress. F087 is evaluator-approved and establishes the
-production-owned shell/protocol boundary without migrating assistant behavior.
-The shell deliberately has no microphone, Realtime, accepted-runtime, Keychain,
-signing, or distribution behavior. F088 remains `todo` and is the only next
-implementation target.
+No feature is currently in progress. F088 is evaluator-approved and the
+working tree awaits an explicit user-approved commit boundary.
 
 The latest accepted runtime baseline remains unchanged:
 
+- F087 is evaluator-approved for the production Mac app shell and protocol.
 - F079 is evaluator-approved for bounded acknowledgement playback.
 - F080 is evaluator-approved for the shared alloy voice profile.
 - F084 remains evaluator-approved, completing the existing Realtime
@@ -316,16 +320,11 @@ The latest accepted runtime baseline remains unchanged:
 
 ## Next Feature
 
-F088 - Integrate the accepted runtime into the Mac app.
+F089 - Add BYOK Keychain setup and first-run recovery.
 
-Its completed predecessor is F086 - Validate an isolated Tauri Realtime host.
-F086 remains isolated under `spikes/tauri_realtime/` and supplies feasibility
-evidence only; it is not an implementation source for the production app.
-
-F088 integrates the accepted runtime and WKWebView while preserving the CLI,
-and is not started by the completed F087 work. F089 then adds BYOK, Keychain,
-first run, and TCC recovery; F090 packages the reproducible Python/model
-runtime; F091 hardens diagnostics and process recovery; F092 produces the
+After the user approves and commits F088, F089 adds BYOK, Keychain, first run,
+and TCC recovery. F090 then packages the reproducible Python/model runtime;
+F091 hardens diagnostics and process recovery; F092 produces the
 signed/notarized manually updated friend-beta DMG; and F093 publishes the demo,
 case study, three-tester feedback, and final go/hold record.
 
@@ -368,5 +367,8 @@ wake ownership.
 - Platform permission: macOS microphone permission must be granted to the terminal or agent surface that launches the assistant.
 - Verification boundary: Automated recovery uses deterministic fakes and cannot prove live microphone, speaker echo, OpenAI service, or provider-network behavior. Use `MANUAL_TESTING.md`, `--wake-debug`, captured WAV replay, and runtime logs for real-device acceptance.
 - Local artifacts: `tmp/debug.log` and similar real-test logs are intentionally untracked and must not be treated as durable repository state.
+- Live Mac App trials must close any residual Chrome `Hey Jarvis Realtime Host`
+  from the legacy workflow. A residual armed host independently captures and
+  plays audio and invalidates product-only acoustic observations.
 
 Resolved feature history, evaluator decisions, fallbacks, and prior failure analysis remain available in the completed feature summaries above, `.agent-harness/runs/`, and git history; they are not active Known Issues.

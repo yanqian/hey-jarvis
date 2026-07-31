@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
 pub const MAX_MESSAGE_BYTES: usize = 32 * 1024;
 pub const MAX_SESSION_ID_LENGTH: usize = 64;
 
@@ -20,10 +20,12 @@ pub enum Payload {
     Startup {
         app_version: String,
         app_support_dir: String,
+        resource_dir: String,
     },
     Ready {
         sidecar_version: String,
         capabilities: Vec<String>,
+        control_url: Option<String>,
     },
     Settings {
         revision: u64,
@@ -94,8 +96,8 @@ fn validate_exact_fields(value: &Value) -> Result<(), String> {
         .and_then(Value::as_str)
         .ok_or_else(|| "protocol payload kind is invalid".to_string())?;
     let expected: &[&str] = match kind {
-        "startup" => &["app_support_dir", "app_version", "kind"],
-        "ready" => &["capabilities", "kind", "sidecar_version"],
+        "startup" => &["app_support_dir", "app_version", "kind", "resource_dir"],
+        "ready" => &["capabilities", "control_url", "kind", "sidecar_version"],
         "settings" => &["kind", "revision"],
         "session" => &["action", "conversation_id", "kind"],
         "lifecycle" => &["detail", "event", "kind"],
@@ -196,10 +198,12 @@ mod tests {
             Payload::Startup {
                 app_version: "0.1.0".into(),
                 app_support_dir: "/tmp/app".into(),
+                resource_dir: "/tmp/resources".into(),
             },
             Payload::Ready {
                 sidecar_version: "fake".into(),
                 capabilities: vec!["health".into()],
+                control_url: None,
             },
             Payload::Settings { revision: 1 },
             Payload::Session {
@@ -229,8 +233,8 @@ mod tests {
     fn rejects_unknown_fields_versions_order_and_session_changes() {
         let encoded = encode(&envelope(Payload::Settings { revision: 1 })).unwrap();
         let with_extra = encoded.replacen(
-            "\"protocol_version\":1",
-            "\"protocol_version\":1,\"extra\":true",
+            "\"protocol_version\":2",
+            "\"protocol_version\":2,\"extra\":true",
             1,
         );
         let payload_extra =
@@ -238,7 +242,7 @@ mod tests {
         assert!(decode(&with_extra, None, 0).is_err());
         assert!(decode(&payload_extra, None, 0).is_err());
         assert!(decode(
-            &encoded.replace("\"protocol_version\":1", "\"protocol_version\":2"),
+            &encoded.replace("\"protocol_version\":2", "\"protocol_version\":1"),
             None,
             0
         )

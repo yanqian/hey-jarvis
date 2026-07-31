@@ -25,6 +25,9 @@
   "bundle": {
     "active": false,
     "targets": ["app"],
+    "resources": {
+      "../../assets/wake_acknowledgement_alloy.mp3": "assets/wake_acknowledgement_alloy.mp3"
+    },
     "macOS": {
       "minimumSystemVersion": "14.0"
     }

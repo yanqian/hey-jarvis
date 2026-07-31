@@ -7,7 +7,10 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-const START_TIMEOUT: Duration = Duration::from_secs(3);
+// Real startup includes loading and warming the wake model plus acquiring the
+// built-in microphone. Keep this bounded, but do not apply the fake fixture's
+// sub-second expectation to the product runtime.
+const START_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Clone, Debug, Serialize)]
@@ -17,6 +20,7 @@ pub struct RuntimeSnapshot {
     pub protocol_version: u16,
     pub session_id: String,
     pub app_support_dir: String,
+    pub control_url: Option<String>,
 }
 
 impl RuntimeSnapshot {
@@ -27,6 +31,7 @@ impl RuntimeSnapshot {
             protocol_version: PROTOCOL_VERSION,
             session_id: String::new(),
             app_support_dir: app_support_dir.display().to_string(),
+            control_url: None,
         }
     }
 }
@@ -38,14 +43,33 @@ pub struct SidecarSupervisor {
     next_sequence: u64,
     session_id: String,
     app_support_dir: PathBuf,
-    script_path: PathBuf,
-    python_command: String,
+    resource_dir: PathBuf,
+    launch: SidecarLaunch,
     snapshot: Arc<Mutex<RuntimeSnapshot>>,
 }
 
+enum SidecarLaunch {
+    Executable(PathBuf),
+    PythonDevelopment {
+        interpreter: String,
+        script: PathBuf,
+    },
+}
+
 impl SidecarSupervisor {
-    pub fn new(app_support_dir: PathBuf, script_path: PathBuf) -> Self {
+    pub fn new(app_support_dir: PathBuf, resource_dir: PathBuf, script_path: PathBuf) -> Self {
         let snapshot = Arc::new(Mutex::new(RuntimeSnapshot::stopped(&app_support_dir)));
+        let launch = if let Some(path) = std::env::var_os("HEY_JARVIS_SIDECAR_EXECUTABLE") {
+            SidecarLaunch::Executable(PathBuf::from(path))
+        } else if cfg!(debug_assertions) {
+            SidecarLaunch::PythonDevelopment {
+                interpreter: std::env::var("HEY_JARVIS_SIDECAR_PYTHON")
+                    .unwrap_or_else(|_| "python3".into()),
+                script: script_path,
+            }
+        } else {
+            SidecarLaunch::Executable(resource_dir.join("sidecar/hey-jarvis-sidecar"))
+        };
         Self {
             child: None,
             stdin: None,
@@ -53,17 +77,27 @@ impl SidecarSupervisor {
             next_sequence: 1,
             session_id: String::new(),
             app_support_dir,
-            script_path,
-            python_command: std::env::var("HEY_JARVIS_FAKE_SIDECAR_PYTHON")
-                .unwrap_or_else(|_| "python3".into()),
+            resource_dir,
+            launch,
             snapshot,
         }
     }
 
     #[cfg(test)]
-    fn with_python(app_support_dir: PathBuf, script_path: PathBuf, python_command: String) -> Self {
-        let mut supervisor = Self::new(app_support_dir, script_path);
-        supervisor.python_command = python_command;
+    fn with_python(
+        app_support_dir: PathBuf,
+        resource_dir: PathBuf,
+        script_path: PathBuf,
+        python_command: String,
+    ) -> Self {
+        let mut supervisor = Self::new(app_support_dir, resource_dir, script_path);
+        supervisor.launch = SidecarLaunch::PythonDevelopment {
+            interpreter: python_command,
+            script: match &supervisor.launch {
+                SidecarLaunch::PythonDevelopment { script, .. } => script.clone(),
+                SidecarLaunch::Executable(path) => path.clone(),
+            },
+        };
         supervisor
     }
 
@@ -71,41 +105,53 @@ impl SidecarSupervisor {
         self.stop("restart")?;
         std::fs::create_dir_all(&self.app_support_dir)
             .map_err(|error| format!("cannot create app support directory: {error}"))?;
-        if !self.script_path.is_file() {
-            return self.fail(format!(
-                "fake sidecar is missing: {}",
-                self.script_path.display()
-            ));
+        let sidecar_path = match &self.launch {
+            SidecarLaunch::Executable(path) => path,
+            SidecarLaunch::PythonDevelopment { script, .. } => script,
+        };
+        if !sidecar_path.is_file() {
+            return self.fail(format!("sidecar is missing: {}", sidecar_path.display()));
         }
 
         self.session_id = new_session_id()?;
         self.next_sequence = 1;
         if let Ok(mut snapshot) = self.snapshot.lock() {
             snapshot.state = "starting".into();
-            snapshot.detail = "Starting the fake sidecar.".into();
+            snapshot.detail = "Starting the sidecar.".into();
             snapshot.session_id = self.session_id.clone();
             snapshot.app_support_dir = self.app_support_dir.display().to_string();
+            snapshot.control_url = None;
         }
-        let mut child = Command::new(&self.python_command)
-            .arg("-I")
-            .arg(&self.script_path)
+        let mut command = match &self.launch {
+            SidecarLaunch::Executable(path) => Command::new(path),
+            SidecarLaunch::PythonDevelopment {
+                interpreter,
+                script,
+            } => {
+                let mut command = Command::new(interpreter);
+                command.arg("-I").arg(script);
+                command
+            }
+        };
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|error| format!("cannot start fake sidecar: {error}"))?;
+            .map_err(|error| format!("cannot start sidecar: {error}"))?;
         let mut stdin = child
             .stdin
             .take()
-            .ok_or_else(|| "fake sidecar stdin is unavailable".to_string())?;
+            .ok_or_else(|| "sidecar stdin is unavailable".to_string())?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| "fake sidecar stdout is unavailable".to_string())?;
+            .ok_or_else(|| "sidecar stdout is unavailable".to_string())?;
 
         let startup = self.outbound(Payload::Startup {
             app_version: env!("CARGO_PKG_VERSION").into(),
             app_support_dir: self.app_support_dir.display().to_string(),
+            resource_dir: self.resource_dir.display().to_string(),
         });
         write_message(&mut stdin, &startup)?;
 
@@ -141,13 +187,11 @@ impl SidecarSupervisor {
 
         let ready_result = receiver
             .recv_timeout(START_TIMEOUT)
-            .map_err(|_| "fake sidecar readiness timed out".to_string())
+            .map_err(|_| "sidecar readiness timed out".to_string())
             .and_then(|result| {
-                result.map_err(|error| format!("fake sidecar readiness read failed: {error}"))
+                result.map_err(|error| format!("sidecar readiness read failed: {error}"))
             })
-            .and_then(|line| {
-                line.ok_or_else(|| "fake sidecar exited before readiness".to_string())
-            });
+            .and_then(|line| line.ok_or_else(|| "sidecar exited before readiness".to_string()));
         let ready_line = match ready_result {
             Ok(line) => line,
             Err(error) => {
@@ -162,12 +206,23 @@ impl SidecarSupervisor {
                 return self.fail(error);
             }
         };
-        if !matches!(ready.payload, Payload::Ready { .. }) {
-            let _ = self.stop("startup_failure");
-            return self.fail("fake sidecar did not send readiness".into());
+        match ready.payload {
+            Payload::Ready { control_url, .. } => {
+                if let Ok(mut snapshot) = self.snapshot.lock() {
+                    snapshot.control_url = control_url;
+                }
+            }
+            Payload::Error { code, .. } => {
+                let _ = self.stop("startup_failure");
+                return self.fail(format!("Sidecar startup failed: {code}"));
+            }
+            _ => {
+                let _ = self.stop("startup_failure");
+                return self.fail("sidecar did not send readiness".into());
+            }
         }
 
-        set_snapshot(&self.snapshot, "ready", "Fake sidecar is healthy.");
+        set_snapshot(&self.snapshot, "ready", "Sidecar is healthy.");
         Ok(self.snapshot())
     }
 
@@ -179,7 +234,7 @@ impl SidecarSupervisor {
         set_snapshot(
             &self.snapshot,
             "ready",
-            "Health check requested from the fake sidecar.",
+            "Health check requested from the sidecar.",
         );
         Ok(self.snapshot())
     }
@@ -236,6 +291,7 @@ impl SidecarSupervisor {
                 protocol_version: PROTOCOL_VERSION,
                 session_id: self.session_id.clone(),
                 app_support_dir: self.app_support_dir.display().to_string(),
+                control_url: None,
             })
     }
 
@@ -326,7 +382,7 @@ fn update_from_payload(snapshot: &Arc<Mutex<RuntimeSnapshot>>, payload: Payload)
 mod tests {
     use super::*;
 
-    fn fixture() -> (PathBuf, PathBuf, String) {
+    fn fixture() -> (PathBuf, PathBuf, PathBuf, String) {
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let script = manifest.join("../sidecar/fake_sidecar.py");
         let support = std::env::temp_dir().join(format!(
@@ -334,13 +390,14 @@ mod tests {
             new_session_id().expect("session")
         ));
         let python = std::env::var("PYTHON").unwrap_or_else(|_| "python3".into());
-        (support, script, python)
+        let resources = manifest.join("../../");
+        (support, resources, script, python)
     }
 
     #[test]
     fn starts_health_checks_and_stops_fake_sidecar() {
-        let (support, script, python) = fixture();
-        let mut supervisor = SidecarSupervisor::with_python(support, script, python);
+        let (support, resources, script, python) = fixture();
+        let mut supervisor = SidecarSupervisor::with_python(support, resources, script, python);
         let started = supervisor.start().expect("sidecar starts");
         assert_eq!(started.state, "ready");
         assert!(started.session_id.starts_with("session-"));
@@ -353,9 +410,13 @@ mod tests {
 
     #[test]
     fn missing_sidecar_fails_closed() {
-        let (support, _, python) = fixture();
-        let mut supervisor =
-            SidecarSupervisor::with_python(support, PathBuf::from("/missing/fake.py"), python);
+        let (support, resources, _, python) = fixture();
+        let mut supervisor = SidecarSupervisor::with_python(
+            support,
+            resources,
+            PathBuf::from("/missing/fake.py"),
+            python,
+        );
         assert!(supervisor.start().is_err());
         assert_eq!(supervisor.snapshot().state, "error");
     }

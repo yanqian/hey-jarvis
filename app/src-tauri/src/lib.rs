@@ -45,11 +45,11 @@ fn stop_sidecar(runtime: &AppRuntime, reason: &str) {
     }
 }
 
-fn fake_sidecar_path() -> PathBuf {
-    std::env::var_os("HEY_JARVIS_FAKE_SIDECAR_PATH")
+fn development_sidecar_path() -> PathBuf {
+    std::env::var_os("HEY_JARVIS_SIDECAR_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../sidecar/fake_sidecar.py")
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../sidecar/product_sidecar.py")
         })
 }
 
@@ -64,9 +64,17 @@ pub fn run() {
         }))
         .setup(|app| {
             let app_support_dir = app.path().app_data_dir()?;
-            let mut supervisor = SidecarSupervisor::new(app_support_dir, fake_sidecar_path());
+            let resource_dir = std::env::var_os("HEY_JARVIS_RESOURCE_DIR")
+                .map(PathBuf::from)
+                .unwrap_or(app.path().resource_dir()?);
+            let mut supervisor =
+                SidecarSupervisor::new(app_support_dir, resource_dir, development_sidecar_path());
             let _ = supervisor.start();
             app.manage(AppRuntime(Mutex::new(supervisor)));
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
 
             let show = MenuItem::with_id(app, "show", "Show Hey Jarvis", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Hey Jarvis", true, None::<&str>)?;

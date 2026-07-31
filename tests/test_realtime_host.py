@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import http.client
 import threading
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -113,6 +114,44 @@ class RealtimeHostTests(unittest.TestCase):
         ids = iter(f"session-{index}" for index in range(10))
         coordinator = HandoffCoordinator(lease, clock=lambda: 1.25, session_ids=lambda: next(ids))
         return coordinator, lease
+
+    def test_product_loopback_capability_bootstraps_an_httponly_cookie(self):
+        host = server.build_server(
+            "127.0.0.1",
+            0,
+            capability_lease="session-product-1",
+        )
+        thread = threading.Thread(target=host.serve_forever, daemon=True)
+        thread.start()
+        connection = http.client.HTTPConnection("127.0.0.1", host.server_port, timeout=2)
+        try:
+            connection.request("GET", "/health")
+            self.assertEqual(connection.getresponse().status, HTTPStatus.FORBIDDEN)
+
+            connection.request("GET", "/?lease=wrong")
+            self.assertEqual(connection.getresponse().status, HTTPStatus.FORBIDDEN)
+
+            connection.request("GET", "/?lease=session-product-1")
+            bootstrap = connection.getresponse()
+            self.assertEqual(bootstrap.status, HTTPStatus.SEE_OTHER)
+            cookie = bootstrap.getheader("Set-Cookie")
+            self.assertIn("HttpOnly", cookie)
+            self.assertIn("SameSite=Strict", cookie)
+            self.assertNotIn("OPENAI", cookie)
+
+            connection.request(
+                "GET",
+                "/health",
+                headers={"Cookie": cookie.split(";", 1)[0]},
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, HTTPStatus.OK)
+            self.assertEqual(json.loads(response.read()), {"status": "ok"})
+        finally:
+            connection.close()
+            host.shutdown()
+            host.server_close()
+            host.coordinator.close()
 
     def activate_session(
         self,

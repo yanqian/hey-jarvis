@@ -19,6 +19,13 @@ function render(snapshot) {
   elements.protocol.textContent = `v${snapshot.protocol_version}`;
   elements.session.textContent = snapshot.session_id || "—";
   elements.appSupport.textContent = snapshot.app_support_dir || "—";
+  if (ready && snapshot.control_url) {
+    const endpoint = new URL(snapshot.control_url);
+    if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1") {
+      throw new Error("Sidecar returned an invalid control endpoint.");
+    }
+    window.location.replace(endpoint.href);
+  }
 }
 
 async function refresh(command = "sidecar_status") {
@@ -26,7 +33,7 @@ async function refresh(command = "sidecar_status") {
     render({
       state: "unavailable",
       detail: "Open this page through the Hey Jarvis desktop app.",
-      protocol_version: 1,
+      protocol_version: 2,
       session_id: "",
       app_support_dir: "",
     });
@@ -39,7 +46,7 @@ async function refresh(command = "sidecar_status") {
     render({
       state: "error",
       detail: String(error),
-      protocol_version: 1,
+      protocol_version: 2,
       session_id: "",
       app_support_dir: "",
     });

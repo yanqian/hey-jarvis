@@ -15,7 +15,7 @@ from fake_sidecar import ProtocolError, parse_message, run  # noqa: E402
 def message(sequence=1, session_id="session-1", payload=None):
     return json.dumps(
         {
-            "protocol_version": 1,
+            "protocol_version": 2,
             "sequence": sequence,
             "session_id": session_id,
             "payload": payload
@@ -23,6 +23,7 @@ def message(sequence=1, session_id="session-1", payload=None):
                 "kind": "startup",
                 "app_version": "0.1.0",
                 "app_support_dir": "/tmp/hey-jarvis-test",
+                "resource_dir": "/tmp/hey-jarvis-resources",
             },
         }
     )
@@ -50,13 +51,13 @@ class FakeSidecarTests(unittest.TestCase):
 
     def test_rejects_unknown_version_order_session_and_fields(self):
         cases = [
-            message().replace('"protocol_version": 1', '"protocol_version": 2'),
+            message().replace('"protocol_version": 2', '"protocol_version": 1'),
             message(sequence=1),
             message(session_id="../bad"),
             message(payload={"kind": "startup", "app_version": "0.1.0", "extra": True}),
             message(payload={"kind": "unknown"}),
         ]
-        parse_message(cases[0].replace('"protocol_version": 2', '"protocol_version": 1'), expected_session=None, last_sequence=0)
+        parse_message(cases[0].replace('"protocol_version": 1', '"protocol_version": 2'), expected_session=None, last_sequence=0)
         with self.assertRaises(ProtocolError):
             parse_message(cases[0], expected_session=None, last_sequence=0)
         with self.assertRaises(ProtocolError):

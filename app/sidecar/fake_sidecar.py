@@ -9,7 +9,7 @@ import sys
 from typing import Any, TextIO
 
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 MAX_MESSAGE_BYTES = 32 * 1024
 MAX_SESSION_ID_LENGTH = 64
 SESSION_RE = re.compile(r"^[A-Za-z0-9-]+$")
@@ -23,7 +23,7 @@ FORBIDDEN_KEYS = {
     "token",
 }
 PAYLOAD_FIELDS = {
-    "startup": {"app_version", "app_support_dir"},
+    "startup": {"app_version", "app_support_dir", "resource_dir"},
     "settings": {"revision"},
     "session": {"action", "conversation_id"},
     "lifecycle": {"event", "detail"},
@@ -133,6 +133,7 @@ def run(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) ->
                     "kind": "ready",
                     "sidecar_version": "0.1.0-fake",
                     "capabilities": ["health", "settings", "session", "shutdown"],
+                    "control_url": None,
                 },
             )
             outbound_sequence += 1

@@ -106,8 +106,8 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F087 - Create the production Mac app shell and protocol", last_completed)
-        self.assertIn("EVAL_PASS: F087", last_completed)
+        self.assertIn("F088 - Integrate the accepted runtime into the Mac app", last_completed)
+        self.assertIn("EVAL_PASS: F088", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
@@ -116,10 +116,10 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("F084 remains evaluator-approved", current_feature)
         self.assertIn("F085 is evaluator-approved", current_feature)
         self.assertIn("F087 is evaluator-approved", current_feature)
-        self.assertIn("F088 remains `todo`", current_feature)
-        self.assertIn("F088 - Integrate the accepted runtime", next_feature)
-        self.assertIn("F086 - Validate an isolated Tauri Realtime host", next_feature)
-        self.assertIn("spikes/tauri_realtime/", next_feature)
+        self.assertIn("F088 is evaluator-approved", current_feature)
+        self.assertIn("No feature is currently in progress", current_feature)
+        self.assertIn("F089 - Add BYOK Keychain setup", next_feature)
+        self.assertIn("F090 then packages", next_feature)
         self.assertNotIn("No unfinished features remain", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)

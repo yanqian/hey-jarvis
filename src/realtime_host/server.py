@@ -6,10 +6,12 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from http.cookies import SimpleCookie
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -298,6 +300,8 @@ def create_realtime_call(
 
 class HostHTTPServer(ThreadingHTTPServer):
     coordinator: HandoffCoordinator
+    settings: object | None
+    capability_lease: str | None
 
 
 def build_server(
@@ -309,6 +313,8 @@ def build_server(
     end_phrases: tuple[str, ...] = DEFAULT_REALTIME_END_PHRASES,
     tool_provider_config: object | None = None,
     tool_http_client: object | None = None,
+    settings: object | None = None,
+    capability_lease: str | None = None,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
@@ -321,6 +327,8 @@ def build_server(
         tool_provider_config=tool_provider_config,
         tool_http_client=tool_http_client,
     )
+    server.settings = settings
+    server.capability_lease = capability_lease
     return server
 
 
@@ -338,6 +346,11 @@ class HostRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
+        if self._handle_capability_bootstrap(parsed):
+            return
+        if not self._has_capability():
+            self._json(HTTPStatus.FORBIDDEN, {"error": "forbidden"})
+            return
         if parsed.path == "/health":
             self._json(HTTPStatus.OK, {"status": "ok"})
             return
@@ -361,7 +374,7 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/realtime-settings":
             try:
-                settings = load_settings(backend="realtime")
+                settings = self._settings(require_openai_api_key=False)
             except ConfigError as exc:
                 self._json(HTTPStatus.CONFLICT, {"error": "host_control_failed", "message": str(exc)})
                 return
@@ -383,15 +396,23 @@ class HostRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; connect-src 'self'; media-src 'self' blob:; "
+            "script-src 'self'; style-src 'self'",
+        )
         self.end_headers()
         self.wfile.write(body)
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
+        if not self._has_capability():
+            self._json(HTTPStatus.FORBIDDEN, {"error": "forbidden"})
+            return
         try:
             if path == "/session":
                 sdp = self._read_sdp()
-                settings = load_settings(require_openai_api_key=True, backend="realtime")
+                settings = self._settings(require_openai_api_key=True)
                 assert settings.openai_api_key is not None
                 answer = create_realtime_call(
                     api_key=settings.openai_api_key,
@@ -448,6 +469,47 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             return
         self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
+    def _settings(self, *, require_openai_api_key: bool) -> object:
+        settings = getattr(getattr(self, "server", None), "settings", None)
+        if settings is None:
+            return load_settings(
+                require_openai_api_key=require_openai_api_key,
+                backend="realtime",
+            )
+        if require_openai_api_key and getattr(settings, "openai_api_key", None) is None:
+            raise ConfigError(["OPENAI_API_KEY is required for Realtime"])
+        return settings
+
+    def _handle_capability_bootstrap(self, parsed: urllib.parse.ParseResult) -> bool:
+        lease = getattr(getattr(self, "server", None), "capability_lease", None)
+        if lease is None or parsed.path != "/" or not parsed.query:
+            return False
+        supplied = urllib.parse.parse_qs(parsed.query).get("lease", [""])[0]
+        if supplied != lease:
+            self._json(HTTPStatus.FORBIDDEN, {"error": "forbidden"})
+            return True
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", "/")
+        self.send_header(
+            "Set-Cookie",
+            f"hey_jarvis_lease={lease}; HttpOnly; SameSite=Strict; Path=/",
+        )
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        return True
+
+    def _has_capability(self) -> bool:
+        lease = getattr(getattr(self, "server", None), "capability_lease", None)
+        if lease is None:
+            return True
+        cookie = SimpleCookie()
+        try:
+            cookie.load(self.headers.get("Cookie", ""))
+        except Exception:
+            return False
+        value = cookie.get("hey_jarvis_lease")
+        return value is not None and value.value == lease
+
     def _read_sdp(self) -> str:
         content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         if content_type != "application/sdp":
@@ -497,7 +559,7 @@ class HostRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         path = self.path.split("?", 1)[0]
         if path != "/api/command":
-            print(f"Realtime host: {self.command} {path}")
+            print(f"Realtime host: {self.command} {path}", file=sys.stderr)
 
 
 def launch_chrome_app(url: str) -> None:
