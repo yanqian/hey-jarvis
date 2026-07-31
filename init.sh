@@ -11,6 +11,15 @@ cd "$ROOT_DIR"
 echo "== Project required files =="
 for path in \
   README.md \
+  app/package.json \
+  app/src/index.html \
+  app/src/main.js \
+  app/sidecar/fake_sidecar.py \
+  app/src-tauri/Cargo.toml \
+  app/src-tauri/src/lib.rs \
+  app/src-tauri/src/protocol.rs \
+  app/src-tauri/src/supervisor.rs \
+  app/src-tauri/tauri.conf.json \
   .env.example \
   requirements.txt \
   requirements-vad.txt \
@@ -27,6 +36,7 @@ for path in \
   tests/test_audio_input.py \
   tests/test_config.py \
   tests/test_documentation.py \
+  tests/test_mac_app_shell.py \
   tests/test_openai_client.py \
   tests/test_player.py \
   tests/test_recorder.py \
@@ -45,6 +55,13 @@ python3 -m compileall -q src tests
 
 echo "== Project tests =="
 python3 -m unittest discover -s tests -p 'test_*.py'
+
+echo "== Mac app frontend and fake sidecar tests =="
+node --check app/src/main.js
+python3 -m unittest discover -s app/sidecar/tests -p 'test_*.py'
+
+echo "== Mac app Rust tests =="
+cargo test --locked --manifest-path app/src-tauri/Cargo.toml
 
 echo "== Project dry-run smoke =="
 python3 -m src.main --dry-run

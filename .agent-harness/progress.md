@@ -4,48 +4,23 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
-F086 isolated coding is complete and remains `in_progress` pending its
-explicitly authorized live device trial and separate evaluator. All spike code
-is under `spikes/tauri_realtime/`; the root product does not import or invoke
-it. Tauri 2 now bundles an isolated Python service, supervises it through a
-tracked external-binary launcher, and exposes a WKWebView-only Realtime trial
-surface with per-launch loopback authorization, bounded evidence, audio
-settings, interruption, cleanup, and Python microphone-reacquisition checks.
-The original PyInstaller `onefile` packaging was rejected after startup
-inspection exposed an orphan child on app exit; the accepted `onedir` app
-resource starts ready on attempt 0 and exits without a residual sidecar.
-Offline checks, Apple Silicon `.app` bundling, no-device GUI startup, and final
-root recovery pass; evidence is in
-`.agent-harness/runs/F086-fast-coding.md`.
+F086 is complete at commit `cd8e4d7`. Its isolated Tauri 2, WKWebView, and
+Python-sidecar spike passed offline, packaged-app, Apple Silicon live-device,
+audible playback, natural interruption, media-release, bounded Python
+microphone-reacquisition, parent-loss cleanup, and separate evaluator gates.
+The spike remains isolated under `spikes/tauri_realtime/` and is feasibility
+evidence only.
 
-F086 live attempt 1 partially passed on 2026-07-31. WKWebView acquired a 48 kHz
-track with echo cancellation, connected the unified Realtime peer, processed a
-normal human turn, and produced strong deliberate-interruption evidence:
-active playback was cancelled, `speech_started` was recorded with
-`during_playback=true`, and a replacement response began. The Mac then
-automatically locked before audible user confirmation and the required
-`Stop and reacquire` action. The session was terminated to bound microphone
-and API use, exposing that external parent termination could orphan the
-sidecar. The sidecar now monitors its supervising parent and self-terminates;
-the new regression brings the isolated Python suite to 9 tests, and the app
-bundle rebuild passes. F086 is not live-accepted yet. Attempt evidence and the
-remaining unlocked rerun gate are recorded in
-`.agent-harness/runs/F086-live-attempt-1.md`.
-
-F086 live attempt 2 now passes every target-Mac gate. A normal human
-turn reached response generation; deliberate speech during playback cancelled
-the old response and the replacement response completed. The first
-reacquisition attempt exposed an unbounded PortAudio read, so the corrected
-probe now waits 300 ms after WebKit track release and uses callback capture
-with a hard two-second timeout. A fresh run reported
-`Python reacquisition PASS · 1280 frames`, recorded
-`media_released reason=user_stop`, and parent-loss cleanup removed the sidecar
-without a manual child kill. The user explicitly confirmed hearing both the
-normal answer and the replacement answer for “三加三” after deliberate
-interruption. Isolated Python coverage is now 10 tests and the app rebuild
-passes. F086 remains `in_progress` only for its separate cold-start evaluator.
-Evidence is in
-`.agent-harness/runs/F086-live-attempt-2.md`.
+The next productization requirement has been normalized in `SPEC.md` and,
+after user confirmation, decomposed into F087-F093. The portfolio-grade,
+local-first architecture makes Rust/Tauri the native security and supervision
+boundary, WKWebView the Realtime media endpoint, and the packaged Python
+sidecar the owner of reusable wake, coordination, tool, and OpenAI behavior.
+The CLI remains the simplest personal-use and recovery path. The friend beta
+uses user-provided Keychain credentials and a manually updated Apple Silicon
+macOS 14+ Developer ID-signed, hardened, notarized, stapled DMG. A hosted
+backend, accounts, billing, telemetry, and automatic updates are excluded. No
+implementation has started.
 
 F085 has been completed through evaluator-gated fast work after a user-observed
 Realtime session closed 15.024 seconds after its last completed response. The
@@ -234,15 +209,17 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F085 - Keep Realtime idle timeout after playback.
+F087 - Create the production Mac app shell and protocol.
 
-F085 raises the default Realtime idle window to 60 seconds, prevents idle
-closure while assistant playback is active, restarts the full idle window after
-playback stops, and preserves the 600-second maximum-duration safety bound.
-Focused and full recovery verification pass with 380 project tests. Coding
-evidence is recorded in `.agent-harness/runs/F085-fast-coding.md`, and separate
-cold-start approval is recorded as `EVAL_PASS: F085` in
-`.agent-harness/runs/20260730T071947Z-F085-evaluation-pass.md`.
+F087 establishes the product-owned Tauri 2 window/tray shell, single-instance
+behavior, provisional `com.heyjarvis.desktop` identity, Application Support
+discovery, protocol-only fake Python sidecar, and bounded Rust supervision.
+The strict versioned protocol and parent-loss behavior are covered by Rust,
+Python, isolation, build, and recovery checks without microphone, OpenAI, or
+signing access. Coding evidence is recorded in
+`.agent-harness/runs/20260731T075516Z-F087-fast-coding.md`, and independent
+cold-start approval is recorded as `EVAL_PASS: F087` in
+`.agent-harness/runs/20260731T075810Z-F087-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -323,86 +300,34 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-F080 is evaluator-approved after fast coding and user-led target-Mac
-acceptance. The implementation keeps the accepted local alloy `嗯` asset,
-removes the rejected 3.0-speed preparation default, and aligns Realtime output
-to alloy at volume 0.5 without changing the local acknowledgement gate or
-playback architecture. The user reported that the voices are closer than
-before and volume 0.5 is suitable, while explicitly noting that the local `嗯`
-sounds male and the Realtime conversation sounds female. Coding and live
-evidence are recorded in `.agent-harness/runs/F080-fast-coding-and-live.md`;
-approval is recorded as `EVAL_PASS: F080` in
-`.agent-harness/runs/20260728T102811Z-F080-evaluation-pass.md`.
-F084 remains evaluator-approved, completing the planned Realtime bridge
-sequence for all existing structured tools.
-F085 is evaluator-approved. Realtime now uses a 60-second post-playback idle
-window, suppresses idle closure while assistant playback is active, and keeps
-the 600-second maximum-duration bound authoritative.
+No feature is in progress. F087 is evaluator-approved and establishes the
+production-owned shell/protocol boundary without migrating assistant behavior.
+The shell deliberately has no microphone, Realtime, accepted-runtime, Keychain,
+signing, or distribution behavior. F088 remains `todo` and is the only next
+implementation target.
 
-F083 completed through evaluator-gated fast work, user-led Realtime FX
-acceptance, and separate cold-start evaluator approval. Coding and live
-evidence are recorded in `.agent-harness/runs/F083-fast-coding.md` and
-`.agent-harness/runs/F083-live-acceptance.md`; approval is recorded in
-`.agent-harness/runs/20260728T090340Z-F083-evaluation-pass.md`.
+The latest accepted runtime baseline remains unchanged:
 
-F082 completed through evaluator-gated fast work, user-led Realtime local-time
-acceptance, and separate cold-start evaluator approval. Coding and live
-evidence are recorded in `.agent-harness/runs/F082-fast-coding.md` and
-`.agent-harness/runs/F082-live-acceptance.md`; approval is recorded in
-`.agent-harness/runs/20260728T084611Z-F082-evaluation-pass.md`.
-
-F081 completed through evaluator-gated fast work, user-led Realtime acceptance,
-and separate cold-start evaluator approval. Coding and live evidence are in
-`.agent-harness/runs/F081-fast-coding.md` and
-`.agent-harness/runs/F081-live-attempts.md`; approval is in
-`.agent-harness/runs/20260728T080314Z-F081-evaluation-pass.md`.
-
-F078 is evaluator-approved. The exact user-accepted 480 ms runtime cue is now
-the canonical project asset; offline preparation, exact digest recovery,
-failure preservation, full tests, and prior live post-cue evidence are
-recorded in `.agent-harness/runs/F078-fast-coding-and-live.md`. Approval is in
-`.agent-harness/runs/20260728T160225Z-F078-evaluation-pass.md`.
-
-F079 is evaluator-approved. It implements an acknowledgement-only
-exact-duration `afplay -t` path without changing normal answer playback or the
-audible-ready gate. A formal three-trial-per-mode target-Mac A/B measured
-1,378 ms legacy versus 635 ms bounded median total wall time. Full recovery
-passed with 378 tests. The user confirmed the bounded cue was complete, clear,
-and not truncated. A freshly authorized Realtime session accepted one
-post-cue question, produced a normal answer, ended semantically, stopped
-browser media, and restored Python wake ownership. Coding and live evidence
-are in `.agent-harness/runs/F079-fast-coding-and-live.md`; approval is recorded
-in `.agent-harness/runs/20260728T161532Z-F079-evaluation-pass.md`.
+- F079 is evaluator-approved for bounded acknowledgement playback.
+- F080 is evaluator-approved for the shared alloy voice profile.
+- F084 remains evaluator-approved, completing the existing Realtime
+  structured-tool bridges.
+- F085 is evaluator-approved for the post-playback idle window.
 
 ## Next Feature
 
-F086 - Validate an isolated Tauri Realtime host.
+F088 - Integrate the accepted runtime into the Mac app.
 
-F086 is planned as a self-contained capability spike under
-`spikes/tauri_realtime/`. It must not change or become a dependency of the
-accepted product runtime. The spike will test whether Tauri 2's macOS WKWebView
-can replace the development Chrome app-mode host for microphone capture,
-unified Realtime WebRTC, playback, interruption, cleanup, and Python
-microphone reacquisition. Isolated coding, reproducible Rust/Python setup,
-offline verification, app bundling, sidecar startup, and clean process
-shutdown now pass. The remaining gate is one explicitly authorized user-led
-built-in-microphone/speaker Realtime run, followed by the separate cold-start
-evaluator. A pass establishes target-Mac feasibility only and requires a
-separate future production-integration feature. News remains excluded because
-no news tool is implemented.
+Its completed predecessor is F086 - Validate an isolated Tauri Realtime host.
+F086 remains isolated under `spikes/tauri_realtime/` and supplies feasibility
+evidence only; it is not an implementation source for the production app.
 
-F076 is evaluator-approved. Its fresh-restart five-session follow-up measured
-a tight 849–930 ms readiness range (860 ms median), versus a 2,702 ms median in
-the earlier long-running three-session sample. The difference is almost
-entirely DataChannel establishment; service age alone is not proven causal.
-The earlier slow sample makes transport-time ACK overlap unsafe for the
-audible-ready contract, so that proposal has been withdrawn. Revised F077
-first adds a bounded local benchmark that separates observable `afplay`
-process-start and process-lifetime phases from asset duration without changing
-the gate. F080 is intentionally a low-risk configuration and asset-baseline
-correction: it does not move ACK into Realtime, replace `afplay`, or alter the
-audible-ready gate. F079 remains planned after F080 so playback overhead is
-optimized only against an accepted, understandable voice baseline.
+F088 integrates the accepted runtime and WKWebView while preserving the CLI,
+and is not started by the completed F087 work. F089 then adds BYOK, Keychain,
+first run, and TCC recovery; F090 packages the reproducible Python/model
+runtime; F091 hardens diagnostics and process recovery; F092 produces the
+signed/notarized manually updated friend-beta DMG; and F093 publishes the demo,
+case study, three-tester feedback, and final go/hold record.
 
 ## Recently Completed
 

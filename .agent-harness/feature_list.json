@@ -2020,6 +2020,149 @@
         "F075",
         "F085"
       ]
+    },
+    {
+      "id": "F087",
+      "title": "Create the production Mac app shell and protocol",
+      "description": "Create a product-owned Tauri 2 tray/window shell and a typed, versioned supervision protocol for a fake Python sidecar without importing the F086 spike or changing accepted assistant behavior.",
+      "acceptance": [
+        "Production Tauri, frontend, Rust, manifest, capability, and test files live under a project-owned app path; product builds do not import or copy spike source, and the spike remains historical evidence.",
+        "The native shell provides a stable provisional app identity, tray show/quit actions, single-instance behavior, app-support path discovery, and one supervised fake sidecar with bounded start, health, stop, and parent-loss behavior.",
+        "A versioned typed protocol defines startup, readiness, settings, session, lifecycle, error, and shutdown messages with strict size, ordering, session-identity, and redaction rules; unknown versions and malformed or secret-bearing payloads fail closed.",
+        "Rust, frontend, protocol, isolation, fake-sidecar, and recovery tests plus the existing project suite, Realtime fake smoke, and final ./init.sh pass without microphone, OpenAI access, signing credentials, or live devices.",
+        "Architecture documentation records Rust/Tauri, WKWebView, and Python ownership plus the provisional bundle identifier and the decisions that must be frozen before signed distribution."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F086"
+      ]
+    },
+    {
+      "id": "F088",
+      "title": "Integrate the accepted runtime into the Mac app",
+      "description": "Reuse the accepted Python wake, Realtime, tool, and privacy behavior behind the production sidecar protocol and replace the Chrome app-mode product path with WKWebView without importing spike code.",
+      "acceptance": [
+        "A product sidecar entrypoint reuses project src behavior for wake detection, exclusive microphone ownership, configured Realtime session creation, all accepted tools, current-language replies, semantic ending, and privacy sanitization instead of importing spike probe code.",
+        "Product WKWebView code owns microphone capture, disabled-track readiness, unified Realtime WebRTC negotiation, remote playback, interruption, and media teardown while the standard API key remains outside JavaScript.",
+        "Runtime resources resolve through explicit bundle-resource and Application Support paths; the app does not depend on repository cwd, root .env, terminal PATH, Chrome, or a separately installed Python, while the CLI remains independently runnable for personal use and recovery.",
+        "RT001-RT004, all six Realtime tools, acknowledgement/input gating, the 60-second post-playback idle window, stale/error cleanup, and wake-microphone reacquisition remain behaviorally compatible in deterministic tests and fake smokes.",
+        "The full project suite and final ./init.sh pass, and one authorized Apple Silicon built-in-device app run proves wake, normal/follow-up/tool turns, deliberate interruption, semantic ending, media release, wake recovery, quit, and relaunch."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F087"
+      ]
+    },
+    {
+      "id": "F089",
+      "title": "Add BYOK Keychain setup and first-run recovery",
+      "description": "Make a user-provided OpenAI API key a first-run requirement, store it in macOS Keychain, and guide users through privacy, API cost, microphone permission, readiness, and recoverable denial states.",
+      "acceptance": [
+        "First launch explains local wake listening, when audio reaches OpenAI, user-paid API usage, local diagnostics, and quit behavior before requesting a key or microphone access.",
+        "The app can add, validate, replace, retrieve, and delete the user's OpenAI key and optional Finnhub key through macOS Keychain; developer CLI .env support remains development-only and no shared key is embedded in the app.",
+        "Keys never enter WebView JavaScript, committed files, Application Support settings, URLs, argv, process listings, logs, reports, or snapshots; native code delivers them to Python only through a bounded per-launch private channel and Python keeps them in memory.",
+        "Missing, invalid, locked, denied, corrupt, offline, missing-device, sidecar-start, model-readiness, and microphone-permission states remain non-listening and provide exact UI recovery guidance; returning users can reopen settings and rerun diagnostics.",
+        "Keychain/privacy/onboarding tests, one clean-account first-run trial, one microphone denial-and-recovery trial, and final ./init.sh pass without committing or logging a real credential."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F087"
+      ]
+    },
+    {
+      "id": "F090",
+      "title": "Package a reproducible Python and wake-model runtime",
+      "description": "Build a reproducible Apple Silicon PyInstaller onedir sidecar containing only required Python, native audio, ML, tool, and wake assets, with measured artifact size and nested-binary inventory.",
+      "acceptance": [
+        "Pinned inputs produce a clean Python 3.12 onedir runtime and exact dependency, license, native-binary, architecture, model, and hash manifests; runtime needs no system Python, Homebrew path, repository .venv, or network download.",
+        "Only required wake assets and backends ship; optional ONNX, scikit-learn, SciPy, tests, caches, and unused models are removed only when import analysis and full behavior verification prove them unnecessary.",
+        "The build records uncompressed sidecar, complete app, DMG-candidate, cold-start, and warm-start measurements against an explicit portfolio-beta budget without unsupported size promises or arbitrary pruning.",
+        "Every bundled executable, dylib, extension, and resource has a deterministic destination suitable for nested signing, and onedir supervision exits cleanly without residual processes.",
+        "Clean-machine offline launch, wake-model load, fake microphone/OpenAI/tool smoke, parent-loss cleanup, reproducibility comparison, full tests, and final ./init.sh pass on Apple Silicon."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F088",
+        "F089"
+      ]
+    },
+    {
+      "id": "F091",
+      "title": "Harden app diagnostics and sidecar recovery",
+      "description": "Add sanitized rotating local diagnostics, bounded crash recovery, deterministic media cleanup, and redacted support export for the Tauri app and packaged sidecar.",
+      "acceptance": [
+        "Rust, WebView, and Python write correlated bounded lifecycle diagnostics under app-owned macOS paths with rotation and retention limits while excluding credentials, SDP, ICE, audio, transcripts, answers, tool arguments, and provider bodies.",
+        "Unexpected sidecar exit, parent loss, WebView reload, stale session, sleep/wake, and app quit deterministically release media and child processes; no tested shutdown path leaves microphone capture or a residual sidecar.",
+        "The supervisor uses bounded restart and backoff, distinguishes recoverable failure from crash loop, preserves a safe non-listening state, and never restarts automatically into paid Realtime activity.",
+        "A user can export and clear a redacted versioned support bundle from the UI, and automated scanners reject forbidden content and oversized artifacts.",
+        "Fault-injection, process-table, sleep/wake, repeated launch/quit, crash-loop, support-bundle, full-project, authorized packaged-app recovery, and final ./init.sh checks pass."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F088",
+        "F090"
+      ]
+    },
+    {
+      "id": "F092",
+      "title": "Produce a signed notarized friend-beta DMG",
+      "description": "Create and exercise a repeatable direct-distribution pipeline for an Apple Silicon Developer ID-signed, hardened, notarized, stapled DMG that friends can install without a terminal.",
+      "acceptance": [
+        "The stable product identity, minimum macOS version, icons, microphone usage text, version source, entitlements, Developer ID identity, and hardened-runtime policy are documented and applied to the app and all nested Python components.",
+        "One release command builds the Apple Silicon app and DMG, signs inside-out with secure timestamps, submits with notarytool, staples accepted tickets, and emits SHA-256 plus a versioned manifest without exposing signing credentials.",
+        "codesign, spctl, stapler, architecture, bundle-content, nested-signature, and no-developer-path checks pass; ad-hoc or unsigned output cannot be labeled as a friend release.",
+        "A clean macOS 14+ account downloads the quarantined DMG, installs through normal Gatekeeper behavior, completes BYOK and microphone setup, runs one bounded conversation, exports diagnostics if needed, quits, relaunches, and can manually install a prior retained DMG.",
+        "The HTTPS/GitHub release includes compatibility, privacy/API-cost disclosure, install, known-issue, feedback, uninstall, and manual-update guidance; full tests and final ./init.sh pass with separate evaluator approval."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F089",
+        "F091"
+      ]
+    },
+    {
+      "id": "F093",
+      "title": "Publish the portfolio release and friend feedback",
+      "description": "Complete Hey Jarvis as a portfolio-grade local-first project with a public engineering narrative, bounded demo, reproducible release, and privacy-safe feedback from at least three friend installs.",
+      "acceptance": [
+        "The project landing page and case study explain the personal-use, AI-learning, job-portfolio, and friend-feedback goals; architecture, privacy, non-commercial scope, major failures, F086 evidence, AI Agent Harness workflow, and deliberate tradeoffs are accurate and reproducible.",
+        "A two-to-four-minute demo shows installation or launch, BYOK setup without revealing a key, wake, acknowledgement, normal/follow-up/tool turns, deliberate interruption, semantic ending, media release, diagnostics, and clean quit.",
+        "At least three invited Apple Silicon users or clean user/device profiles record privacy-safe install, first-run, wake, conversation, interruption, cleanup, relaunch, support friction, and qualitative feedback without committed audio, transcripts, or credentials.",
+        "Release blockers include credential exposure, signing/notarization failure, repeatable microphone ownership loss, residual sidecar, crash loop, or unrecoverable onboarding; failures create follow-up features rather than being hidden by aggregate feedback.",
+        "A final completion record summarizes artifact size and readiness measurements, feedback, unresolved limitations, retained CLI recovery path, future cloud evolution without implementing it, and a go/hold decision; full verification and final ./init.sh pass."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F092"
+      ]
     }
   ]
 }

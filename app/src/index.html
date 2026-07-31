@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hey Jarvis</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./main.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="eyebrow">MAC APP FOUNDATION</span>
+        <h1>Hey Jarvis</h1>
+        <p>Native shell and sidecar supervision are ready for integration.</p>
+      </header>
+
+      <section class="status-card" aria-live="polite">
+        <div class="status-heading">
+          <span id="status-dot" class="status-dot"></span>
+          <div>
+            <h2 id="status-title">Checking sidecar…</h2>
+            <p id="status-detail">Waiting for the native supervisor.</p>
+          </div>
+        </div>
+        <dl>
+          <div><dt>Protocol</dt><dd id="protocol">—</dd></div>
+          <div><dt>Session</dt><dd id="session">—</dd></div>
+          <div><dt>App data</dt><dd id="app-support">—</dd></div>
+        </dl>
+      </section>
+
+      <div class="actions">
+        <button id="health-check" type="button">Check sidecar</button>
+        <button id="restart" class="secondary" type="button">Restart sidecar</button>
+      </div>
+
+      <p class="boundary">
+        This foundation does not access the microphone or OpenAI. Assistant
+        behavior is integrated in the next feature.
+      </p>
+    </main>
+  </body>
+</html>

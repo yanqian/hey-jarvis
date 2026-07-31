@@ -1,6 +1,9 @@
 .agent-harness/agent-provider.json
 .env
 .venv/
+node_modules/
+target/
+app/src-tauri/gen/
 .DS_Store
 __pycache__/
 *.pyc

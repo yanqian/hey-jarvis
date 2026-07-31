@@ -128,6 +128,8 @@ Start with the document matching your task:
   and diagnostics.
 - [Realtime guide](docs/REALTIME.md) — browser handoff, privacy, controls, and
   evaluation commands.
+- [Mac App architecture](docs/MAC_APP_ARCHITECTURE.md) — native ownership,
+  sidecar protocol, lifecycle, identity, and release freeze points.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common failures and audio debug.
 
 Developer references:
