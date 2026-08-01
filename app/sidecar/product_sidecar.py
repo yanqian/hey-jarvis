@@ -8,6 +8,8 @@ import logging
 import os
 import sys
 import threading
+import urllib.error
+import urllib.request
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, TextIO
@@ -34,10 +36,74 @@ from src.tools.providers import provider_config_from_settings  # noqa: E402
 
 LOGGER = logging.getLogger("hey_jarvis.mac_sidecar")
 ACKNOWLEDGEMENT_RESOURCE = Path("assets/wake_acknowledgement_alloy.mp3")
+PRIVATE_BOOTSTRAP_MAX_BYTES = 4096
+OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 
 
 class ProductRuntimeError(RuntimeError):
-    pass
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def validate_openai_credential(
+    api_key: str,
+    *,
+    urlopen: Callable[..., object] = urllib.request.urlopen,
+) -> None:
+    request = urllib.request.Request(
+        OPENAI_MODELS_URL,
+        method="GET",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    try:
+        with urlopen(request, timeout=10):
+            return
+    except urllib.error.HTTPError as exc:
+        if exc.code in {401, 403}:
+            raise ProductRuntimeError("openai_credential_invalid") from exc
+        raise ProductRuntimeError("openai_service_unavailable") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise ProductRuntimeError("offline") from exc
+
+
+def parse_private_credentials(line: str) -> dict[str, str]:
+    if (
+        not line
+        or len(line.encode("utf-8")) > PRIVATE_BOOTSTRAP_MAX_BYTES
+        or "\x00" in line
+    ):
+        raise ProductRuntimeError("credential_bootstrap_invalid")
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError as exc:
+        raise ProductRuntimeError("credential_bootstrap_invalid") from exc
+    if not isinstance(payload, dict) or set(payload) != {
+        "kind",
+        "openai_api_key",
+        "finnhub_api_key",
+    }:
+        raise ProductRuntimeError("credential_bootstrap_invalid")
+    openai = payload.get("openai_api_key")
+    finnhub = payload.get("finnhub_api_key")
+    if (
+        payload.get("kind") != "private_credentials"
+        or not isinstance(openai, str)
+        or not openai.startswith("sk-")
+        or not 3 < len(openai) <= 512
+        or any(character.isspace() or ord(character) < 32 for character in openai)
+        or (finnhub is not None and not isinstance(finnhub, str))
+        or (isinstance(finnhub, str) and (not finnhub or len(finnhub) > 512))
+        or (
+            isinstance(finnhub, str)
+            and any(character.isspace() or ord(character) < 32 for character in finnhub)
+        )
+    ):
+        raise ProductRuntimeError("credential_bootstrap_invalid")
+    values = {"OPENAI_API_KEY": openai}
+    if finnhub is not None:
+        values["FINNHUB_API_KEY"] = finnhub
+    return values
 
 
 class ProductRuntime:
@@ -73,6 +139,7 @@ class ProductRuntime:
             require_openai_api_key=True,
             backend="realtime",
         )
+        validate_openai_credential(settings.openai_api_key)
         acknowledgement = (resource_dir / ACKNOWLEDGEMENT_RESOURCE).resolve()
         settings = replace(
             settings,
@@ -181,6 +248,18 @@ def run(
     runtime: ProductRuntime | None = None
 
     try:
+        bootstrap_line = input_stream.readline()
+        if not bootstrap_line:
+            return 2
+        try:
+            credentials = parse_private_credentials(bootstrap_line.rstrip("\n"))
+        except ProductRuntimeError:
+            return 2
+        runtime_env = dict(os.environ if env is None else env)
+        runtime_env.pop("OPENAI_API_KEY", None)
+        runtime_env.pop("FINNHUB_API_KEY", None)
+        runtime_env.update(credentials)
+
         for line in input_stream:
             try:
                 message = parse_message(
@@ -202,18 +281,23 @@ def run(
                         session_id=session_id,
                         resource_dir=Path(payload["resource_dir"]),
                         app_support_dir=Path(payload["app_support_dir"]),
-                        env=os.environ if env is None else env,
+                        env=runtime_env,
                     )
                 except Exception as exc:
                     LOGGER.error("product runtime startup failed: %s", type(exc).__name__)
+                    error_code = (
+                        exc.code
+                        if isinstance(exc, ProductRuntimeError)
+                        else type(exc).__name__
+                    )
                     _write(
                         output_stream,
                         session_id,
                         outbound_sequence,
                         {
                             "kind": "error",
-                            "code": f"startup_{type(exc).__name__}",
-                            "recoverable": False,
+                            "code": f"startup_{error_code}",
+                            "recoverable": True,
                         },
                     )
                     return 1

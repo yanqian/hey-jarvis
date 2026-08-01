@@ -2072,9 +2072,9 @@
         "Missing, invalid, locked, denied, corrupt, offline, missing-device, sidecar-start, model-readiness, and microphone-permission states remain non-listening and provide exact UI recovery guidance; returning users can reopen settings and rerun diagnostics.",
         "Keychain/privacy/onboarding tests, one clean-account first-run trial, one microphone denial-and-recovery trial, and final ./init.sh pass without committing or logging a real credential."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

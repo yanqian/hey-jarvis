@@ -492,7 +492,7 @@ class HostRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Location", "/")
         self.send_header(
             "Set-Cookie",
-            f"hey_jarvis_lease={lease}; HttpOnly; SameSite=Strict; Path=/",
+            f"hey_jarvis_lease={lease}; HttpOnly; SameSite=Lax; Path=/",
         )
         self.send_header("Cache-Control", "no-store")
         self.end_headers()

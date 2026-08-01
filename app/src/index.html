@@ -12,10 +12,53 @@
       <header>
         <span class="eyebrow">MAC APP</span>
         <h1>Hey Jarvis</h1>
-        <p>Starting the local voice runtime.</p>
+        <p id="page-summary">Private, local wake listening with OpenAI-powered conversations.</p>
       </header>
 
-      <section class="status-card" aria-live="polite">
+      <section id="onboarding" class="setup-card" aria-labelledby="setup-title">
+        <div class="step-label">FIRST RUN &amp; SETTINGS</div>
+        <h2 id="setup-title">Set up your voice assistant</h2>
+        <div class="disclosure">
+          <p><strong>Local until you wake it.</strong> Hey Jarvis listens for the wake phrase on this Mac. Conversation audio reaches OpenAI only after wake and stops at the end of the session.</p>
+          <p><strong>Your API usage.</strong> You provide the OpenAI key and are responsible for its usage. OpenAI Project budgets and rate limits are monitoring controls, not a guaranteed hard spending cap.</p>
+          <p><strong>Private diagnostics.</strong> Keys stay in macOS Keychain and never enter this web interface. Local diagnostics exclude keys, raw audio, and transcripts. Quitting the tray app stops listening.</p>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <h3>OpenAI API key <span class="required">Required</span></h3>
+            <p id="openai-status">Checking macOS Keychain…</p>
+          </div>
+          <div class="row-actions">
+            <button id="save-openai" type="button">Add key…</button>
+            <button id="delete-openai" class="danger" type="button">Delete</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <h3>Finnhub API key <span class="optional">Optional</span></h3>
+            <p id="finnhub-status">Used only for stock quotes.</p>
+          </div>
+          <div class="row-actions">
+            <button id="save-finnhub" class="secondary" type="button">Add key…</button>
+            <button id="delete-finnhub" class="danger" type="button">Delete</button>
+          </div>
+        </div>
+
+        <div class="permission-panel">
+          <h3>Microphone permission</h3>
+          <p id="microphone-status">Permission is requested only when you click the button below.</p>
+          <div class="actions">
+            <button id="start" type="button">Check microphone &amp; start</button>
+            <button id="microphone-settings" class="secondary" type="button">Open System Settings</button>
+          </div>
+        </div>
+
+        <p id="setup-message" class="message" role="status"></p>
+      </section>
+
+      <section id="runtime" class="status-card" aria-live="polite" hidden>
         <div class="status-heading">
           <span id="status-dot" class="status-dot"></span>
           <div>
@@ -28,17 +71,12 @@
           <div><dt>Session</dt><dd id="session">—</dd></div>
           <div><dt>App data</dt><dd id="app-support">—</dd></div>
         </dl>
+        <div class="actions">
+          <button id="health-check" type="button">Run readiness check</button>
+          <button id="restart" class="secondary" type="button">Restart sidecar</button>
+          <button id="runtime-settings" class="secondary" type="button">Settings</button>
+        </div>
       </section>
-
-      <div class="actions">
-        <button id="health-check" type="button">Check sidecar</button>
-        <button id="restart" class="secondary" type="button">Restart sidecar</button>
-      </div>
-
-      <p class="boundary">
-        Your OpenAI key stays in the native runtime and is never exposed to
-        this web interface.
-      </p>
     </main>
   </body>
 </html>

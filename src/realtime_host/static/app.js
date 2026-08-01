@@ -243,6 +243,16 @@ async function stop(reason="command"){
   $("status").textContent="Armed · Python wake microphone restored";
 }
 
+async function openAppSettings(){
+  armed=false;
+  try{if(sessionId)await stop("open_settings");}catch{}
+  stopInputLevels();
+  if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}inputTrack=null;
+  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;
+  if(window.history.length>1)window.history.back();
+  else $("status").textContent="Open Settings from the Hey Jarvis tray menu.";
+}
+
 async function sendFixtureAudio(command){
   if(command.session_id!==sessionId||dc?.readyState!=="open")throw new Error("fixture audio requires an open session");
   const audio=command.audio;if(typeof audio!=="string"||!audio.length)throw new Error("fixture audio payload is missing");
@@ -255,4 +265,4 @@ async function sendFixtureAudio(command){
 async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
 function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:"Count slowly from one to one hundred, saying every number clearly. Do not abbreviate or skip any number."}]}}));dc.send(JSON.stringify({type:"response.create"}));}
 
-$("arm").addEventListener("click",arm);$("long").addEventListener("click",longAnswer);$("stop").addEventListener("click",()=>post("/api/stop"));window.addEventListener("beforeunload",()=>{if(stream)stream.getTracks().forEach(track=>track.stop());});
+$("arm").addEventListener("click",arm);$("long").addEventListener("click",longAnswer);$("stop").addEventListener("click",()=>post("/api/stop"));$("app-settings").addEventListener("click",openAppSettings);window.addEventListener("beforeunload",()=>{if(stream)stream.getTracks().forEach(track=>track.stop());});

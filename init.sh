@@ -18,7 +18,9 @@ for path in \
   app/sidecar/product_sidecar.py \
   app/src-tauri/Cargo.toml \
   app/src-tauri/Info.plist \
+  app/src-tauri/src/credentials.rs \
   app/src-tauri/src/lib.rs \
+  app/src-tauri/src/onboarding.rs \
   app/src-tauri/src/protocol.rs \
   app/src-tauri/src/supervisor.rs \
   app/src-tauri/tauri.conf.json \

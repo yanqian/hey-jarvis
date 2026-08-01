@@ -26,6 +26,11 @@ provider-native coding and an authorized Apple Silicon live run recorded in
 `.agent-harness/runs/F088-live-acceptance.md`; independent approval is recorded
 as `EVAL_PASS: F088` in
 `.agent-harness/runs/20260731T101439Z-F088-evaluation-pass.md`.
+F089 is now in progress through evaluator-gated fast work. Its current coding
+scope is BYOK Keychain storage, a native secure-entry path that keeps values
+out of WebView JavaScript, a bounded inherited-stdin credential bootstrap,
+first-run disclosures, deliberate microphone permission, and non-listening
+recovery states.
 
 F085 has been completed through evaluator-gated fast work after a user-observed
 Realtime session closed 15.024 seconds after its last completed response. The
@@ -306,11 +311,38 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F088 is evaluator-approved and the
-working tree awaits an explicit user-approved commit boundary.
+F089 - Add BYOK Keychain setup and first-run recovery.
+
+The Harness selected F089 with attempt 1. Provider-native coding is in
+progress; F089 remains incomplete until focused privacy/onboarding tests,
+final recovery, authorized clean-state first-run and microphone
+denial/recovery trials, durable coding evidence, and separate cold-start
+Evaluator approval pass.
+
+Target-Mac interactive evidence confirms that the native Settings page can
+add both the required OpenAI key and optional Finnhub key without displaying
+their values. A microphone-revocation trial then exposed a recovery defect:
+the already-open loopback voice page had no visible path back to “Check
+microphone & start.” The candidate fix adds a visible runtime Settings action
+and an explicit native settings mode that stops the sidecar and suppresses the
+completed-onboarding redirect. Automated focused checks and full `./init.sh`
+pass; the denial/recovery behavior still requires a fresh interactive retry
+before it can be accepted.
+
+The corrected Settings/history flow, configured-runtime path, and standalone
+app TCC recovery now have target-Mac acceptance in
+`.agent-harness/runs/20260801T150441Z-F089-live-acceptance.md`: Settings remains
+non-listening across the Tauri development document reload, Python 3.12 starts
+the sidecar, Arm reaches input readiness, normal and follow-up questions work,
+barge-in switches to the new question, and “再见” restores the armed wake
+state. A standalone app denial remained non-listening, exposed exact recovery
+guidance, and successfully returned through System Settings -> Check -> Runtime
+ready -> Arm after the `Hey Jarvis` microphone entry was enabled. Only final
+automated verification and the independent evaluator gate remain.
 
 The latest accepted runtime baseline remains unchanged:
 
+- F088 is evaluator-approved for the accepted runtime and WKWebView product integration.
 - F087 is evaluator-approved for the production Mac app shell and protocol.
 - F079 is evaluator-approved for bounded acknowledgement playback.
 - F080 is evaluator-approved for the shared alloy voice profile.
@@ -320,13 +352,11 @@ The latest accepted runtime baseline remains unchanged:
 
 ## Next Feature
 
-F089 - Add BYOK Keychain setup and first-run recovery.
-
-After the user approves and commits F088, F089 adds BYOK, Keychain, first run,
-and TCC recovery. F090 then packages the reproducible Python/model runtime;
-F091 hardens diagnostics and process recovery; F092 produces the
-signed/notarized manually updated friend-beta DMG; and F093 publishes the demo,
-case study, three-tester feedback, and final go/hold record.
+Complete and evaluate F089 without exposing a real credential. F090 then
+packages the reproducible Python/model runtime; F091 hardens diagnostics and
+process recovery; F092 produces the signed/notarized manually updated
+friend-beta DMG; and F093 publishes the demo, case study, three-tester feedback,
+and final go/hold record.
 
 ## Recently Completed
 

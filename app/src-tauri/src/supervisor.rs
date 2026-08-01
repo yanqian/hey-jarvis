@@ -1,3 +1,4 @@
+use crate::credentials::RuntimeCredentials;
 use crate::protocol::{decode, encode, Envelope, Payload, PROTOCOL_VERSION};
 use serde::Serialize;
 use std::io::{BufRead, BufReader, Write};
@@ -63,8 +64,7 @@ impl SidecarSupervisor {
             SidecarLaunch::Executable(PathBuf::from(path))
         } else if cfg!(debug_assertions) {
             SidecarLaunch::PythonDevelopment {
-                interpreter: std::env::var("HEY_JARVIS_SIDECAR_PYTHON")
-                    .unwrap_or_else(|_| "python3".into()),
+                interpreter: development_python_interpreter(),
                 script: script_path,
             }
         } else {
@@ -101,7 +101,15 @@ impl SidecarSupervisor {
         supervisor
     }
 
+    #[cfg(test)]
     pub fn start(&mut self) -> Result<RuntimeSnapshot, String> {
+        self.start_with_credentials(None)
+    }
+
+    pub fn start_with_credentials(
+        &mut self,
+        credentials: Option<&RuntimeCredentials>,
+    ) -> Result<RuntimeSnapshot, String> {
         self.stop("restart")?;
         std::fs::create_dir_all(&self.app_support_dir)
             .map_err(|error| format!("cannot create app support directory: {error}"))?;
@@ -147,6 +155,20 @@ impl SidecarSupervisor {
             .stdout
             .take()
             .ok_or_else(|| "sidecar stdout is unavailable".to_string())?;
+
+        if let Some(credentials) = credentials {
+            let mut bootstrap = credentials.private_bootstrap()?;
+            let result = stdin
+                .write_all(&bootstrap)
+                .and_then(|_| stdin.flush())
+                .map_err(|_| "credential bootstrap write failed".to_string());
+            bootstrap.fill(0);
+            if let Err(error) = result {
+                let _ = child.kill();
+                let _ = child.wait();
+                return self.fail(error);
+            }
+        }
 
         let startup = self.outbound(Payload::Startup {
             app_version: env!("CARGO_PKG_VERSION").into(),
@@ -319,6 +341,17 @@ impl SidecarSupervisor {
         set_snapshot(&self.snapshot, "error", &detail);
         Err(detail)
     }
+}
+
+fn development_python_interpreter() -> String {
+    if let Ok(configured) = std::env::var("HEY_JARVIS_SIDECAR_PYTHON") {
+        return configured;
+    }
+    let project_venv = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.venv/bin/python");
+    if project_venv.is_file() {
+        return project_venv.display().to_string();
+    }
+    "python3".into()
 }
 
 impl Drop for SidecarSupervisor {

@@ -1,8 +1,16 @@
+mod credentials;
+mod onboarding;
 mod protocol;
 mod supervisor;
 
+use credentials::{
+    delete_and_report, prompt_and_store, status as credential_status_value, CredentialKind,
+    CredentialStatus, CredentialStore, MacKeychainStore, RuntimeCredentials,
+};
+use onboarding::{load as load_onboarding, save as save_onboarding, OnboardingRecord};
+use serde::Serialize;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use supervisor::{RuntimeSnapshot, SidecarSupervisor};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -10,12 +18,25 @@ use tauri::{
     Manager, State,
 };
 
-struct AppRuntime(Mutex<SidecarSupervisor>);
+struct AppRuntime {
+    supervisor: Mutex<SidecarSupervisor>,
+    credentials: Arc<dyn CredentialStore>,
+    onboarding_path: PathBuf,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct OnboardingSnapshot {
+    first_run: bool,
+    completed: bool,
+    microphone_permission: String,
+    openai_configured: bool,
+    finnhub_configured: bool,
+}
 
 #[tauri::command]
 fn sidecar_status(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, String> {
     runtime
-        .0
+        .supervisor
         .lock()
         .map_err(|_| "sidecar supervisor is unavailable".to_string())
         .map(|supervisor| supervisor.snapshot())
@@ -24,7 +45,7 @@ fn sidecar_status(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, Str
 #[tauri::command]
 fn sidecar_health(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, String> {
     runtime
-        .0
+        .supervisor
         .lock()
         .map_err(|_| "sidecar supervisor is unavailable".to_string())?
         .health()
@@ -32,16 +53,112 @@ fn sidecar_health(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, Str
 
 #[tauri::command]
 fn restart_sidecar(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, String> {
+    let record = load_onboarding(&runtime.onboarding_path)?;
+    if !record.completed || record.microphone_permission != "granted" {
+        return Err("onboarding_incomplete".into());
+    }
+    let credentials = RuntimeCredentials::load(runtime.credentials.as_ref())?;
     runtime
-        .0
+        .supervisor
         .lock()
         .map_err(|_| "sidecar supervisor is unavailable".to_string())?
-        .start()
+        .start_with_credentials(Some(&credentials))
 }
 
 fn stop_sidecar(runtime: &AppRuntime, reason: &str) {
-    if let Ok(mut supervisor) = runtime.0.lock() {
+    if let Ok(mut supervisor) = runtime.supervisor.lock() {
         let _ = supervisor.stop(reason);
+    }
+}
+
+#[tauri::command]
+fn onboarding_status(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
+    let first_run = !runtime.onboarding_path.exists();
+    let record = load_onboarding(&runtime.onboarding_path)?;
+    let credentials = credential_status_value(runtime.credentials.as_ref())?;
+    Ok(onboarding_snapshot(first_run, record, credentials))
+}
+
+#[tauri::command]
+fn enter_settings(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
+    stop_sidecar(&runtime, "open_settings");
+    onboarding_status(runtime)
+}
+
+#[tauri::command]
+fn prompt_save_credential(
+    kind: String,
+    runtime: State<'_, AppRuntime>,
+) -> Result<CredentialStatus, String> {
+    let kind = CredentialKind::parse(&kind)?;
+    let result = prompt_and_store(runtime.credentials.as_ref(), kind)?;
+    if kind == CredentialKind::OpenAi {
+        stop_sidecar(&runtime, "credential_replaced");
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn delete_credential(
+    kind: String,
+    runtime: State<'_, AppRuntime>,
+) -> Result<CredentialStatus, String> {
+    let kind = CredentialKind::parse(&kind)?;
+    if kind == CredentialKind::OpenAi {
+        stop_sidecar(&runtime, "credential_deleted");
+    }
+    delete_and_report(runtime.credentials.as_ref(), kind)
+}
+
+#[tauri::command]
+fn record_microphone_denied(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
+    stop_sidecar(&runtime, "microphone_denied");
+    let mut record = load_onboarding(&runtime.onboarding_path).unwrap_or_default();
+    record.completed = false;
+    record.microphone_permission = "denied".into();
+    save_onboarding(&runtime.onboarding_path, &record)?;
+    let credentials = credential_status_value(runtime.credentials.as_ref())?;
+    Ok(onboarding_snapshot(false, record, credentials))
+}
+
+#[tauri::command]
+fn complete_onboarding(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, String> {
+    let credentials = RuntimeCredentials::load(runtime.credentials.as_ref())?;
+    let record = OnboardingRecord {
+        completed: true,
+        microphone_permission: "granted".into(),
+        ..OnboardingRecord::default()
+    };
+    save_onboarding(&runtime.onboarding_path, &record)?;
+    runtime
+        .supervisor
+        .lock()
+        .map_err(|_| "sidecar supervisor is unavailable".to_string())?
+        .start_with_credentials(Some(&credentials))
+}
+
+#[tauri::command]
+fn open_microphone_settings() -> Result<(), String> {
+    std::process::Command::new("/usr/bin/open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+        .status()
+        .map_err(|_| "system_settings_unavailable".to_string())?
+        .success()
+        .then_some(())
+        .ok_or_else(|| "system_settings_unavailable".to_string())
+}
+
+fn onboarding_snapshot(
+    first_run: bool,
+    record: OnboardingRecord,
+    credentials: CredentialStatus,
+) -> OnboardingSnapshot {
+    OnboardingSnapshot {
+        first_run,
+        completed: record.completed,
+        microphone_permission: record.microphone_permission,
+        openai_configured: credentials.openai_configured,
+        finnhub_configured: credentials.finnhub_configured,
     }
 }
 
@@ -51,6 +168,17 @@ fn development_sidecar_path() -> PathBuf {
         .unwrap_or_else(|| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../sidecar/product_sidecar.py")
         })
+}
+
+fn settings_url(app: &tauri::AppHandle) -> Result<tauri::Url, String> {
+    let mut url = app
+        .config()
+        .build
+        .dev_url
+        .clone()
+        .unwrap_or(tauri::Url::parse("tauri://localhost").map_err(|_| "settings_unavailable")?);
+    url.set_fragment(Some("settings-return"));
+    Ok(url)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -67,18 +195,30 @@ pub fn run() {
             let resource_dir = std::env::var_os("HEY_JARVIS_RESOURCE_DIR")
                 .map(PathBuf::from)
                 .unwrap_or(app.path().resource_dir()?);
+            let onboarding_path = onboarding::path(&app_support_dir);
+            let credential_store: Arc<dyn CredentialStore> = Arc::new(MacKeychainStore);
             let mut supervisor =
                 SidecarSupervisor::new(app_support_dir, resource_dir, development_sidecar_path());
-            let _ = supervisor.start();
-            app.manage(AppRuntime(Mutex::new(supervisor)));
+            let onboarding = load_onboarding(&onboarding_path).unwrap_or_default();
+            if onboarding.completed && onboarding.microphone_permission == "granted" {
+                if let Ok(credentials) = RuntimeCredentials::load(credential_store.as_ref()) {
+                    let _ = supervisor.start_with_credentials(Some(&credentials));
+                }
+            }
+            app.manage(AppRuntime {
+                supervisor: Mutex::new(supervisor),
+                credentials: credential_store,
+                onboarding_path,
+            });
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
 
             let show = MenuItem::with_id(app, "show", "Show Hey Jarvis", true, None::<&str>)?;
+            let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Hey Jarvis", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &settings, &quit])?;
             let mut tray = TrayIconBuilder::with_id("hey-jarvis").menu(&menu);
             if let Some(icon) = app.default_window_icon() {
                 tray = tray.icon(icon.clone());
@@ -86,6 +226,18 @@ pub fn run() {
             tray.on_menu_event(|app, event| match event.id.as_ref() {
                 "show" => {
                     if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                "settings" => {
+                    if let Some(runtime) = app.try_state::<AppRuntime>() {
+                        stop_sidecar(&runtime, "open_settings");
+                    }
+                    if let Some(window) = app.get_webview_window("main") {
+                        if let Ok(url) = settings_url(app) {
+                            let _ = window.navigate(url);
+                        }
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
@@ -104,7 +256,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             sidecar_status,
             sidecar_health,
-            restart_sidecar
+            restart_sidecar,
+            onboarding_status,
+            enter_settings,
+            prompt_save_credential,
+            delete_credential,
+            record_microphone_denied,
+            complete_onboarding,
+            open_microphone_settings
         ])
         .build(tauri::generate_context!())
         .expect("Hey Jarvis Mac app failed to build");

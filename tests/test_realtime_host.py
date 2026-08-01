@@ -136,7 +136,8 @@ class RealtimeHostTests(unittest.TestCase):
             self.assertEqual(bootstrap.status, HTTPStatus.SEE_OTHER)
             cookie = bootstrap.getheader("Set-Cookie")
             self.assertIn("HttpOnly", cookie)
-            self.assertIn("SameSite=Strict", cookie)
+            self.assertIn("SameSite=Lax", cookie)
+            self.assertNotIn("SameSite=None", cookie)
             self.assertNotIn("OPENAI", cookie)
 
             connection.request(

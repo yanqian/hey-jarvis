@@ -2,13 +2,20 @@ import io
 import json
 import sys
 import unittest
+import urllib.error
 from pathlib import Path
 
 
 SIDECAR_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SIDECAR_DIR))
 
-from product_sidecar import ACKNOWLEDGEMENT_RESOURCE, run  # noqa: E402
+from product_sidecar import (  # noqa: E402
+    ACKNOWLEDGEMENT_RESOURCE,
+    ProductRuntimeError,
+    parse_private_credentials,
+    run,
+    validate_openai_credential,
+)
 
 
 def message(sequence, payload):
@@ -18,6 +25,16 @@ def message(sequence, payload):
             "sequence": sequence,
             "session_id": "session-product-1",
             "payload": payload,
+        }
+    )
+
+
+def credentials(openai="sk-test-private", finnhub=None):
+    return json.dumps(
+        {
+            "kind": "private_credentials",
+            "openai_api_key": openai,
+            "finnhub_api_key": finnhub,
         }
     )
 
@@ -33,6 +50,38 @@ class FakeRuntime:
 
 
 class ProductSidecarTests(unittest.TestCase):
+    def test_openai_credential_validation_distinguishes_valid_invalid_and_offline(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        calls = []
+
+        def succeeds(request, timeout):
+            calls.append((request, timeout))
+            return Response()
+
+        validate_openai_credential("sk-valid-test", urlopen=succeeds)
+        self.assertEqual(calls[0][1], 10)
+        self.assertEqual(calls[0][0].get_header("Authorization"), "Bearer sk-valid-test")
+
+        def unauthorized(_request, timeout):
+            del timeout
+            raise urllib.error.HTTPError("url", 401, "unauthorized", {}, None)
+
+        with self.assertRaisesRegex(ProductRuntimeError, "openai_credential_invalid"):
+            validate_openai_credential("sk-invalid-test", urlopen=unauthorized)
+
+        def offline(_request, timeout):
+            del timeout
+            raise urllib.error.URLError("offline")
+
+        with self.assertRaisesRegex(ProductRuntimeError, "offline"):
+            validate_openai_credential("sk-offline-test", urlopen=offline)
+
     def test_product_protocol_starts_health_checks_and_closes_runtime(self):
         runtime = FakeRuntime()
         calls = []
@@ -43,6 +92,7 @@ class ProductSidecarTests(unittest.TestCase):
 
         incoming = "\n".join(
             [
+                credentials(),
                 message(
                     1,
                     {
@@ -66,7 +116,7 @@ class ProductSidecarTests(unittest.TestCase):
                 io.StringIO(incoming),
                 output,
                 runtime_factory=factory,
-                env={"OPENAI_API_KEY": "test-only"},
+                env={"OPENAI_API_KEY": "sk-environment-must-not-win"},
             ),
             0,
         )
@@ -80,19 +130,26 @@ class ProductSidecarTests(unittest.TestCase):
         self.assertTrue(runtime.closed)
         self.assertEqual(calls[0]["resource_dir"], Path("/tmp/hey-jarvis-resources"))
         self.assertEqual(calls[0]["app_support_dir"], Path("/tmp/hey-jarvis-support"))
+        self.assertEqual(calls[0]["env"]["OPENAI_API_KEY"], "sk-test-private")
+        self.assertNotIn("sk-test-private", output.getvalue())
 
     def test_startup_failure_is_redacted_and_nonzero(self):
         def factory(**_kwargs):
             raise RuntimeError("OPENAI_API_KEY=sk-private")
 
-        incoming = message(
-            1,
-            {
-                "kind": "startup",
-                "app_version": "0.1.0",
-                "app_support_dir": "/tmp/support",
-                "resource_dir": "/tmp/resources",
-            },
+        incoming = "\n".join(
+            [
+                credentials(),
+                message(
+                    1,
+                    {
+                        "kind": "startup",
+                        "app_version": "0.1.0",
+                        "app_support_dir": "/tmp/support",
+                        "resource_dir": "/tmp/resources",
+                    },
+                ),
+            ]
         )
         output = io.StringIO()
 
@@ -104,6 +161,38 @@ class ProductSidecarTests(unittest.TestCase):
         self.assertIn("startup_RuntimeError", result)
         self.assertNotIn("sk-private", result)
         self.assertNotIn("OPENAI_API_KEY", result)
+
+    def test_private_credentials_are_required_and_validated_before_protocol(self):
+        self.assertEqual(run(io.StringIO(""), io.StringIO()), 2)
+        with self.assertRaises(ProductRuntimeError):
+            parse_private_credentials(credentials(openai="not-a-key"))
+        with self.assertRaises(ProductRuntimeError):
+            parse_private_credentials("{}")
+
+        calls = []
+
+        def factory(**kwargs):
+            calls.append(kwargs)
+            return FakeRuntime()
+
+        incoming = "\n".join(
+            [
+                credentials(finnhub="stock-token"),
+                message(
+                    1,
+                    {
+                        "kind": "startup",
+                        "app_version": "0.1.0",
+                        "app_support_dir": "/tmp/support",
+                        "resource_dir": "/tmp/resources",
+                    },
+                ),
+            ]
+        )
+        output = io.StringIO()
+        self.assertEqual(run(io.StringIO(incoming), output, runtime_factory=factory), 0)
+        self.assertEqual(calls[0]["env"]["FINNHUB_API_KEY"], "stock-token")
+        self.assertNotIn("stock-token", output.getvalue())
 
     def test_acknowledgement_resource_is_relative_to_bundle_resources(self):
         self.assertFalse(ACKNOWLEDGEMENT_RESOURCE.is_absolute())
