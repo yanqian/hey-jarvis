@@ -1,0 +1,23 @@
+# F090 Apple Silicon runtime inputs. Install every entry with --no-deps; the
+# complete transitive closure used by the product is intentionally explicit.
+ai-edge-litert==2.1.6
+backports.strenum==1.2.8
+certifi==2026.6.17
+cffi==2.0.0
+charset-normalizer==3.4.7
+flatbuffers==25.12.19
+idna==3.18
+numpy==2.5.0
+protobuf==7.35.1
+pycparser==3.0
+python-dotenv==1.2.2
+requests==2.34.2
+sounddevice==0.5.5
+tqdm==4.68.3
+typing-extensions==4.16.0
+urllib3==2.7.0
+
+# openWakeWord's published dependency metadata also pulls its optional ONNX,
+# SciPy, and verifier-training stack. The build installs this exact wheel with
+# --no-deps after the closure above and applies the audited runtime-only init.
+openwakeword==0.6.0

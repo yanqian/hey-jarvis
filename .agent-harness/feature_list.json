@@ -2092,9 +2092,9 @@
         "Every bundled executable, dylib, extension, and resource has a deterministic destination suitable for nested signing, and onedir supervision exits cleanly without residual processes.",
         "Clean-machine offline launch, wake-model load, fake microphone/OpenAI/tool smoke, parent-loss cleanup, reproducibility comparison, full tests, and final ./init.sh pass on Apple Silicon."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

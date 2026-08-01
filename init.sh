@@ -24,6 +24,11 @@ for path in \
   app/src-tauri/src/protocol.rs \
   app/src-tauri/src/supervisor.rs \
   app/src-tauri/tauri.conf.json \
+  packaging/macos-sidecar/build-requirements.lock \
+  packaging/macos-sidecar/hey_jarvis_sidecar.spec \
+  packaging/macos-sidecar/models.lock \
+  packaging/macos-sidecar/openwakeword-runtime-init.py \
+  packaging/macos-sidecar/requirements.lock \
   .env.example \
   requirements.txt \
   requirements-vad.txt \
@@ -37,10 +42,14 @@ for path in \
   src/silence.py \
   src/state_machine.py \
   src/wake_word.py \
+  scripts/build_macos_sidecar.sh \
+  scripts/inventory_macos_sidecar.py \
+  scripts/normalize_zip.py \
   tests/test_audio_input.py \
   tests/test_config.py \
   tests/test_documentation.py \
   tests/test_mac_app_shell.py \
+  tests/test_macos_sidecar_packaging.py \
   tests/test_openai_client.py \
   tests/test_player.py \
   tests/test_recorder.py \

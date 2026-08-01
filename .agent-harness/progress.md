@@ -26,11 +26,14 @@ provider-native coding and an authorized Apple Silicon live run recorded in
 `.agent-harness/runs/F088-live-acceptance.md`; independent approval is recorded
 as `EVAL_PASS: F088` in
 `.agent-harness/runs/20260731T101439Z-F088-evaluation-pass.md`.
-F089 is now in progress through evaluator-gated fast work. Its current coding
-scope is BYOK Keychain storage, a native secure-entry path that keeps values
-out of WebView JavaScript, a bounded inherited-stdin credential bootstrap,
-first-run disclosures, deliberate microphone permission, and non-listening
-recovery states.
+F089 is evaluator-approved and committed as `12a0874`; its BYOK Keychain,
+private bootstrap, first-run disclosure, TCC denial/re-enable, and non-listening
+recovery evidence is durable in the F089 run records. F090 is
+evaluator-approved after reproducible Python 3.12/TFLite onedir packaging,
+dependency/license/model/native-code inventories, offline packaged smokes,
+byte-identical normalized rebuilds, and measured sidecar/app/DMG-candidate
+footprints. Independent approval is recorded as `EVAL_PASS: F090` in
+`.agent-harness/runs/20260801T180500Z-F090-evaluation-pass.md`.
 
 F085 has been completed through evaluator-gated fast work after a user-observed
 Realtime session closed 15.024 seconds after its last completed response. The
@@ -219,18 +222,23 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F088 - Integrate the accepted runtime into the Mac app.
+F090 - Package a reproducible Python and wake-model runtime.
 
-F088 integrates the accepted wake, Realtime, tool, privacy, and cleanup
-behavior behind the product sidecar protocol and WKWebView media surface while
-preserving the independent CLI path. Deterministic recovery passed with 388
-project tests, seven Mac App/sidecar tests, six Rust tests, and all smoke paths.
-The authorized Apple Silicon run passed wake, follow-up, weather, natural
-interruption, semantic ending, wake recovery, Quit cleanup, and relaunch.
-Coding and live evidence are recorded in `.agent-harness/runs/F088-fast-coding.md`
-and `.agent-harness/runs/F088-live-acceptance.md`; independent cold-start
-approval is recorded as `EVAL_PASS: F088` in
-`.agent-harness/runs/20260731T101439Z-F088-evaluation-pass.md`.
+F090 packages a pinned Python 3.12 Apple Silicon PyInstaller onedir with the
+three required TFLite wake assets and exact dependency, license, model,
+artifact, architecture, and nested-code inventories. Two normalized clean
+builds produced the identical complete artifact-manifest SHA-256
+`ae6018880656ef56d7707efc15b600988d62f02b0c31627d40ee1e66fd7f13b2`.
+The frozen runtime passed an empty-environment offline smoke with real TFLite
+preload and deterministic fake microphone/OpenAI/tool/cleanup behavior. The
+unsigned sidecar, app, and DMG-candidate measurements remain inside the
+documented portfolio-beta budgets. Final recovery passed with 397 project
+tests, nine Mac App/sidecar tests, eleven Rust tests, and all smoke paths.
+Coding and Apple Silicon packaging evidence are recorded in
+`.agent-harness/runs/20260801T171000Z-F090-fast-coding-evidence.md` and
+`.agent-harness/runs/20260801T170000Z-F090-apple-silicon-packaging.md`;
+independent cold-start approval is recorded as `EVAL_PASS: F090` in
+`.agent-harness/runs/20260801T180500Z-F090-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -311,37 +319,13 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-F089 - Add BYOK Keychain setup and first-run recovery.
-
-The Harness selected F089 with attempt 1. Provider-native coding is in
-progress; F089 remains incomplete until focused privacy/onboarding tests,
-final recovery, authorized clean-state first-run and microphone
-denial/recovery trials, durable coding evidence, and separate cold-start
-Evaluator approval pass.
-
-Target-Mac interactive evidence confirms that the native Settings page can
-add both the required OpenAI key and optional Finnhub key without displaying
-their values. A microphone-revocation trial then exposed a recovery defect:
-the already-open loopback voice page had no visible path back to “Check
-microphone & start.” The candidate fix adds a visible runtime Settings action
-and an explicit native settings mode that stops the sidecar and suppresses the
-completed-onboarding redirect. Automated focused checks and full `./init.sh`
-pass; the denial/recovery behavior still requires a fresh interactive retry
-before it can be accepted.
-
-The corrected Settings/history flow, configured-runtime path, and standalone
-app TCC recovery now have target-Mac acceptance in
-`.agent-harness/runs/20260801T150441Z-F089-live-acceptance.md`: Settings remains
-non-listening across the Tauri development document reload, Python 3.12 starts
-the sidecar, Arm reaches input readiness, normal and follow-up questions work,
-barge-in switches to the new question, and “再见” restores the armed wake
-state. A standalone app denial remained non-listening, exposed exact recovery
-guidance, and successfully returned through System Settings -> Check -> Runtime
-ready -> Arm after the `Hey Jarvis` microphone entry was enabled. Only final
-automated verification and the independent evaluator gate remain.
+No feature is currently in progress. F090 is evaluator-approved and ready to
+commit. F091 is the next independently verifiable productization feature.
 
 The latest accepted runtime baseline remains unchanged:
 
+- F090 is evaluator-approved for the reproducible packaged Python/model runtime.
+- F089 is evaluator-approved for BYOK Keychain setup and first-run recovery.
 - F088 is evaluator-approved for the accepted runtime and WKWebView product integration.
 - F087 is evaluator-approved for the production Mac app shell and protocol.
 - F079 is evaluator-approved for bounded acknowledgement playback.
@@ -352,11 +336,10 @@ The latest accepted runtime baseline remains unchanged:
 
 ## Next Feature
 
-Complete and evaluate F089 without exposing a real credential. F090 then
-packages the reproducible Python/model runtime; F091 hardens diagnostics and
-process recovery; F092 produces the signed/notarized manually updated
-friend-beta DMG; and F093 publishes the demo, case study, three-tester feedback,
-and final go/hold record.
+Complete and evaluate F091 to harden diagnostics, support export, media
+cleanup, and bounded sidecar recovery. F092 then produces the signed/notarized
+manually updated friend-beta DMG; F093 publishes the demo, case study,
+three-tester feedback, and final go/hold record.
 
 ## Recently Completed
 

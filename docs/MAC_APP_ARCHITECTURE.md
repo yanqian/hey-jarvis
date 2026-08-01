@@ -108,9 +108,16 @@ cookie from cross-site subresource requests and unsafe methods.
 Debug builds may launch `product_sidecar.py` through an explicitly configurable
 Python interpreter so developers can work from source. Release builds do not
 have this fallback: they launch `sidecar/hey-jarvis-sidecar` from the resolved
-bundle resource directory and fail closed when it is absent. F090 owns creation
-and bundling of that executable, so a friend release cannot depend on terminal
-PATH, a repository checkout, or separately installed Python.
+bundle resource directory and fail closed when it is absent. F090 creates that
+path as a reproducible Python 3.12 PyInstaller onedir, bundles its complete
+`_internal` sibling tree, and includes generated dependency/license, model,
+artifact-hash, and nested-code manifests. The frozen default carries only the
+three required TFLite wake assets and excludes the unused ONNX, SciPy,
+scikit-learn, OpenAI SDK, and WebRTC VAD stacks after real model preload plus
+deterministic runtime behavior verification. A friend release therefore does
+not depend on terminal PATH, a repository checkout, separately installed
+Python, or a runtime model download. Detailed build and measurement contracts
+are in `docs/MAC_APP_PACKAGING.md`.
 
 Tray Quit, normal app exit, restart, and supervisor destruction send a bounded
 `shutdown`, close the parent pipe, wait no more than two seconds, and then kill
@@ -119,9 +126,10 @@ exits, preventing an orphan process. Startup and protocol failures leave a
 visible non-ready state rather than silently proceeding.
 
 The first release targets Apple Silicon and macOS 14 or later. F088 integrates
-the real runtime and WKWebView media path, and F089 adds Keychain/first-run/TCC
-recovery. Python packaging, signing, and the distributable bundle remain
-F090-F092.
+the real runtime and WKWebView media path, F089 adds Keychain/first-run/TCC
+recovery, and F090 supplies the measured unsigned packaged runtime. Diagnostics
+and recovery remain F091; signing, notarization, and the distributable DMG
+remain F092.
 
 ## Identity and release decisions
 

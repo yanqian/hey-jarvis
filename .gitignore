@@ -8,6 +8,7 @@ app/src-tauri/gen/
 __pycache__/
 *.pyc
 debug/
+build/
 tmp/*.wav
 tmp/*.mp3
 tmp/*.m4a

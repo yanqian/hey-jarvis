@@ -26,7 +26,9 @@
     "active": false,
     "targets": ["app"],
     "resources": {
-      "../../assets/wake_acknowledgement_alloy.mp3": "assets/wake_acknowledgement_alloy.mp3"
+      "../../assets/wake_acknowledgement_alloy.mp3": "assets/wake_acknowledgement_alloy.mp3",
+      "../../build/macos-sidecar/hey-jarvis-sidecar": "sidecar",
+      "../../build/macos-sidecar/manifests": "packaging-manifests"
     },
     "macOS": {
       "minimumSystemVersion": "14.0"

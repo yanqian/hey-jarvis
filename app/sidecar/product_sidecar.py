@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sys
+import time
 import threading
 import urllib.error
 import urllib.request
@@ -44,6 +45,41 @@ class ProductRuntimeError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+def run_packaging_smoke() -> int:
+    """Prove the frozen default TFLite and deterministic fake paths offline."""
+
+    from src.main import run_fake_backend_smoke
+    from src.wake_word import missing_wake_word_model_paths
+
+    started = time.monotonic()
+    missing = missing_wake_word_model_paths(
+        model_name="hey_jarvis",
+        inference_framework="tflite",
+    )
+    if missing:
+        print(json.dumps({"ok": False, "reason": "wake_assets_missing"}, sort_keys=True))
+        return 1
+    settings = load_settings(env={}, env_file=None)
+    detector = _build_wake_detector(settings, logger=LOGGER)
+    detector.preload()
+    if run_fake_backend_smoke() != 0:
+        print(json.dumps({"ok": False, "reason": "fake_backend_failed"}, sort_keys=True))
+        return 1
+    print(
+        json.dumps(
+            {
+                "architecture": __import__("platform").machine(),
+                "elapsed_ms": round((time.monotonic() - started) * 1000),
+                "inference": "tflite",
+                "model": "hey_jarvis",
+                "ok": True,
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
 
 
 def validate_openai_credential(
@@ -381,4 +417,6 @@ def run(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+    if sys.argv[1:] == ["--packaging-smoke"]:
+        raise SystemExit(run_packaging_smoke())
     raise SystemExit(run())

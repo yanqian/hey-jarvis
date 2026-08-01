@@ -1,0 +1,4 @@
+# filename|sha256|immutable release URL
+melspectrogram.tflite|96fa0adccb6e8cf95cb14465409a1a2898ee4a96a85bb9ed3c7eb0e68bf163e8|https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.tflite
+embedding_model.tflite|c0aea21eb84a4ce90a08c870da41b7a7173b45269e6a3207c71d67c40f3a59d8|https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.tflite
+hey_jarvis_v0.1.tflite|14bff778604985e1b5c19f0f7bbe477a69cf281d8db34b232b3b972411f710e2|https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/hey_jarvis_v0.1.tflite
