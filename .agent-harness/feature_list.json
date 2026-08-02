@@ -2113,9 +2113,9 @@
         "A user can export and clear a redacted versioned support bundle from the UI, and automated scanners reject forbidden content and oversized artifacts.",
         "Fault-injection, process-table, sleep/wake, repeated launch/quit, crash-loop, support-bundle, full-project, authorized packaged-app recovery, and final ./init.sh checks pass."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

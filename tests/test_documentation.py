@@ -106,8 +106,8 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F090 - Package a reproducible Python and wake-model runtime", last_completed)
-        self.assertIn("EVAL_PASS: F090", last_completed)
+        self.assertIn("F091 - Harden app diagnostics and sidecar recovery", last_completed)
+        self.assertIn("EVAL_PASS: F091", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
@@ -117,9 +117,9 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("F085 is evaluator-approved", current_feature)
         self.assertIn("F087 is evaluator-approved", current_feature)
         self.assertIn("No feature is currently in progress", current_feature)
-        self.assertIn("F090 is evaluator-approved", current_feature)
-        self.assertIn("Complete and evaluate F091", next_feature)
-        self.assertIn("F092 then", next_feature)
+        self.assertIn("F091 is evaluator-approved", current_feature)
+        self.assertIn("Complete and evaluate F092", next_feature)
+        self.assertIn("F093 then", next_feature)
         self.assertNotIn("No unfinished features remain", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)

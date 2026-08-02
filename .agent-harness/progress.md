@@ -34,6 +34,13 @@ dependency/license/model/native-code inventories, offline packaged smokes,
 byte-identical normalized rebuilds, and measured sidecar/app/DMG-candidate
 footprints. Independent approval is recorded as `EVAL_PASS: F090` in
 `.agent-harness/runs/20260801T180500Z-F090-evaluation-pass.md`.
+F091 is evaluator-approved after lifecycle-only rotating diagnostics across
+Rust/WebView/Python, redacted versioned support export and clear controls,
+deterministic media/process cleanup, native sleep/wake handling, and bounded
+non-paid sidecar crash recovery. The authorized release-App trial also found
+and fixed omitted frozen Realtime static assets. Independent approval is
+recorded as `EVAL_PASS: F091` in
+`.agent-harness/runs/20260802T064406Z-F091-evaluation-pass.md`.
 
 F085 has been completed through evaluator-gated fast work after a user-observed
 Realtime session closed 15.024 seconds after its last completed response. The
@@ -222,23 +229,22 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F090 - Package a reproducible Python and wake-model runtime.
+F091 - Harden app diagnostics and sidecar recovery.
 
-F090 packages a pinned Python 3.12 Apple Silicon PyInstaller onedir with the
-three required TFLite wake assets and exact dependency, license, model,
-artifact, architecture, and nested-code inventories. Two normalized clean
-builds produced the identical complete artifact-manifest SHA-256
-`ae6018880656ef56d7707efc15b600988d62f02b0c31627d40ee1e66fd7f13b2`.
-The frozen runtime passed an empty-environment offline smoke with real TFLite
-preload and deterministic fake microphone/OpenAI/tool/cleanup behavior. The
-unsigned sidecar, app, and DMG-candidate measurements remain inside the
-documented portfolio-beta budgets. Final recovery passed with 397 project
-tests, nine Mac App/sidecar tests, eleven Rust tests, and all smoke paths.
-Coding and Apple Silicon packaging evidence are recorded in
-`.agent-harness/runs/20260801T171000Z-F090-fast-coding-evidence.md` and
-`.agent-harness/runs/20260801T170000Z-F090-apple-silicon-packaging.md`;
-independent cold-start approval is recorded as `EVAL_PASS: F090` in
-`.agent-harness/runs/20260801T180500Z-F090-evaluation-pass.md`.
+F091 adds bounded rotating lifecycle diagnostics across Rust, WebView, and the
+frozen Python runtime; a redacted versioned support export and clear UI;
+deterministic WebView media release; explicit macOS sleep/wake cleanup; and a
+three-restart budget that terminates in a safe non-listening crash loop. The
+authorized Apple Silicon release trial verified support export/clear, three
+recoveries plus crash-loop cutoff, three repeated launch/quit rounds, physical
+sleep/wake cleanup, and zero residual App/sidecar processes. It also exposed
+and fixed missing Realtime static files in the frozen sidecar package. Final
+recovery passed with 398 project tests, ten Mac app/Python tests, seventeen
+Rust tests, and all smoke paths. Coding and live evidence are recorded in
+`.agent-harness/runs/20260802T063008Z-F091-fast-coding.md` and
+`.agent-harness/runs/20260802T045016Z-F091-automated-verification.md`;
+independent cold-start approval is recorded as `EVAL_PASS: F091` in
+`.agent-harness/runs/20260802T064406Z-F091-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -319,8 +325,8 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F090 is evaluator-approved and ready to
-commit. F091 is the next independently verifiable productization feature.
+No feature is currently in progress. F091 is evaluator-approved and ready to
+commit. F092 is the next independently verifiable productization feature.
 
 The latest accepted runtime baseline remains unchanged:
 
@@ -336,10 +342,9 @@ The latest accepted runtime baseline remains unchanged:
 
 ## Next Feature
 
-Complete and evaluate F091 to harden diagnostics, support export, media
-cleanup, and bounded sidecar recovery. F092 then produces the signed/notarized
-manually updated friend-beta DMG; F093 publishes the demo, case study,
-three-tester feedback, and final go/hold record.
+Complete and evaluate F092 to produce the signed/notarized manually updated
+friend-beta DMG. F093 then publishes the demo, case study, three-tester
+feedback, and final go/hold record.
 
 ## Recently Completed
 

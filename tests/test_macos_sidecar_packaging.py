@@ -57,6 +57,10 @@ class MacOSSidecarPackagingTests(unittest.TestCase):
         source = (PACKAGING / "hey_jarvis_sidecar.spec").read_text(encoding="utf-8")
         self.assertIn('target_arch="arm64"', source)
         self.assertIn("COLLECT(", source)
+        self.assertIn('ROOT / "src" / "realtime_host" / "static"', source)
+        for asset in ("index.html", "app.js", "styles.css"):
+            self.assertIn(f'REALTIME_STATIC / "{asset}"', source)
+        self.assertIn('"src/realtime_host/static"', source)
         for package in ("onnxruntime", "openai", "scipy", "sklearn", "webrtcvad"):
             self.assertIn(f'"{package}"', source)
 

@@ -1,5 +1,7 @@
 mod credentials;
+mod diagnostics;
 mod onboarding;
+mod power;
 mod protocol;
 mod supervisor;
 
@@ -7,10 +9,13 @@ use credentials::{
     delete_and_report, prompt_and_store, status as credential_status_value, CredentialKind,
     CredentialStatus, CredentialStore, MacKeychainStore, RuntimeCredentials,
 };
+use diagnostics::{Diagnostics, SupportExport};
 use onboarding::{load as load_onboarding, save as save_onboarding, OnboardingRecord};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 use supervisor::{RuntimeSnapshot, SidecarSupervisor};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -22,6 +27,45 @@ struct AppRuntime {
     supervisor: Mutex<SidecarSupervisor>,
     credentials: Arc<dyn CredentialStore>,
     onboarding_path: PathBuf,
+    app_support_dir: PathBuf,
+    diagnostics: Diagnostics,
+}
+
+#[tauri::command]
+fn record_webview_lifecycle(
+    event: String,
+    session_id: Option<String>,
+    runtime: State<'_, AppRuntime>,
+) -> Result<(), String> {
+    const ALLOWED: &[&str] = &[
+        "loaded",
+        "settings_opened",
+        "microphone_check_started",
+        "microphone_check_passed",
+        "microphone_denied",
+        "runtime_navigation",
+        "pagehide",
+    ];
+    if !ALLOWED.contains(&event.as_str()) {
+        return Err("diagnostic_event_rejected".into());
+    }
+    runtime
+        .diagnostics
+        .record("webview", &event, session_id.as_deref(), None);
+    Ok(())
+}
+
+#[tauri::command]
+fn export_support_bundle(runtime: State<'_, AppRuntime>) -> Result<SupportExport, String> {
+    runtime
+        .diagnostics
+        .record("native", "support_exported", None, None);
+    runtime.diagnostics.export(&runtime.app_support_dir)
+}
+
+#[tauri::command]
+fn clear_diagnostics(runtime: State<'_, AppRuntime>) -> Result<(), String> {
+    runtime.diagnostics.clear()
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -192,13 +236,18 @@ pub fn run() {
         }))
         .setup(|app| {
             let app_support_dir = app.path().app_data_dir()?;
+            let diagnostics = Diagnostics::new(&app_support_dir);
+            diagnostics.record("native", "app_started", None, Some("safe"));
             let resource_dir = std::env::var_os("HEY_JARVIS_RESOURCE_DIR")
                 .map(PathBuf::from)
                 .unwrap_or(app.path().resource_dir()?);
             let onboarding_path = onboarding::path(&app_support_dir);
             let credential_store: Arc<dyn CredentialStore> = Arc::new(MacKeychainStore);
-            let mut supervisor =
-                SidecarSupervisor::new(app_support_dir, resource_dir, development_sidecar_path());
+            let mut supervisor = SidecarSupervisor::new(
+                app_support_dir.clone(),
+                resource_dir,
+                development_sidecar_path(),
+            );
             let onboarding = load_onboarding(&onboarding_path).unwrap_or_default();
             if onboarding.completed && onboarding.microphone_permission == "granted" {
                 if let Ok(credentials) = RuntimeCredentials::load(credential_store.as_ref()) {
@@ -209,6 +258,36 @@ pub fn run() {
                 supervisor: Mutex::new(supervisor),
                 credentials: credential_store,
                 onboarding_path,
+                app_support_dir,
+                diagnostics,
+            });
+            power::install(app.handle().clone());
+            let monitor_app = app.handle().clone();
+            thread::spawn(move || loop {
+                thread::sleep(Duration::from_secs(1));
+                let Some(runtime) = monitor_app.try_state::<AppRuntime>() else {
+                    break;
+                };
+                let needs_recovery = runtime
+                    .supervisor
+                    .lock()
+                    .map(|mut supervisor| supervisor.needs_recovery())
+                    .unwrap_or(false);
+                if !needs_recovery {
+                    continue;
+                }
+                let Ok(credentials) = RuntimeCredentials::load(runtime.credentials.as_ref()) else {
+                    runtime.diagnostics.record(
+                        "native",
+                        "recovery_credentials_unavailable",
+                        None,
+                        Some("non_listening"),
+                    );
+                    continue;
+                };
+                if let Ok(mut supervisor) = runtime.supervisor.lock() {
+                    let _ = supervisor.recover_if_needed(&credentials);
+                };
             });
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -263,15 +342,24 @@ pub fn run() {
             delete_credential,
             record_microphone_denied,
             complete_onboarding,
-            open_microphone_settings
+            open_microphone_settings,
+            record_webview_lifecycle,
+            export_support_bundle,
+            clear_diagnostics
         ])
         .build(tauri::generate_context!())
         .expect("Hey Jarvis Mac app failed to build");
 
     app.run(|app_handle, event| {
-        if let tauri::RunEvent::Exit = event {
-            if let Some(runtime) = app_handle.try_state::<AppRuntime>() {
-                stop_sidecar(&runtime, "app_exit");
+        if let Some(runtime) = app_handle.try_state::<AppRuntime>() {
+            match event {
+                tauri::RunEvent::Exit => {
+                    runtime
+                        .diagnostics
+                        .record("native", "app_exit", None, Some("stopping"));
+                    stop_sidecar(&runtime, "app_exit");
+                }
+                _ => {}
             }
         }
     });

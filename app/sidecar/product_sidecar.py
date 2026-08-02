@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 import threading
@@ -39,12 +40,51 @@ LOGGER = logging.getLogger("hey_jarvis.mac_sidecar")
 ACKNOWLEDGEMENT_RESOURCE = Path("assets/wake_acknowledgement_alloy.mp3")
 PRIVATE_BOOTSTRAP_MAX_BYTES = 4096
 OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
+DIAGNOSTIC_LIMIT_BYTES = 512 * 1024
+DIAGNOSTIC_GENERATIONS = 3
+SAFE_DIAGNOSTIC = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+FORBIDDEN_DIAGNOSTIC = ("sk-", "api_key", "authorization", "sdp", "candidate", "transcript", "answer", "tool_argument", "provider_body", "audio")
 
 
 class ProductRuntimeError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+class LifecycleDiagnostics:
+    """Bounded lifecycle-only JSONL; arbitrary values never enter diagnostics."""
+
+    def __init__(self, app_support_dir: Path, session_id: str) -> None:
+        self.root = app_support_dir / "diagnostics"
+        self.path = self.root / "python.jsonl"
+        self.session_id = session_id if SAFE_DIAGNOSTIC.fullmatch(session_id) else None
+
+    def record(self, event: str, state: str | None = None) -> None:
+        if not SAFE_DIAGNOSTIC.fullmatch(event) or (
+            state is not None and not SAFE_DIAGNOSTIC.fullmatch(state)
+        ):
+            return
+        if any(marker in event.lower() or (state is not None and marker in state.lower()) for marker in FORBIDDEN_DIAGNOSTIC):
+            return
+        self.root.mkdir(parents=True, exist_ok=True)
+        if self.path.exists() and self.path.stat().st_size >= DIAGNOSTIC_LIMIT_BYTES:
+            for generation in range(DIAGNOSTIC_GENERATIONS - 1, 0, -1):
+                source = self.path.with_suffix(f".jsonl.{generation}")
+                target = self.path.with_suffix(f".jsonl.{generation + 1}")
+                if source.exists():
+                    source.replace(target)
+            self.path.replace(self.path.with_suffix(".jsonl.1"))
+        record = {
+            "schema": 1,
+            "at_ms": int(time.time() * 1000),
+            "component": "python",
+            "event": event,
+            "session": self.session_id,
+            "state": state,
+        }
+        with self.path.open("a", encoding="utf-8") as output:
+            output.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
 
 
 def run_packaging_smoke() -> int:
@@ -167,7 +207,8 @@ class ProductRuntime:
         app_support_dir: Path,
         env: Mapping[str, str] | None = None,
     ) -> "ProductRuntime":
-        del app_support_dir  # Reserved for app-owned logs/settings in F089/F091.
+        diagnostics = LifecycleDiagnostics(app_support_dir, session_id)
+        diagnostics.record("runtime_starting", "non_listening")
         values = os.environ if env is None else env
         settings = load_settings(
             env=values,
@@ -246,6 +287,7 @@ class ProductRuntime:
             daemon=True,
         )
         controller_thread.start()
+        diagnostics.record("runtime_ready", "wake_listening")
         control_url = (
             f"http://127.0.0.1:{server.server_port}/"
             f"?lease={quote(session_id, safe='')}"
@@ -282,6 +324,7 @@ def run(
     inbound_sequence = 0
     outbound_sequence = 1
     runtime: ProductRuntime | None = None
+    diagnostics: LifecycleDiagnostics | None = None
 
     try:
         bootstrap_line = input_stream.readline()
@@ -312,6 +355,10 @@ def run(
                 if payload["kind"] != "startup":
                     return 2
                 session_id = message["session_id"]
+                diagnostics = LifecycleDiagnostics(
+                    Path(payload["app_support_dir"]), session_id
+                )
+                diagnostics.record("protocol_startup", "non_listening")
                 try:
                     runtime = runtime_factory(
                         session_id=session_id,
@@ -320,6 +367,7 @@ def run(
                         env=runtime_env,
                     )
                 except Exception as exc:
+                    diagnostics.record("startup_failed", "non_listening")
                     LOGGER.error("product runtime startup failed: %s", type(exc).__name__)
                     error_code = (
                         exc.code
@@ -355,10 +403,13 @@ def run(
                     },
                 )
                 outbound_sequence += 1
+                diagnostics.record("ready_sent", "wake_listening")
                 continue
 
             kind = payload["kind"]
             if kind == "lifecycle" and payload["event"] == "health_check":
+                if diagnostics is not None:
+                    diagnostics.record("health_check", "ready")
                 _write(
                     output_stream,
                     session_id,
@@ -395,6 +446,8 @@ def run(
                 )
                 outbound_sequence += 1
             elif kind == "shutdown":
+                if diagnostics is not None:
+                    diagnostics.record("shutdown_requested", "stopping")
                 _write(
                     output_stream,
                     session_id,
@@ -411,6 +464,8 @@ def run(
     finally:
         if runtime is not None:
             runtime.close()
+        if diagnostics is not None:
+            diagnostics.record("process_stopped", "non_listening")
 
     return 0
 

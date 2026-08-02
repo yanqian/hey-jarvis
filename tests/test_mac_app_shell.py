@@ -201,6 +201,56 @@ class MacAppShellTests(unittest.TestCase):
         ):
             self.assertIn(phrase, architecture)
 
+    def test_diagnostics_recovery_and_support_export_are_privacy_bounded(self):
+        native = (APP / "src-tauri" / "src" / "diagnostics.rs").read_text(
+            encoding="utf-8"
+        )
+        supervisor = (APP / "src-tauri" / "src" / "supervisor.rs").read_text(
+            encoding="utf-8"
+        )
+        sidecar = (APP / "sidecar" / "product_sidecar.py").read_text(
+            encoding="utf-8"
+        )
+        frontend = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        host = (ROOT / "src" / "realtime_host" / "static" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        power = (APP / "src-tauri" / "src" / "power.rs").read_text(
+            encoding="utf-8"
+        )
+        docs = (ROOT / "docs" / "MAC_APP_DIAGNOSTICS.md").read_text(
+            encoding="utf-8"
+        )
+
+        for marker in (
+            "LOG_LIMIT",
+            "LOG_GENERATIONS",
+            "hey-jarvis-support-v1",
+            "support_export_rejected",
+            "FORBIDDEN",
+        ):
+            self.assertIn(marker, native)
+        for marker in (
+            "MAX_RESTARTS",
+            "RESTART_BACKOFF",
+            "sidecar_crash_loop",
+            "desired_running",
+            "recover_if_needed",
+        ):
+            self.assertIn(marker, supervisor)
+        self.assertIn("LifecycleDiagnostics", sidecar)
+        self.assertIn("DIAGNOSTIC_LIMIT_BYTES", sidecar)
+        self.assertIn('invoke("export_support_bundle")', frontend)
+        self.assertIn('invoke("clear_diagnostics")', frontend)
+        self.assertIn("Export support bundle", page)
+        self.assertIn('window.addEventListener("pagehide",releasePageMedia)', host)
+        self.assertIn('document.addEventListener("freeze",releasePageMedia)', host)
+        self.assertIn("NSWorkspaceWillSleepNotification", power)
+        self.assertIn("NSWorkspaceDidWakeNotification", power)
+        self.assertIn('stop_sidecar(&runtime, "system_will_sleep")', power)
+        self.assertIn("never creates paid Realtime activity", docs)
+
 
 if __name__ == "__main__":
     unittest.main()

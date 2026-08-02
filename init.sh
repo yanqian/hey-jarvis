@@ -19,8 +19,10 @@ for path in \
   app/src-tauri/Cargo.toml \
   app/src-tauri/Info.plist \
   app/src-tauri/src/credentials.rs \
+  app/src-tauri/src/diagnostics.rs \
   app/src-tauri/src/lib.rs \
   app/src-tauri/src/onboarding.rs \
+  app/src-tauri/src/power.rs \
   app/src-tauri/src/protocol.rs \
   app/src-tauri/src/supervisor.rs \
   app/src-tauri/tauri.conf.json \
@@ -29,6 +31,7 @@ for path in \
   packaging/macos-sidecar/models.lock \
   packaging/macos-sidecar/openwakeword-runtime-init.py \
   packaging/macos-sidecar/requirements.lock \
+  docs/MAC_APP_DIAGNOSTICS.md \
   .env.example \
   requirements.txt \
   requirements-vad.txt \

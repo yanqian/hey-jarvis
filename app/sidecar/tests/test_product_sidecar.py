@@ -1,6 +1,7 @@
 import io
 import json
 import sys
+import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
@@ -11,6 +12,7 @@ sys.path.insert(0, str(SIDECAR_DIR))
 
 from product_sidecar import (  # noqa: E402
     ACKNOWLEDGEMENT_RESOURCE,
+    LifecycleDiagnostics,
     ProductRuntimeError,
     parse_private_credentials,
     run,
@@ -50,6 +52,17 @@ class FakeRuntime:
 
 
 class ProductSidecarTests(unittest.TestCase):
+    def test_lifecycle_diagnostics_are_bounded_and_redacted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            diagnostics = LifecycleDiagnostics(Path(directory), "session-product-1")
+            diagnostics.record("runtime_ready", "wake_listening")
+            diagnostics.record("transcript_secret", "ready")
+            text = diagnostics.path.read_text(encoding="utf-8")
+            record = json.loads(text)
+            self.assertEqual(record["event"], "runtime_ready")
+            self.assertEqual(record["session"], "session-product-1")
+            self.assertNotIn("transcript_secret", text)
+
     def test_openai_credential_validation_distinguishes_valid_invalid_and_offline(self):
         class Response:
             def __enter__(self):

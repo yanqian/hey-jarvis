@@ -1,4 +1,5 @@
 use crate::credentials::RuntimeCredentials;
+use crate::diagnostics::Diagnostics;
 use crate::protocol::{decode, encode, Envelope, Payload, PROTOCOL_VERSION};
 use serde::Serialize;
 use std::io::{BufRead, BufReader, Write};
@@ -13,6 +14,8 @@ use std::time::{Duration, Instant};
 // sub-second expectation to the product runtime.
 const START_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
+const MAX_RESTARTS: u8 = 3;
+const RESTART_BACKOFF: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RuntimeSnapshot {
@@ -47,6 +50,9 @@ pub struct SidecarSupervisor {
     resource_dir: PathBuf,
     launch: SidecarLaunch,
     snapshot: Arc<Mutex<RuntimeSnapshot>>,
+    diagnostics: Diagnostics,
+    desired_running: bool,
+    restart_attempts: u8,
 }
 
 enum SidecarLaunch {
@@ -60,6 +66,7 @@ enum SidecarLaunch {
 impl SidecarSupervisor {
     pub fn new(app_support_dir: PathBuf, resource_dir: PathBuf, script_path: PathBuf) -> Self {
         let snapshot = Arc::new(Mutex::new(RuntimeSnapshot::stopped(&app_support_dir)));
+        let diagnostics = Diagnostics::new(&app_support_dir);
         let launch = if let Some(path) = std::env::var_os("HEY_JARVIS_SIDECAR_EXECUTABLE") {
             SidecarLaunch::Executable(PathBuf::from(path))
         } else if cfg!(debug_assertions) {
@@ -80,6 +87,9 @@ impl SidecarSupervisor {
             resource_dir,
             launch,
             snapshot,
+            diagnostics,
+            desired_running: false,
+            restart_attempts: 0,
         }
     }
 
@@ -111,6 +121,8 @@ impl SidecarSupervisor {
         credentials: Option<&RuntimeCredentials>,
     ) -> Result<RuntimeSnapshot, String> {
         self.stop("restart")?;
+        self.desired_running = true;
+        self.restart_attempts = 0;
         std::fs::create_dir_all(&self.app_support_dir)
             .map_err(|error| format!("cannot create app support directory: {error}"))?;
         let sidecar_path = match &self.launch {
@@ -122,6 +134,12 @@ impl SidecarSupervisor {
         }
 
         self.session_id = new_session_id()?;
+        self.diagnostics.record(
+            "native",
+            "sidecar_starting",
+            Some(&self.session_id),
+            Some("starting"),
+        );
         self.next_sequence = 1;
         if let Ok(mut snapshot) = self.snapshot.lock() {
             snapshot.state = "starting".into();
@@ -245,7 +263,91 @@ impl SidecarSupervisor {
         }
 
         set_snapshot(&self.snapshot, "ready", "Sidecar is healthy.");
+        self.diagnostics.record(
+            "native",
+            "sidecar_ready",
+            Some(&self.session_id),
+            Some("ready"),
+        );
         Ok(self.snapshot())
+    }
+
+    pub fn needs_recovery(&mut self) -> bool {
+        if !self.desired_running {
+            return false;
+        }
+        match self.child.as_mut() {
+            Some(child) => child.try_wait().ok().flatten().is_some(),
+            None => true,
+        }
+    }
+
+    pub fn recover_if_needed(
+        &mut self,
+        credentials: &RuntimeCredentials,
+    ) -> Result<RuntimeSnapshot, String> {
+        self.recover_with_credentials(Some(credentials))
+    }
+
+    fn recover_with_credentials(
+        &mut self,
+        credentials: Option<&RuntimeCredentials>,
+    ) -> Result<RuntimeSnapshot, String> {
+        if !self.needs_recovery() {
+            return Ok(self.snapshot());
+        }
+        self.stdin.take();
+        self.child.take();
+        if let Some(reader) = self.reader.take() {
+            let _ = reader.join();
+        }
+        self.diagnostics.record(
+            "native",
+            "sidecar_unexpected_exit",
+            Some(&self.session_id),
+            Some("non_listening"),
+        );
+        if self.restart_attempts >= MAX_RESTARTS {
+            self.desired_running = false;
+            set_snapshot(
+                &self.snapshot,
+                "crash_loop",
+                "Sidecar crash loop; listening remains off.",
+            );
+            self.diagnostics.record(
+                "native",
+                "sidecar_crash_loop",
+                Some(&self.session_id),
+                Some("non_listening"),
+            );
+            return Err("sidecar_crash_loop".into());
+        }
+        let attempt = self.restart_attempts + 1;
+        thread::sleep(RESTART_BACKOFF * u32::from(attempt));
+        let result = self.start_with_credentials(credentials);
+        self.restart_attempts = attempt;
+        if result.is_err() {
+            self.desired_running = true;
+            set_snapshot(
+                &self.snapshot,
+                "degraded",
+                format!("Sidecar recovery attempt {attempt} failed; listening remains off."),
+            );
+            self.diagnostics.record(
+                "native",
+                "sidecar_restart_failed",
+                Some(&self.session_id),
+                Some("non_listening"),
+            );
+        } else {
+            self.diagnostics.record(
+                "native",
+                "sidecar_restarted",
+                Some(&self.session_id),
+                Some("wake_listening"),
+            );
+        }
+        result
     }
 
     pub fn health(&mut self) -> Result<RuntimeSnapshot, String> {
@@ -262,6 +364,7 @@ impl SidecarSupervisor {
     }
 
     pub fn stop(&mut self, reason: &str) -> Result<(), String> {
+        self.desired_running = false;
         if self.child.is_none() {
             return Ok(());
         }
@@ -300,6 +403,12 @@ impl SidecarSupervisor {
             let _ = reader.join();
         }
         set_snapshot(&self.snapshot, "stopped", "Sidecar stopped.");
+        self.diagnostics.record(
+            "native",
+            "sidecar_stopped",
+            Some(&self.session_id),
+            Some("non_listening"),
+        );
         Ok(())
     }
 
@@ -339,6 +448,12 @@ impl SidecarSupervisor {
 
     fn fail<T>(&self, detail: String) -> Result<T, String> {
         set_snapshot(&self.snapshot, "error", &detail);
+        self.diagnostics.record(
+            "native",
+            "sidecar_failed",
+            Some(&self.session_id),
+            Some("non_listening"),
+        );
         Err(detail)
     }
 }
@@ -460,5 +575,73 @@ mod tests {
         let second = new_session_id().expect("session");
         assert_ne!(first, second);
         assert!(first.len() <= crate::protocol::MAX_SESSION_ID_LENGTH);
+    }
+
+    #[test]
+    fn intentional_stop_never_requests_recovery() {
+        let (support, resources, script, python) = fixture();
+        let mut supervisor = SidecarSupervisor::with_python(support, resources, script, python);
+        supervisor.start().expect("start");
+        supervisor.stop("test").expect("stop");
+        assert!(!supervisor.needs_recovery());
+        assert_eq!(supervisor.snapshot().state, "stopped");
+    }
+
+    #[test]
+    fn unexpected_exit_restarts_with_a_bounded_crash_loop() {
+        let (support, resources, script, python) = fixture();
+        let mut supervisor = SidecarSupervisor::with_python(support, resources, script, python);
+        supervisor.start().expect("start");
+        for expected_attempt in 1..=MAX_RESTARTS {
+            supervisor
+                .child
+                .as_mut()
+                .expect("child")
+                .kill()
+                .expect("kill");
+            supervisor
+                .child
+                .as_mut()
+                .expect("child")
+                .wait()
+                .expect("wait");
+            assert!(supervisor.needs_recovery());
+            supervisor
+                .recover_with_credentials(None)
+                .expect("bounded restart");
+            assert_eq!(supervisor.restart_attempts, expected_attempt);
+        }
+        supervisor
+            .child
+            .as_mut()
+            .expect("child")
+            .kill()
+            .expect("kill");
+        supervisor
+            .child
+            .as_mut()
+            .expect("child")
+            .wait()
+            .expect("wait");
+        assert_eq!(
+            supervisor.recover_with_credentials(None).unwrap_err(),
+            "sidecar_crash_loop"
+        );
+        assert_eq!(supervisor.snapshot().state, "crash_loop");
+        assert!(!supervisor.desired_running);
+        assert!(supervisor.child.is_none());
+    }
+
+    #[test]
+    fn repeated_launch_and_quit_leave_no_child_handle() {
+        let (support, resources, script, python) = fixture();
+        let mut supervisor = SidecarSupervisor::with_python(support, resources, script, python);
+        for _ in 0..5 {
+            supervisor.start().expect("start");
+            supervisor.stop("repeated_quit").expect("stop");
+            assert!(supervisor.child.is_none());
+            assert!(supervisor.stdin.is_none());
+            assert!(supervisor.reader.is_none());
+        }
     }
 }

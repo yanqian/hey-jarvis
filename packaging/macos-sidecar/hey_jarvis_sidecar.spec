@@ -7,6 +7,7 @@ ROOT = Path(SPEC).resolve().parents[2]
 SITE = Path(__import__("site").getsitepackages()[0])
 OWW = SITE / "openwakeword"
 MODELS = OWW / "resources" / "models"
+REALTIME_STATIC = ROOT / "src" / "realtime_host" / "static"
 
 required_models = [
     MODELS / "melspectrogram.tflite",
@@ -14,12 +15,21 @@ required_models = [
     MODELS / "hey_jarvis_v0.1.tflite",
 ]
 missing = [str(path) for path in required_models if not path.is_file()]
+required_static = [
+    REALTIME_STATIC / "index.html",
+    REALTIME_STATIC / "app.js",
+    REALTIME_STATIC / "styles.css",
+]
+missing.extend(str(path) for path in required_static if not path.is_file())
 if missing:
-    raise SystemExit("missing packaged wake assets: " + ", ".join(missing))
+    raise SystemExit("missing packaged runtime assets: " + ", ".join(missing))
 
 datas = [
     (str(path), "openwakeword/resources/models") for path in required_models
 ]
+datas.extend(
+    (str(path), "src/realtime_host/static") for path in required_static
+)
 binaries = collect_dynamic_libs("ai_edge_litert")
 
 a = Analysis(

@@ -131,6 +131,10 @@ recovery, and F090 supplies the measured unsigned packaged runtime. Diagnostics
 and recovery remain F091; signing, notarization, and the distributable DMG
 remain F092.
 
+F091 defines lifecycle-only rotating diagnostics, bounded non-paid sidecar
+recovery, deterministic WebView media release, and redacted support export in
+`docs/MAC_APP_DIAGNOSTICS.md`.
+
 ## Identity and release decisions
 
 The provisional identity is:

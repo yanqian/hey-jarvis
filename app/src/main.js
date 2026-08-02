@@ -22,6 +22,10 @@ const elements = {
   health: document.querySelector("#health-check"),
   restart: document.querySelector("#restart"),
   runtimeSettings: document.querySelector("#runtime-settings"),
+  exportSupport: document.querySelector("#export-support"),
+  runtimeExportSupport: document.querySelector("#runtime-export-support"),
+  clearDiagnostics: document.querySelector("#clear-diagnostics"),
+  diagnosticsMessage: document.querySelector("#diagnostics-message"),
 };
 
 let setup = null;
@@ -29,6 +33,11 @@ const SETTINGS_RETURN_HASH = "#settings-return";
 
 function isSettingsReturn() {
   return window.location.hash === SETTINGS_RETURN_HASH;
+}
+
+function recordLifecycle(event, sessionId = null) {
+  if (!invoke) return;
+  invoke("record_webview_lifecycle", { event, sessionId }).catch(() => {});
 }
 
 const recoveryMessages = {
@@ -93,6 +102,7 @@ async function showSettings() {
       window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
     }
     renderSetup(await invoke("enter_settings"));
+    recordLifecycle("settings_opened");
     elements.message.textContent = "Voice listening is stopped while Settings is open.";
   } catch (error) {
     elements.detail.textContent = friendlyError(error);
@@ -115,6 +125,7 @@ function renderRuntime(snapshot) {
       throw new Error("Sidecar returned an invalid control endpoint.");
     }
     window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
+    recordLifecycle("runtime_navigation", snapshot.session_id);
     window.location.assign(endpoint.href);
   }
 }
@@ -125,6 +136,7 @@ async function load() {
     return;
   }
   try {
+    recordLifecycle("loaded");
     const settingsMode = isSettingsReturn();
     const snapshot = await invoke(settingsMode ? "enter_settings" : "onboarding_status");
     renderSetup(snapshot);
@@ -167,6 +179,7 @@ async function deleteCredential(kind) {
 async function checkMicrophoneAndStart() {
   if (!setup?.openai_configured) return;
   elements.message.textContent = "Checking the built-in microphone…";
+  recordLifecycle("microphone_check_started");
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -175,6 +188,7 @@ async function checkMicrophoneAndStart() {
   } catch (error) {
     if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
       renderSetup(await invoke("record_microphone_denied"));
+      recordLifecycle("microphone_denied");
       elements.message.textContent = "Microphone access is required, but listening remains off. Enable it in System Settings and retry.";
     } else if (error?.name === "NotFoundError") {
       elements.message.textContent = "No microphone was found. Connect or enable an input device, then retry.";
@@ -185,6 +199,7 @@ async function checkMicrophoneAndStart() {
   }
 
   for (const track of stream.getTracks()) track.stop();
+  recordLifecycle("microphone_check_passed");
   elements.microphoneStatus.textContent = "Microphone access granted; the temporary check stream was released.";
   elements.message.textContent = "Microphone access is ready. Starting the local voice runtime…";
   try {
@@ -221,8 +236,28 @@ elements.restart.addEventListener("click", async () => {
   }
 });
 elements.runtimeSettings.addEventListener("click", showSettings);
+async function exportSupport() {
+  const target = elements.diagnosticsMessage || elements.detail;
+  try {
+    const result = await invoke("export_support_bundle");
+    target.textContent = `Support bundle exported (${result.records} events, ${result.bytes} bytes): ${result.path}`;
+  } catch (_error) {
+    target.textContent = "Support export was rejected or unavailable; diagnostics were not changed.";
+  }
+}
+elements.exportSupport.addEventListener("click", exportSupport);
+elements.runtimeExportSupport.addEventListener("click", exportSupport);
+elements.clearDiagnostics.addEventListener("click", async () => {
+  try {
+    await invoke("clear_diagnostics");
+    elements.diagnosticsMessage.textContent = "Local diagnostics were cleared.";
+  } catch (_error) {
+    elements.diagnosticsMessage.textContent = "Diagnostics could not be cleared.";
+  }
+});
 window.addEventListener("pageshow", (event) => {
   if (event.persisted && isSettingsReturn()) showSettings();
 });
+window.addEventListener("pagehide", () => recordLifecycle("pagehide"));
 
 load();

@@ -55,6 +55,16 @@
           </div>
         </div>
 
+        <div class="permission-panel diagnostics-panel">
+          <h3>Private diagnostics</h3>
+          <p>Exported support data contains bounded lifecycle events only—never keys, audio, transcripts, answers, tool arguments, SDP, ICE, or provider bodies.</p>
+          <div class="actions">
+            <button id="export-support" class="secondary" type="button">Export support bundle</button>
+            <button id="clear-diagnostics" class="danger" type="button">Clear diagnostics</button>
+          </div>
+          <p id="diagnostics-message" class="message" role="status"></p>
+        </div>
+
         <p id="setup-message" class="message" role="status"></p>
       </section>
 
@@ -75,6 +85,7 @@
           <button id="health-check" type="button">Run readiness check</button>
           <button id="restart" class="secondary" type="button">Restart sidecar</button>
           <button id="runtime-settings" class="secondary" type="button">Settings</button>
+          <button id="runtime-export-support" class="secondary" type="button">Export support</button>
         </div>
       </section>
     </main>
