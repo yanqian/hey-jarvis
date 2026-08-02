@@ -24,7 +24,7 @@ into the product demo.
 | --- | --- | --- |
 | 0:00–0:20 | Title card, four project goals, unsigned-internal warning | Honest project and distribution scope |
 | 0:20–0:45 | Open the installed app and briefly show Settings with both keys shown only as configured/not configured | BYOK, Keychain boundary, privacy/API-cost disclosure |
-| 0:45–1:05 | Run **Check microphone & start**, reach the runtime page, then select **Arm hands-free audio** | Deliberate TCC check and explicit media arming |
+| 0:45–1:05 | Run **Check microphone & start**, reach the runtime page, then select **Enable voice assistant** | Deliberate TCC check and explicit media arming |
 | 1:05–1:30 | Say the wake phrase, hear one acknowledgement, and ask one ordinary question | Local wake followed by Realtime handoff |
 | 1:30–1:55 | Ask a follow-up without repeating the wake phrase | Continuous session |
 | 1:55–2:20 | Ask one provider-backed tool question; show the answer without exposing transcript/log content | Bounded tool integration |

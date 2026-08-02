@@ -2,7 +2,7 @@
 
 This is the production-path capability prototype for F052, not the F051 architecture spike. Chrome app mode is the smallest current macOS host because F051 already proved its WebRTC capture processing and server-managed interruption behavior. A packaged `.app` remains deferred.
 
-Run the integrated assistant with `python -m src.main --backend realtime`. Click **Arm hands-free audio** once per host launch to grant/unlock microphone and autoplay. The warm-up track is stopped before Python opens its wake microphone. Afterwards say the configured local wake phrase; each confirmed wake closes Python capture, plays the local acknowledgement, and starts one continuous WebRTC session without another browser click.
+Run the integrated assistant with `python -m src.main --backend realtime`. Click **Enable voice assistant** once per host launch to grant/unlock microphone and autoplay. The warm-up track is stopped before Python opens its wake microphone. Afterwards say the configured local wake phrase; each confirmed wake closes Python capture, plays the local acknowledgement, and starts one continuous WebRTC session without another browser click.
 
 For host-only diagnostics, run `python -m src.realtime_host.server --launch --real-microphone`, then trigger a synthetic handoff from Python control:
 

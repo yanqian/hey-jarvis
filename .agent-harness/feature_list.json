@@ -2163,6 +2163,47 @@
       "depends_on": [
         "F092"
       ]
+    },
+    {
+      "id": "F094",
+      "title": "Create the minimal voice interaction surface",
+      "description": "Replace the production WKWebView engineering dashboard with a focused modern Hey Jarvis conversation surface that truthfully maps wake-ready, connecting, listening, thinking, speaking, stopping, and error states without changing accepted audio behavior.",
+      "acceptance": [
+        "The ordinary runtime window centers Hey Jarvis state, concise supporting copy, a lightweight CSS orb/wave visual, one truthful contextual primary action, and a settings affordance; audio settings, protocol/session identifiers, event logs, and test-answer controls are absent from the production interaction surface.",
+        "Existing browser events deterministically map to distinct wake-ready, connecting, listening, thinking, speaking, stopping, and recoverable error presentation states; waiting for the local wake phrase is never mislabeled as active conversation listening, and state meaning is not conveyed by color alone.",
+        "The existing arm user gesture, explicit disabled-track input-enable boundary, end-session request, settings media release, semantic ending, playback lifecycle, wake recovery, and all secret/privacy boundaries remain behaviorally unchanged and regression tested.",
+        "The production window is resized to a focused Mac interaction surface; semantic HTML, visible keyboard focus, responsive small-window behavior, and `prefers-reduced-motion` support are present, with no new runtime dependency or copied reference-product asset.",
+        "Focused static/frontend tests, Node syntax checking, local visual inspection at the configured window size, existing Realtime and Mac app regressions, full project tests, Realtime fake smoke, and final ./init.sh pass with separate evaluator approval."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F088",
+        "F091"
+      ]
+    },
+    {
+      "id": "F095",
+      "title": "Create the secondary Settings and diagnostics surface",
+      "description": "Move configuration, credential, microphone recovery, and privacy-bounded diagnostics into a dedicated modern Settings presentation reached consistently from the tray and main interaction window.",
+      "acceptance": [
+        "The tray Settings item, main-window settings affordance, and standard macOS settings shortcut resolve to one dedicated Settings presentation instead of exposing engineering controls in the conversation surface.",
+        "Opening Settings intentionally stops listening and clearly communicates the non-listening privacy state while preserving Keychain add/replace/delete, microphone permission recovery, readiness checks, support export, and clear-diagnostics behavior.",
+        "Settings use a coherent General, API Keys, Microphone, Privacy & Diagnostics, and About information architecture without exposing credentials, raw audio, transcripts, provider bodies, or internal protocol/session data.",
+        "Window lifecycle, return-to-conversation behavior, menu-bar show/quit behavior, media cleanup, crash recovery, keyboard navigation, and reduced-motion/accessibility boundaries remain deterministic and regression tested.",
+        "Focused Tauri/frontend/static tests, local visual inspection, credential/privacy regressions, full project tests, and final ./init.sh pass with separate evaluator approval."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F094"
+      ]
     }
   ]
 }

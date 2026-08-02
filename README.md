@@ -35,7 +35,7 @@ ships equivalent wake-word behavior.
 - network access for installation and real OpenAI/provider calls
 
 Realtime additionally launches a local Chrome app-mode host and needs one
-**Arm hands-free audio** click per host launch.
+**Enable voice assistant** click per host launch.
 
 ## Quick start
 
@@ -74,7 +74,7 @@ To use Realtime instead:
 python -m src.main --backend realtime
 ```
 
-Click **Arm hands-free audio** once in the Chrome window, then use the same wake
+Click **Enable voice assistant** once in the Chrome window, then use the same wake
 phrase. Realtime audio and optional transcription are billable API usage.
 Before wake, audio remains local to the Python wake detector.
 

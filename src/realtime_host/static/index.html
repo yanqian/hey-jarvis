@@ -1,1 +1,63 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Hey Jarvis</title><link rel="stylesheet" href="/styles.css"></head><body><main><p class="eyebrow">Local-first voice assistant</p><h1>Hey Jarvis</h1><p id="status">Runtime ready · click Arm hands-free audio</p><button id="arm">Arm hands-free audio</button><button id="long" disabled>Play long test answer</button><button id="stop" disabled>Stop session</button><button id="app-settings">Settings</button><dl id="settings"><div><dt>echoCancellation</dt><dd>not reported</dd></div><div><dt>noiseSuppression</dt><dd>not reported</dd></div><div><dt>autoGainControl</dt><dd>not reported</dd></div><div><dt>sampleRate</dt><dd>not reported</dd></div><div><dt>channelCount</dt><dd>not reported</dd></div></dl><pre id="events">Enable the microphone once, then say the wake phrase.</pre><audio id="remoteAudio" autoplay></audio></main><script src="/app.js" defer></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hey Jarvis</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-ui-state="ready">
+    <main class="voice-shell">
+      <header class="topbar">
+        <div class="brand" aria-label="Hey Jarvis">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Hey Jarvis</span>
+        </div>
+        <button id="app-settings" class="icon-button" type="button" aria-label="Open Settings" title="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 8.75A3.25 3.25 0 1 0 12 15.25 3.25 3.25 0 0 0 12 8.75ZM19 12a6.93 6.93 0 0 0-.08-1l1.66-1.3-1.8-3.12-1.96.79a7.3 7.3 0 0 0-1.72-1L14.8 4.3h-3.6l-.3 2.07a7.3 7.3 0 0 0-1.72 1l-1.96-.79-1.8 3.12L7.08 11a6.93 6.93 0 0 0 0 2l-1.66 1.3 1.8 3.12 1.96-.79a7.3 7.3 0 0 0 1.72 1l.3 2.07h3.6l.3-2.07a7.3 7.3 0 0 0 1.72-1l1.96.79 1.8-3.12L18.92 13c.05-.33.08-.66.08-1Z" />
+          </svg>
+        </button>
+      </header>
+
+      <section class="interaction" aria-labelledby="status-title" aria-describedby="status-detail">
+        <div class="status-copy" aria-live="polite" aria-atomic="true">
+          <p id="status-label" class="status-label">Ready</p>
+          <h1 id="status-title">Meet your voice assistant</h1>
+          <p id="status-detail">Enable hands-free audio once, then wake Jarvis with your voice.</p>
+        </div>
+
+        <div class="orb-stage" aria-hidden="true">
+          <div class="orb-halo"></div>
+          <div class="orb">
+            <span class="orb-core"></span>
+            <span class="orb-sheen"></span>
+          </div>
+          <div class="wave wave-left">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <div class="wave wave-right">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+      </section>
+
+      <footer class="controls" aria-label="Voice controls">
+        <button id="arm" class="primary-action" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 14.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v5a3.5 3.5 0 0 0 3.5 3.5Zm-6-4a1 1 0 0 1 2 0V11a4 4 0 0 0 8 0v-.5a1 1 0 1 1 2 0V11a6 6 0 0 1-5 5.92V19h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.08A6 6 0 0 1 6 11v-.5Z" />
+          </svg>
+          <span>Enable voice assistant</span>
+        </button>
+        <button id="stop" class="end-action" type="button" hidden disabled>
+          <span class="stop-icon" aria-hidden="true"></span>
+          <span>End conversation</span>
+        </button>
+      </footer>
+
+      <p id="privacy-note" class="privacy-note">Wake phrase detection stays on this Mac. Conversation audio is sent only after wake.</p>
+      <audio id="remoteAudio" autoplay></audio>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

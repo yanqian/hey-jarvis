@@ -231,25 +231,25 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F092 - Produce an unsigned internal-test DMG.
+F094 - Create the minimal voice interaction surface.
 
-F092 provides one project-owned Apple Silicon build command for the pinned
-sidecar, Tauri app, atomic `INTERNAL-UNSIGNED` DMG, SHA-256, versioned manifest,
-mounted verification, and checksum-keyed rollback retention. The final DMG is
-45,439,075 bytes; the 104 MiB app contains 83 inventoried arm64 Mach-O paths,
-all classified `adhoc-no-distribution-trust`. Identity, version, icon,
-microphone text, macOS 14 minimum, resources, size, credentials, checkout paths,
-and negative signing/notarization/public claims are enforced.
+F094 replaces the production WKWebView engineering dashboard with a focused
+560x600 Hey Jarvis conversation surface. A CSS-only orb and concise copy map
+ready, wake-ready, connecting, listening, thinking, speaking, stopping, and
+error states without exposing audio settings, event logs, or test controls in
+the ordinary interface. The 480x520 minimum, visible focus, semantic live
+status, responsive layout, and reduced-motion behavior passed local browser
+inspection. Existing media arming, disabled-track input gating, explicit stop,
+semantic ending, playback lifecycle, settings cleanup, privacy, and wake
+recovery boundaries remain accepted.
 
-The authorized Finder trial passed install, expected Keychain authorization,
-BYOK runtime launch, correct answer, continuous follow-up, interruption,
-semantic ending, support export, diagnostic-history clear semantics, two clean
-quits, relaunch, and checksum-verified prior-DMG replacement rollback. Final
-recovery passed with 404 project tests, ten Mac app/Python tests, seventeen
-Rust tests, and all smoke paths. Coding evidence is in
-`.agent-harness/runs/20260802T082740Z-F092-fast-coding.md`; independent approval
-is recorded as `EVAL_PASS: F092` in
-`.agent-harness/runs/20260802T083105Z-F092-evaluation-pass.md`.
+The first evaluator rejection found a recovery-documentation assertion that
+had fallen behind the progress handoff text. The synchronized retry passed 409
+project tests, ten Mac app/Python tests, seventeen Rust tests, and all smoke
+paths. Coding evidence is in `.agent-harness/runs/F094-fast-coding.md` and
+`.agent-harness/runs/F094-coding-retry.md`; independent approval is recorded as
+`EVAL_PASS: F094` in
+`.agent-harness/runs/20260802T133342Z-F094-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -330,10 +330,14 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F093 is pending (`status=todo`) while the
-owner prioritizes product optimizations.
+No feature is currently in progress. F094 is evaluator-approved after a
+corrective documentation-contract retry. F095 is the next owner-prioritized
+optimization and will move credentials, microphone recovery, diagnostics, and
+support actions into a dedicated secondary Settings presentation that shares
+F094's visual language.
 
-F093 is the only unfinished feature. It owns the public engineering narrative
+F093 is pending (`status=todo`) and intentionally deferred behind the
+owner-prioritized F094-F095 product optimizations. It owns the public engineering narrative
 and bounded demo plus privacy-safe feedback from at least three explicitly
 trusted trials or clean profiles. It must use the evaluator-approved F092
 internal artifact without publishing the unsigned binary or describing it as
@@ -350,10 +354,10 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Normalize and plan the owner's next optimization as independently verifiable
-feature work before implementation. Resume F093 later by recording the bounded
-production-app demo and running two additional trusted Apple Silicon tester or
-distinct clean-profile trials. Public binary distribution remains on hold.
+Implement and independently evaluate F095 as its own feature. Resume F093 later by
+recording the bounded production-app demo and running two additional trusted Apple Silicon
+tester or distinct clean-profile trials.
+Public binary distribution remains on hold.
 
 ## Recently Completed
 

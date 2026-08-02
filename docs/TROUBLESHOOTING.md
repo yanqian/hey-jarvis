@@ -141,7 +141,7 @@ python -m src.main --text "AAPL stock price"
 ## Realtime host
 
 Confirm the backend was started with `--backend realtime`, Chrome opened the
-local app-mode host, and **Arm hands-free audio** was clicked once for this host
+local app-mode host, and **Enable voice assistant** was clicked once for this host
 launch. Grant Chrome microphone permission when prompted.
 
 Use:

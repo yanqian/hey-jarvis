@@ -24,6 +24,10 @@ class MacAppShellTests(unittest.TestCase):
         self.assertEqual(capability["windows"], ["main"])
         self.assertEqual(capability["permissions"], ["core:default"])
 
+        window = config["app"]["windows"][0]
+        self.assertEqual((window["width"], window["height"]), (560, 600))
+        self.assertEqual((window["minWidth"], window["minHeight"]), (480, 520))
+
     def test_product_does_not_import_or_copy_spike_source(self):
         forbidden = ("spikes/tauri_realtime", "tauri-realtime-probe", "PROBE_PORT")
         product_files = [
@@ -112,8 +116,12 @@ class MacAppShellTests(unittest.TestCase):
         )
         app_page = (APP / "src" / "index.html").read_text(encoding="utf-8")
 
-        self.assertIn('id="app-settings">Settings', host_page)
-        self.assertIn("Runtime ready · click Arm hands-free audio", host_page)
+        self.assertIn('id="app-settings"', host_page)
+        self.assertIn('aria-label="Open Settings"', host_page)
+        self.assertIn("Enable voice assistant", host_page)
+        self.assertIn('data-ui-state="ready"', host_page)
+        self.assertNotIn('id="events"', host_page)
+        self.assertNotIn('id="settings"', host_page)
         self.assertIn('id="runtime-settings"', app_page)
         self.assertIn("window.history.back()", host_script)
         self.assertNotIn("tauri://localhost", host_script)

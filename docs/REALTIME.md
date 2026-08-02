@@ -6,7 +6,7 @@ Realtime is the opt-in continuous WebRTC backend:
 python -m src.main --backend realtime
 ```
 
-Click **Arm hands-free audio** once per Chrome host launch. Say the configured
+Click **Enable voice assistant** once per Chrome host launch. Say the configured
 wake phrase; Python closes its wake microphone before Chrome obtains WebRTC
 media. Follow-up turns and barge-in then remain inside one session without
 another wake.

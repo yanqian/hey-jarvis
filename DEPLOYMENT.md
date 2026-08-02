@@ -130,7 +130,7 @@ Realtime WebRTC is opt-in:
 python -m src.main --backend realtime
 ```
 
-Click **Arm hands-free audio** once per launched Chrome host. Python owns the
+Click **Enable voice assistant** once per launched Chrome host. Python owns the
 microphone before wake; after confirmed wake and acknowledgement it closes its
 capture before Chrome opens WebRTC media. Follow-up turns and interruption then
 stay inside the same session until an end phrase/tool, timeout, explicit stop,

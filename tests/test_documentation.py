@@ -121,7 +121,7 @@ class DocumentationTests(unittest.TestCase):
         for phrase in (
             "DEMO_DURATION_SECONDS: 210",
             "Check microphone & start",
-            "Arm hands-free audio",
+            "Enable voice assistant",
             "follow-up",
             "Interrupt",
             "再见",
@@ -165,16 +165,17 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F092 - Produce an unsigned internal-test DMG", last_completed)
-        self.assertIn("EVAL_PASS: F092", last_completed)
+        self.assertIn("F094 - Create the minimal voice interaction surface", last_completed)
+        self.assertIn("EVAL_PASS: F094", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
         self.assertIn("No feature is currently in progress", current_feature)
+        self.assertIn("F095 is the next", current_feature)
         self.assertIn("F093 is pending (`status=todo`)", current_feature)
         self.assertIn("internal artifact", current_feature)
         self.assertIn("machine-readable decision is `HOLD`", current_feature)
-        self.assertIn("Normalize and plan the owner's next optimization", next_feature)
+        self.assertIn("Implement and independently evaluate F095", next_feature)
         self.assertIn("Resume F093 later", next_feature)
         self.assertIn("two additional trusted Apple Silicon", next_feature)
         self.assertIn("Public binary distribution remains on hold", next_feature)

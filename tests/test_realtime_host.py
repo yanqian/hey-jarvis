@@ -958,7 +958,30 @@ class RealtimeHostTests(unittest.TestCase):
         html = server.resolve_static("/")[0].decode()
         javascript = server.resolve_static("/app.js")[0].decode()
         guidance = (server.STATIC_ROOT.parent / "README.md").read_text()
-        self.assertIn("Arm hands-free audio", html)
+        self.assertIn("Enable voice assistant", html)
+        self.assertIn('data-ui-state="ready"', html)
+        self.assertIn('aria-live="polite"', html)
+        self.assertIn("End conversation", html)
+        self.assertNotIn('id="events"', html)
+        self.assertNotIn('id="settings"', html)
+        self.assertNotIn('id="long"', html)
+        stylesheet = server.resolve_static("/styles.css")[0].decode()
+        self.assertIn("prefers-reduced-motion: reduce", stylesheet)
+        self.assertIn("button:focus-visible", stylesheet)
+        self.assertIn("[hidden]", stylesheet)
+        for state in (
+            '"wake-ready"',
+            "connecting",
+            "listening",
+            "thinking",
+            "speaking",
+            "stopping",
+            "error",
+        ):
+            self.assertIn(state, javascript)
+        self.assertIn('setUiState("listening")', javascript)
+        self.assertIn('setUiState("speaking")', javascript)
+        self.assertIn('setUiState("thinking")', javascript)
         for text in ("getUserMedia", "/api/command?after=", "host_id", "echoCancellation:{exact:true}", "track.stop()", "peer.close()"):
             self.assertIn(text, javascript)
         self.assertIn("REMOTE_AUDIO_VOLUME=0.1", javascript)

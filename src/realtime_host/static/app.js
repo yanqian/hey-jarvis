@@ -8,10 +8,34 @@ let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelS
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
-function log(type,detail={}){events.push({at_ms:Math.round(performance.now()),type,...detail});events=events.slice(-100);$("events").textContent=events.map(JSON.stringify).join("\n");}
+const UI_STATES={
+  ready:{label:"Ready",title:"Meet your voice assistant",detail:"Enable hands-free audio once, then wake Jarvis with your voice."},
+  "wake-ready":{label:"Wake listening",title:'Waiting for “Hey Jarvis”',detail:"Wake phrase detection stays on this Mac."},
+  connecting:{label:"Connecting",title:"Getting ready",detail:"Conversation audio stays off until the secure session is ready."},
+  listening:{label:"Listening",title:"I’m listening",detail:"Speak naturally — you can follow up or interrupt at any time."},
+  thinking:{label:"Thinking",title:"Working on it",detail:"Jarvis is preparing a response."},
+  speaking:{label:"Speaking",title:"Responding",detail:"You can interrupt at any time."},
+  stopping:{label:"Ending",title:"Closing the conversation",detail:"Releasing the microphone and restoring local wake listening."},
+  error:{label:"Needs attention",title:"Jarvis couldn’t continue",detail:"Wake listening is safe. Try again or open Settings for recovery."},
+};
+
+function setUiState(state,detail=null){
+  const presentation=UI_STATES[state]||UI_STATES.error;
+  document.body.dataset.uiState=state in UI_STATES?state:"error";
+  $("status-label").textContent=presentation.label;
+  $("status-title").textContent=presentation.title;
+  $("status-detail").textContent=detail||presentation.detail;
+}
+
+function showEndControl(show){
+  $("stop").hidden=!show;
+  $("stop").disabled=!show;
+}
+
+function log(type,detail={}){events.push({at_ms:Math.round(performance.now()),type,...detail});events=events.slice(-100);}
 async function post(path,payload={}){const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const data=await response.json();if(!response.ok)throw new Error(data.message||data.error);return data;}
 async function hostEvent(type,detail={}){return post("/api/event",{type,session_id:sessionId,host_id:hostId,...detail});}
-function renderSettings(settings){for(const row of $("settings").querySelectorAll("div")){const key=row.querySelector("dt").textContent;row.querySelector("dd").textContent=String(settings[key]??"not reported");}}
+function renderSettings(_settings){}
 async function preferStrongestEchoCancellation(track){
   const capabilities=typeof track.getCapabilities==="function"?track.getCapabilities():{};
   const advertised=Array.isArray(capabilities.echoCancellation)?capabilities.echoCancellation:[];
@@ -108,9 +132,9 @@ async function arm(){
     warm.getTracks().forEach(track=>track.stop());
     $("remoteAudio").volume=Number.isFinite(sessionConfig.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;
     const playAttempt=$("remoteAudio").play();if(playAttempt)playAttempt.catch(()=>{});
-    sessionId=null;await hostEvent("armed");armed=true;$("arm").disabled=true;
-    $("status").textContent="Armed · waiting for Python wake";log("armed");poll();
-  }catch(error){$("status").textContent=`Arm failed: ${error.message}`;}
+    sessionId=null;await hostEvent("armed");armed=true;$("arm").disabled=true;$("arm").hidden=true;
+    setUiState("wake-ready");log("armed");poll();
+  }catch(error){$("arm").disabled=false;$("arm").hidden=false;setUiState("error",`Voice setup failed: ${error.message}`);}
 }
 
 function elapsedMs(start,end){return Math.max(0,Math.round(end-start));}
@@ -161,7 +185,7 @@ async function reportConfiguredSession(){
   await hostEvent("handoff_timing",handoffTimingSummary(readyAt));
   await hostEvent("session_configured");
   sessionCreatedAt=null;dataChannelOpenedAt=null;
-  $("status").textContent="Configured · waiting for audible ready acknowledgement";
+  setUiState("connecting","Connected securely. Waiting for the ready acknowledgement.");
 }
 
 async function handleServerEvent(event){
@@ -169,16 +193,16 @@ async function handleServerEvent(event){
   if(!tracked.includes(event.type))return;
   log(event.type,{status:event.response?.status});
   if(event.type==="session.created"){sessionCreatedAt=performance.now();await reportConfiguredSession();}
-  if(event.type==="input_audio_buffer.speech_started")await hostEvent("speech_started");
-  if(event.type==="input_audio_buffer.speech_stopped")await hostEvent("speech_stopped");
-  if(event.type==="response.created"){flushInputLevels();await hostEvent("response_created");}
+  if(event.type==="input_audio_buffer.speech_started"){setUiState("listening","I can hear you.");await hostEvent("speech_started");}
+  if(event.type==="input_audio_buffer.speech_stopped"){setUiState("thinking");await hostEvent("speech_stopped");}
+  if(event.type==="response.created"){setUiState("thinking");flushInputLevels();await hostEvent("response_created");}
   if(event.type==="response.done"){
     flushInputLevels();
     await hostEvent("response_done",{reason:String(event.response?.status||"unknown")});
     for(const item of event.response?.output||[])if(item.type==="function_call"&&await forwardToolCall(item))return;
   }
-  if(event.type==="output_audio_buffer.started"){flushInputLevels();assistantSpeaking=true;await hostEvent("playback_started");}
-  if(event.type==="output_audio_buffer.stopped"){flushInputLevels();assistantSpeaking=false;await hostEvent("playback_stopped");}
+  if(event.type==="output_audio_buffer.started"){setUiState("speaking");flushInputLevels();assistantSpeaking=true;await hostEvent("playback_started");}
+  if(event.type==="output_audio_buffer.stopped"){setUiState("listening");flushInputLevels();assistantSpeaking=false;await hostEvent("playback_stopped");}
   if(event.type==="response.function_call_arguments.done")await forwardToolCall(event);
   if(event.type==="conversation.item.input_audio_transcription.completed"){
     const transcript=typeof event.transcript==="string"&&event.transcript.length<=200?event.transcript:null;
@@ -186,13 +210,13 @@ async function handleServerEvent(event){
     if(result.status==="stopping")await stop("end_phrase");
   }
   if(event.type==="conversation.item.input_audio_transcription.failed")await hostEvent("transcription_failed",{item_id:event.item_id});
-  if(event.type==="error"){await hostEvent("error",{reason:"realtime_error"}).catch(()=>{});await stop("realtime_error");}
+  if(event.type==="error"){await hostEvent("error",{reason:"realtime_error"}).catch(()=>{});await stop("realtime_error","error");}
 }
 
 async function start(command){
   if(!armed||pc)throw new Error("host is not ready for start");
   handoffTiming={commandReceived:performance.now()};sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
-  sessionId=command.session_id;$("status").textContent="Python released wake microphone · connecting";
+  sessionId=command.session_id;setUiState("connecting");showEndControl(true);
   await hostEvent("microphone_requested");
   handoffTiming.tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived;
   handoffTiming.microphoneStarted=handoffTiming.commandReceived;
@@ -222,25 +246,26 @@ async function start(command){
   handoffTiming.negotiationCompleted=performance.now();
   await hostEvent("transport_connected");
   transportReported=true;await reportConfiguredSession();
-  $("status").textContent="Connecting · waiting for session.created";$("long").disabled=false;$("stop").disabled=false;log("transport_connected");
+  setUiState("connecting","Secure transport connected. Finishing voice setup.");log("transport_connected");
 }
 
 async function enableInput(command){
   if(command.session_id!==sessionId||!inputTrack||inputTrack.enabled||dc?.readyState!=="open")throw new Error("input enablement requires the configured active session");
   inputTrack.enabled=true;
   await hostEvent("connected");
-  $("status").textContent="Live · input ready; follow-up speech stays in this session";log("input_ready");
+  setUiState("listening");log("input_ready");
 }
 
-async function stop(reason="command"){
+async function stop(reason="command",finalState="wake-ready"){
   const endingSession=sessionId;if(!endingSession)return;stopInputLevels();sessionId=null;
+  setUiState("stopping");showEndControl(false);
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}inputTrack=null;
   const audio=$("remoteAudio");audio.pause();audio.srcObject=null;handoffTiming=null;sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
-  $("long").disabled=true;$("stop").disabled=true;log("stopped",{reason});
+  log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
-  $("status").textContent="Armed · Python wake microphone restored";
+  setUiState(finalState);
 }
 
 async function openAppSettings(){
@@ -250,7 +275,7 @@ async function openAppSettings(){
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}inputTrack=null;
   const audio=$("remoteAudio");audio.pause();audio.srcObject=null;
   if(window.history.length>1)window.history.back();
-  else $("status").textContent="Open Settings from the Hey Jarvis tray menu.";
+  else setUiState("error","Open Settings from the Hey Jarvis menu bar icon.");
 }
 
 async function sendFixtureAudio(command){
@@ -262,10 +287,10 @@ async function sendFixtureAudio(command){
   log("fixture_audio_sent",{name:String(command.fixture_name||"unknown")});
 }
 
-async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
+async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error","error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
 function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:"Count slowly from one to one hundred, saying every number clearly. Do not abbreviate or skip any number."}]}}));dc.send(JSON.stringify({type:"response.create"}));}
 
-$("arm").addEventListener("click",arm);$("long").addEventListener("click",longAnswer);$("stop").addEventListener("click",()=>post("/api/stop"));$("app-settings").addEventListener("click",openAppSettings);
+$("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop").addEventListener("click",()=>{setUiState("stopping");$("stop").disabled=true;post("/api/stop").catch(error=>setUiState("error",`Could not end the conversation: ${error.message}`));});$("app-settings").addEventListener("click",openAppSettings);
 function releasePageMedia(){
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}
   inputTrack=null;
