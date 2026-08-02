@@ -458,6 +458,7 @@ impl SidecarSupervisor {
     }
 }
 
+#[cfg(debug_assertions)]
 fn development_python_interpreter() -> String {
     if let Ok(configured) = std::env::var("HEY_JARVIS_SIDECAR_PYTHON") {
         return configured;
@@ -466,6 +467,13 @@ fn development_python_interpreter() -> String {
     if project_venv.is_file() {
         return project_venv.display().to_string();
     }
+    "python3".into()
+}
+
+#[cfg(not(debug_assertions))]
+fn development_python_interpreter() -> String {
+    // This branch is never selected by a release SidecarSupervisor. Avoid
+    // compiling the repository-local virtualenv path into release artifacts.
     "python3".into()
 }
 

@@ -1,8 +1,8 @@
 # Mac App Python packaging
 
 F090 freezes the Apple Silicon product sidecar as a PyInstaller `onedir`
-runtime. It is deliberately separate from Developer ID signing, notarization,
-and the final DMG workflow, which remain F092 scope.
+runtime. F092 wraps it in an explicitly unsigned internal DMG; Developer ID
+signing, notarization, and public distribution remain out of scope.
 
 ## Reproducible build
 
@@ -76,5 +76,14 @@ These are measurement gates, not promises or arbitrary pruning targets:
 - immediate warm model/fake smoke: at most 5 seconds.
 
 The accepted F090 run records actual sidecar, app, DMG-candidate, cold, and warm
-measurements. A signed/notarized DMG can differ and will be measured again by
-F092. No Intel/universal2 or final download-size claim is made.
+measurements. F092 enforces the 150 MiB budget on its internal unsigned DMG. No
+Intel/universal2 or future signed download-size claim is made.
+
+## Internal DMG
+
+`./scripts/build_internal_macos_release.sh` is the one-command F092 pipeline.
+It produces a clearly named `INTERNAL-UNSIGNED` DMG, SHA-256 file, and
+versioned manifest; mounts the result; and verifies identity, version,
+architecture, resources, nested code, size, private-material exclusions, and
+the absence of distribution-trust claims. Full trusted-tester instructions are
+in [INTERNAL_MAC_APP_TESTING.md](INTERNAL_MAC_APP_TESTING.md).

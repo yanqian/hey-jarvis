@@ -1,8 +1,12 @@
 # Deployment
 
-Hey Jarvis runs as a local macOS Python process. It is not a server deployment
-or packaged application: the microphone, speaker, wake model, credentials, and
-runtime all live on the Mac that launches it.
+Hey Jarvis remains runnable as a local macOS Python process. It also has a
+product-owned Tauri application packaged as an Apple Silicon
+`INTERNAL-UNSIGNED` DMG for owner-led and explicitly trusted testing. The DMG
+is neither Developer ID signed nor notarized and must not be published as a
+general download. It is a packaged application, but not a publicly
+distributable one. See
+[docs/INTERNAL_MAC_APP_TESTING.md](docs/INTERNAL_MAC_APP_TESTING.md).
 
 ## Supported target
 
@@ -174,6 +178,9 @@ python -m src.main --diagnose
 
 Review `.env.example` for new settings. Do not overwrite an existing `.env`
 because it contains local credentials and tuning.
+
+The internal Mac app uses manual DMG replacement and a retained prior DMG for
+rollback. It does not use this source-update procedure or an automatic updater.
 
 ## Local runtime files
 

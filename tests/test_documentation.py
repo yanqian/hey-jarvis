@@ -106,22 +106,18 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F091 - Harden app diagnostics and sidecar recovery", last_completed)
-        self.assertIn("EVAL_PASS: F091", last_completed)
+        self.assertIn("F092 - Produce an unsigned internal-test DMG", last_completed)
+        self.assertIn("EVAL_PASS: F092", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
-        self.assertIn("F079 is evaluator-approved", current_feature)
-        self.assertIn("F080 is evaluator-approved", current_feature)
-        self.assertIn("F084 remains evaluator-approved", current_feature)
-        self.assertIn("F085 is evaluator-approved", current_feature)
-        self.assertIn("F087 is evaluator-approved", current_feature)
-        self.assertIn("No feature is currently in progress", current_feature)
-        self.assertIn("F091 is evaluator-approved", current_feature)
-        self.assertIn("Complete and evaluate F092", next_feature)
-        self.assertIn("F093 then", next_feature)
+        self.assertIn("F093 - Publish the portfolio demo and internal feedback", current_feature)
+        self.assertIn("internal artifact", current_feature)
+        self.assertIn("Plan and execute F093", next_feature)
+        self.assertIn("Public binary distribution remains on hold", next_feature)
         self.assertNotIn("No unfinished features remain", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
+        self.assertIn("F091 - Harden app diagnostics and sidecar recovery", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
         self.assertIn("F061", known_issues)
         self.assertIn("passed the synchronized RT003 run", known_issues)
@@ -366,6 +362,26 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("`stock`", realtime)
         self.assertIn("weather", realtime)
         self.assertIn("outside the Realtime tool boundary", realtime)
+
+    def test_unsigned_internal_distribution_is_explicit_and_bounded(self):
+        guide = read(ROOT / "docs" / "INTERNAL_MAC_APP_TESTING.md")
+        deployment = read(DEPLOYMENT)
+        build = read(ROOT / "scripts" / "build_internal_macos_release.sh")
+
+        for phrase in (
+            "INTERNAL-UNSIGNED",
+            "Open Anyway",
+            "Do not disable Gatekeeper",
+            "Do not put this DMG on a public download page",
+            "manual install/update/rollback",
+            "Developer ID signing and notarization",
+        ):
+            self.assertIn(phrase, guide)
+        self.assertIn("INTERNAL-UNSIGNED", deployment)
+        self.assertIn("Hey-Jarvis-$VERSION-INTERNAL-UNSIGNED-arm64", build)
+        self.assertNotIn("notarytool", build)
+        self.assertNotIn("stapler", build)
+        self.assertNotIn("xattr", build)
 
     def test_local_markdown_links_resolve(self):
         link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")

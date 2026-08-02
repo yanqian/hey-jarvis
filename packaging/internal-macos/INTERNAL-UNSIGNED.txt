@@ -1,0 +1,12 @@
+HEY JARVIS — INTERNAL UNSIGNED TEST BUILD
+
+This build has no Apple Developer ID distribution signature and is not
+notarized. It is for the owner and explicitly trusted testers only. Do not
+publish it or present it as Gatekeeper-ready.
+
+Confirm the SHA-256 value with the owner before opening it. If macOS blocks the
+first launch and you trust the source, use System Settings > Privacy & Security
+> Open Anyway. Do not disable Gatekeeper and do not remove quarantine metadata.
+
+See docs/INTERNAL_MAC_APP_TESTING.md in the source repository for setup,
+privacy/API-cost, feedback, uninstall, update, and rollback instructions.

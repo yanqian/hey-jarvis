@@ -127,9 +127,10 @@ visible non-ready state rather than silently proceeding.
 
 The first release targets Apple Silicon and macOS 14 or later. F088 integrates
 the real runtime and WKWebView media path, F089 adds Keychain/first-run/TCC
-recovery, and F090 supplies the measured unsigned packaged runtime. Diagnostics
-and recovery remain F091; signing, notarization, and the distributable DMG
-remain F092.
+recovery, and F090 supplies the measured unsigned packaged runtime. F091 owns
+diagnostics and recovery. F092 produces only a clearly labelled unsigned
+internal DMG; Developer ID signing, notarization, and public distribution are
+future work.
 
 F091 defines lifecycle-only rotating diagnostics, bounded non-paid sidecar
 recovery, deterministic WebView media release, and redacted support export in
@@ -144,14 +145,17 @@ The provisional identity is:
 - initial app version: `0.1.0`
 - minimum macOS version: `14.0`
 
-Before F092 signs the first friend release, freeze:
+F092 freezes these internal-build inputs:
 
-- the final bundle identifier and Apple Developer Team;
-- the version and release-channel source of truth;
-- final icons, microphone usage text, and hardened-runtime entitlements;
+- the bundle identifier (without an Apple Developer Team);
+- `tauri.conf.json` as version source, checked against Cargo/npm metadata;
+- the icon and microphone usage text;
 - Application Support and Keychain service/account names;
-- Developer ID and notarization credential ownership;
-- DMG name, download URL, retained rollback artifact, and checksum format.
+- the `INTERNAL-UNSIGNED` DMG name, retained rollback artifact, and SHA-256
+  format.
+
+No hardened-runtime, Developer ID and notarization, Gatekeeper-ready, or public
+download claim is made. Those require a separate future feature.
 
 Changing bundle identity after distribution can disrupt TCC microphone grants,
 Keychain access, and update continuity, so it is a release-blocking decision.

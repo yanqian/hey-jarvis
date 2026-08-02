@@ -12,9 +12,10 @@ The project has two voice backends:
 | **Pipeline** (default) | Stable local development and debugging | Wake → record → transcribe → answer → speak |
 | **Realtime** (opt-in) | Continuous, lower-latency conversation and barge-in | Wake → WebRTC session with follow-up turns |
 
-Both are working MVP paths. This is not a packaged macOS app: signing,
-notarization, launch-at-login, automatic updates, and distributable `.app`
-packaging are deferred.
+Both are working MVP paths. A product-owned Tauri app and an unsigned Apple
+Silicon DMG can now be built for explicitly trusted internal testing. Developer
+ID signing, notarization, launch-at-login, automatic updates, and public binary
+distribution of a distributable `.app` remain deferred.
 
 ## Requirements
 
@@ -73,6 +74,7 @@ Before wake, audio remains local to the Python wake detector.
 | Command | Purpose |
 | --- | --- |
 | `./init.sh` | Compile, test, and run dependency-free recovery smoke paths |
+| `./scripts/build_internal_macos_release.sh` | Build and verify the Apple Silicon `INTERNAL-UNSIGNED` DMG |
 | `python -m src.main --dry-run` | Verify the entry point without devices or APIs |
 | `python -m src.main --fake-backend` | Exercise the full pipeline state machine with fakes |
 | `python -m src.realtime.fake_smoke` | Exercise the Realtime lifecycle without browser, audio, or network |
@@ -130,6 +132,8 @@ Start with the document matching your task:
   evaluation commands.
 - [Mac App architecture](docs/MAC_APP_ARCHITECTURE.md) — native ownership,
   sidecar protocol, lifecycle, identity, and release freeze points.
+- [Unsigned internal Mac testing](docs/INTERNAL_MAC_APP_TESTING.md) — trusted
+  install, privacy/cost, feedback, update, rollback, and uninstall workflow.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common failures and audio debug.
 
 Developer references:

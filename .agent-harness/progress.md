@@ -16,10 +16,12 @@ after user confirmation, decomposed into F087-F093. The portfolio-grade,
 local-first architecture makes Rust/Tauri the native security and supervision
 boundary, WKWebView the Realtime media endpoint, and the packaged Python
 sidecar the owner of reusable wake, coordination, tool, and OpenAI behavior.
-The CLI remains the simplest personal-use and recovery path. The friend beta
-uses user-provided Keychain credentials and a manually updated Apple Silicon
-macOS 14+ Developer ID-signed, hardened, notarized, stapled DMG. A hosted
-backend, accounts, billing, telemetry, and automatic updates are excluded.
+The CLI remains the simplest personal-use and recovery path. The current beta
+scope uses user-provided Keychain credentials and a manually updated Apple
+Silicon macOS 14+ DMG that is explicitly unsigned and restricted to owner-led
+or trusted internal testing. Public binary distribution, Developer ID signing,
+notarization, a hosted backend, accounts, billing, telemetry, and automatic
+updates are excluded from the current plan.
 F087 is complete at commit `95524d7`. F088 is evaluator-approved after
 provider-native coding and an authorized Apple Silicon live run recorded in
 `.agent-harness/runs/F088-fast-coding.md` and
@@ -229,22 +231,25 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F091 - Harden app diagnostics and sidecar recovery.
+F092 - Produce an unsigned internal-test DMG.
 
-F091 adds bounded rotating lifecycle diagnostics across Rust, WebView, and the
-frozen Python runtime; a redacted versioned support export and clear UI;
-deterministic WebView media release; explicit macOS sleep/wake cleanup; and a
-three-restart budget that terminates in a safe non-listening crash loop. The
-authorized Apple Silicon release trial verified support export/clear, three
-recoveries plus crash-loop cutoff, three repeated launch/quit rounds, physical
-sleep/wake cleanup, and zero residual App/sidecar processes. It also exposed
-and fixed missing Realtime static files in the frozen sidecar package. Final
-recovery passed with 398 project tests, ten Mac app/Python tests, seventeen
-Rust tests, and all smoke paths. Coding and live evidence are recorded in
-`.agent-harness/runs/20260802T063008Z-F091-fast-coding.md` and
-`.agent-harness/runs/20260802T045016Z-F091-automated-verification.md`;
-independent cold-start approval is recorded as `EVAL_PASS: F091` in
-`.agent-harness/runs/20260802T064406Z-F091-evaluation-pass.md`.
+F092 provides one project-owned Apple Silicon build command for the pinned
+sidecar, Tauri app, atomic `INTERNAL-UNSIGNED` DMG, SHA-256, versioned manifest,
+mounted verification, and checksum-keyed rollback retention. The final DMG is
+45,439,075 bytes; the 104 MiB app contains 83 inventoried arm64 Mach-O paths,
+all classified `adhoc-no-distribution-trust`. Identity, version, icon,
+microphone text, macOS 14 minimum, resources, size, credentials, checkout paths,
+and negative signing/notarization/public claims are enforced.
+
+The authorized Finder trial passed install, expected Keychain authorization,
+BYOK runtime launch, correct answer, continuous follow-up, interruption,
+semantic ending, support export, diagnostic-history clear semantics, two clean
+quits, relaunch, and checksum-verified prior-DMG replacement rollback. Final
+recovery passed with 404 project tests, ten Mac app/Python tests, seventeen
+Rust tests, and all smoke paths. Coding evidence is in
+`.agent-harness/runs/20260802T082740Z-F092-fast-coding.md`; independent approval
+is recorded as `EVAL_PASS: F092` in
+`.agent-harness/runs/20260802T083105Z-F092-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -325,28 +330,30 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F091 is evaluator-approved and ready to
-commit. F092 is the next independently verifiable productization feature.
+F093 - Publish the portfolio demo and internal feedback.
 
-The latest accepted runtime baseline remains unchanged:
-
-- F090 is evaluator-approved for the reproducible packaged Python/model runtime.
-- F089 is evaluator-approved for BYOK Keychain setup and first-run recovery.
-- F088 is evaluator-approved for the accepted runtime and WKWebView product integration.
-- F087 is evaluator-approved for the production Mac app shell and protocol.
-- F079 is evaluator-approved for bounded acknowledgement playback.
-- F080 is evaluator-approved for the shared alloy voice profile.
-- F084 remains evaluator-approved, completing the existing Realtime
-  structured-tool bridges.
-- F085 is evaluator-approved for the post-playback idle window.
+F093 is the only unfinished feature. It owns the public engineering narrative
+and bounded demo plus privacy-safe feedback from at least three explicitly
+trusted trials or clean profiles. It must use the evaluator-approved F092
+internal artifact without publishing the unsigned binary or describing it as
+signed, notarized, Gatekeeper-ready, or suitable for anonymous download.
 
 ## Next Feature
 
-Complete and evaluate F092 to produce the signed/notarized manually updated
-friend-beta DMG. F093 then publishes the demo, case study, three-tester
-feedback, and final go/hold record.
+Plan and execute F093 one acceptance surface at a time: portfolio narrative,
+bounded demo, trusted feedback records, and the final go/hold decision.
+Public binary distribution remains on hold.
 
 ## Recently Completed
+
+F091 - Harden app diagnostics and sidecar recovery.
+
+F091 added bounded rotating lifecycle diagnostics across Rust, WebView, and
+the frozen Python runtime; redacted support export and clear UI; deterministic
+media release; sleep/wake cleanup; and bounded crash recovery. Its authorized
+Apple Silicon trials and independent evaluator approval are recorded in
+`.agent-harness/runs/20260802T063008Z-F091-fast-coding.md` and
+`.agent-harness/runs/20260802T064406Z-F091-evaluation-pass.md`.
 
 F077 - Measure acknowledgement playback lifecycle.
 

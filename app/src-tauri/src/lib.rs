@@ -206,12 +206,21 @@ fn onboarding_snapshot(
     }
 }
 
+#[cfg(debug_assertions)]
 fn development_sidecar_path() -> PathBuf {
     std::env::var_os("HEY_JARVIS_SIDECAR_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../sidecar/product_sidecar.py")
         })
+}
+
+#[cfg(not(debug_assertions))]
+fn development_sidecar_path() -> PathBuf {
+    // The release supervisor always resolves the frozen sidecar from the app's
+    // resource directory. Keeping the development source path out of this
+    // build also prevents a developer checkout path leaking into the binary.
+    PathBuf::new()
 }
 
 fn settings_url(app: &tauri::AppHandle) -> Result<tauri::Url, String> {

@@ -25,6 +25,7 @@
   "bundle": {
     "active": false,
     "targets": ["app"],
+    "icon": ["icons/icon.png"],
     "resources": {
       "../../assets/wake_acknowledgement_alloy.mp3": "assets/wake_acknowledgement_alloy.mp3",
       "../../build/macos-sidecar/hey-jarvis-sidecar": "sidecar",

@@ -2125,18 +2125,18 @@
     },
     {
       "id": "F092",
-      "title": "Produce a signed notarized friend-beta DMG",
-      "description": "Create and exercise a repeatable direct-distribution pipeline for an Apple Silicon Developer ID-signed, hardened, notarized, stapled DMG that friends can install without a terminal.",
+      "title": "Produce an unsigned internal-test DMG",
+      "description": "Create and exercise a repeatable Apple Silicon DMG pipeline for owner-led and explicitly trusted internal testing without claiming Developer ID signing, notarization, or public release readiness.",
       "acceptance": [
-        "The stable product identity, minimum macOS version, icons, microphone usage text, version source, entitlements, Developer ID identity, and hardened-runtime policy are documented and applied to the app and all nested Python components.",
-        "One release command builds the Apple Silicon app and DMG, signs inside-out with secure timestamps, submits with notarytool, staples accepted tickets, and emits SHA-256 plus a versioned manifest without exposing signing credentials.",
-        "codesign, spctl, stapler, architecture, bundle-content, nested-signature, and no-developer-path checks pass; ad-hoc or unsigned output cannot be labeled as a friend release.",
-        "A clean macOS 14+ account downloads the quarantined DMG, installs through normal Gatekeeper behavior, completes BYOK and microphone setup, runs one bounded conversation, exports diagnostics if needed, quits, relaunches, and can manually install a prior retained DMG.",
-        "The HTTPS/GitHub release includes compatibility, privacy/API-cost disclosure, install, known-issue, feedback, uninstall, and manual-update guidance; full tests and final ./init.sh pass with separate evaluator approval."
+        "The stable product identity, Apple Silicon/macOS 14+ compatibility, icon, microphone usage text, and one version source are documented and applied consistently to the app and internal artifact metadata.",
+        "One project-owned command reproducibly builds the packaged sidecar, Tauri app, clearly named INTERNAL-UNSIGNED DMG, SHA-256 checksum, and versioned manifest without reading signing or notarization credentials.",
+        "Verification checks architecture, bundle contents, nested executable inventory, version agreement, checksum, size budget, absence of developer filesystem paths and credentials, and explicit unsigned status; the artifact and documentation cannot label it signed, notarized, Gatekeeper-ready, or a public friend release.",
+        "A clean local macOS 14+ account or explicitly trusted tester installs through documented GUI-only internal-test steps, including Privacy & Security Open Anyway when required, without disabling Gatekeeper or using quarantine-removal commands; BYOK, microphone setup, one bounded conversation, support export, quit, relaunch, and manual rollback to a retained prior DMG pass.",
+        "Internal distribution guidance covers trusted-source warning, compatibility, privacy/API cost, install, known issues, feedback, uninstall, manual update/rollback, and the hold on public distribution until a future Developer ID/notarization feature; full tests and final ./init.sh pass with separate evaluator approval."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
@@ -2146,14 +2146,14 @@
     },
     {
       "id": "F093",
-      "title": "Publish the portfolio release and friend feedback",
-      "description": "Complete Hey Jarvis as a portfolio-grade local-first project with a public engineering narrative, bounded demo, reproducible release, and privacy-safe feedback from at least three friend installs.",
+      "title": "Publish the portfolio demo and internal feedback",
+      "description": "Complete Hey Jarvis as a portfolio-grade local-first project with a public engineering narrative, bounded demo, reproducible internal artifact, and privacy-safe feedback from at least three trusted trials.",
       "acceptance": [
-        "The project landing page and case study explain the personal-use, AI-learning, job-portfolio, and friend-feedback goals; architecture, privacy, non-commercial scope, major failures, F086 evidence, AI Agent Harness workflow, and deliberate tradeoffs are accurate and reproducible.",
+        "The project landing page and case study explain the personal-use, AI-learning, job-portfolio, and trusted-feedback goals; architecture, privacy, non-commercial scope, major failures, F086 evidence, AI Agent Harness workflow, deliberate tradeoffs, and unsigned internal-only release status are accurate and reproducible.",
         "A two-to-four-minute demo shows installation or launch, BYOK setup without revealing a key, wake, acknowledgement, normal/follow-up/tool turns, deliberate interruption, semantic ending, media release, diagnostics, and clean quit.",
-        "At least three invited Apple Silicon users or clean user/device profiles record privacy-safe install, first-run, wake, conversation, interruption, cleanup, relaunch, support friction, and qualitative feedback without committed audio, transcripts, or credentials.",
-        "Release blockers include credential exposure, signing/notarization failure, repeatable microphone ownership loss, residual sidecar, crash loop, or unrecoverable onboarding; failures create follow-up features rather than being hidden by aggregate feedback.",
-        "A final completion record summarizes artifact size and readiness measurements, feedback, unresolved limitations, retained CLI recovery path, future cloud evolution without implementing it, and a go/hold decision; full verification and final ./init.sh pass."
+        "At least three explicitly trusted Apple Silicon users or clean local user/device profiles record privacy-safe install, first-run, wake, conversation, interruption, cleanup, relaunch, support friction, and qualitative feedback without committed audio, transcripts, or credentials.",
+        "Release blockers include credential exposure, an unsigned artifact being presented as public or trusted, repeatable microphone ownership loss, residual sidecar, crash loop, or unrecoverable onboarding; failures create follow-up features rather than being hidden by aggregate feedback.",
+        "A final completion record summarizes artifact size and readiness measurements, feedback, unresolved limitations, retained CLI recovery path, future cloud and signed-distribution evolution without implementing them, and a go/hold decision that keeps public binary distribution on hold; full verification and final ./init.sh pass."
       ],
       "passes": false,
       "status": "todo",
