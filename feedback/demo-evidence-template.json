@@ -1,0 +1,14 @@
+{
+  "recorded": true,
+  "production_app": true,
+  "byok_hidden": true,
+  "wake_and_acknowledgement": true,
+  "normal_followup_tool_turns": true,
+  "interruption": true,
+  "semantic_end_and_media_release": true,
+  "diagnostics_and_clean_quit": true,
+  "duration_seconds": 210,
+  "sensitive_material_visible": false,
+  "public_binary_linked": false,
+  "public_demo_reference": "replace-with-public-video-or-repository-demo-reference"
+}

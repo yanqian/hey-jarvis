@@ -330,7 +330,8 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-F093 - Publish the portfolio demo and internal feedback.
+No feature is currently in progress. F093 is pending (`status=todo`) while the
+owner prioritizes product optimizations.
 
 F093 is the only unfinished feature. It owns the public engineering narrative
 and bounded demo plus privacy-safe feedback from at least three explicitly
@@ -338,11 +339,21 @@ trusted trials or clean profiles. It must use the evaluator-approved F092
 internal artifact without publishing the unsigned binary or describing it as
 signed, notarized, Gatekeeper-ready, or suitable for anonymous download.
 
+Provider-native work has added the case study, a 210-second privacy-safe demo
+runbook, structured trusted-trial evidence, an explicit completion record, and
+a fail-closed completion verifier. The owner-led F092 run is preserved as one
+eligible privacy-safe trial. The current machine-readable decision is `HOLD`:
+the demo has not yet been recorded and two additional trusted tester or clean
+profile trials remain. No demo or external feedback has been fabricated.
+The existing F093 worktree is intentionally retained so the feature can resume
+without recreating its narrative, demo, feedback, or verification groundwork.
+
 ## Next Feature
 
-Plan and execute F093 one acceptance surface at a time: portfolio narrative,
-bounded demo, trusted feedback records, and the final go/hold decision.
-Public binary distribution remains on hold.
+Normalize and plan the owner's next optimization as independently verifiable
+feature work before implementation. Resume F093 later by recording the bounded
+production-app demo and running two additional trusted Apple Silicon tester or
+distinct clean-profile trials. Public binary distribution remains on hold.
 
 ## Recently Completed
 

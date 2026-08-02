@@ -15,6 +15,10 @@ CONFIGURATION = ROOT / "docs" / "CONFIGURATION.md"
 PIPELINE = ROOT / "docs" / "PIPELINE.md"
 REALTIME = ROOT / "docs" / "REALTIME.md"
 TROUBLESHOOTING = ROOT / "docs" / "TROUBLESHOOTING.md"
+PORTFOLIO_CASE_STUDY = ROOT / "docs" / "PORTFOLIO_CASE_STUDY.md"
+PORTFOLIO_DEMO = ROOT / "docs" / "PORTFOLIO_DEMO.md"
+PORTFOLIO_COMPLETION = ROOT / "docs" / "PORTFOLIO_COMPLETION.md"
+TRUSTED_FEEDBACK = ROOT / "feedback" / "README.md"
 PROGRESS = ROOT / ".agent-harness" / "progress.md"
 
 PROJECT_DOCS = (
@@ -79,6 +83,10 @@ class DocumentationTests(unittest.TestCase):
             "MANUAL_TESTING.md",
             "SPEC.md",
             "AGENTS.md",
+            "docs/PORTFOLIO_CASE_STUDY.md",
+            "docs/PORTFOLIO_DEMO.md",
+            "docs/PORTFOLIO_COMPLETION.md",
+            "feedback/README.md",
         ):
             self.assertIn(target, readme)
 
@@ -87,6 +95,57 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn(".agent-harness/", readme)
         self.assertIn(".agent-harness/runs/", readme)
         self.assertNotIn("`.agent-harness/` and `runs/`", readme)
+
+    def test_portfolio_material_is_honest_private_and_reproducible(self):
+        case_study = read(PORTFOLIO_CASE_STUDY)
+        normalized_case_study = " ".join(case_study.split())
+        demo = read(PORTFOLIO_DEMO)
+        feedback = read(TRUSTED_FEEDBACK)
+        completion = read(PORTFOLIO_COMPLETION)
+        normalized_completion = " ".join(completion.split())
+
+        for phrase in (
+            "four practical goals",
+            "F086",
+            "Rust/Tauri",
+            "WKWebView",
+            "Python 3.12 sidecar",
+            "AI Agent Harness",
+            "45,439,075 bytes",
+            "83 nested Mach-O",
+            "INTERNAL-UNSIGNED",
+            "Public binary distribution stays on hold",
+            "retained CLI",
+        ):
+            self.assertIn(phrase, normalized_case_study)
+        for phrase in (
+            "DEMO_DURATION_SECONDS: 210",
+            "Check microphone & start",
+            "Arm hands-free audio",
+            "follow-up",
+            "Interrupt",
+            "再见",
+            "Export support bundle",
+            "Quit from the tray",
+        ):
+            self.assertIn(phrase, demo)
+        for phrase in (
+            "at least three",
+            "trial-template.json",
+            "verify_portfolio_completion.py",
+            "public binary distribution remains `HOLD`",
+        ):
+            self.assertIn(phrase, feedback)
+        for phrase in (
+            "Current decision: HOLD",
+            "45,439,075 bytes",
+            "83 arm64 Mach-O",
+            "two more",
+            "Public binary distribution",
+            "Python CLI",
+            "hosted control plane",
+        ):
+            self.assertIn(phrase, normalized_completion)
 
     def test_recovery_progress_matches_latest_documentation_state(self):
         progress = read(PROGRESS)
@@ -111,9 +170,13 @@ class DocumentationTests(unittest.TestCase):
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
-        self.assertIn("F093 - Publish the portfolio demo and internal feedback", current_feature)
+        self.assertIn("No feature is currently in progress", current_feature)
+        self.assertIn("F093 is pending (`status=todo`)", current_feature)
         self.assertIn("internal artifact", current_feature)
-        self.assertIn("Plan and execute F093", next_feature)
+        self.assertIn("machine-readable decision is `HOLD`", current_feature)
+        self.assertIn("Normalize and plan the owner's next optimization", next_feature)
+        self.assertIn("Resume F093 later", next_feature)
+        self.assertIn("two additional trusted Apple Silicon", next_feature)
         self.assertIn("Public binary distribution remains on hold", next_feature)
         self.assertNotIn("No unfinished features remain", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)

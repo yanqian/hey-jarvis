@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "trial_id": "owner-f092",
+  "participant_scope": "trusted_tester",
+  "consent_confirmed": true,
+  "apple_silicon": true,
+  "macos_major": 26,
+  "app_version": "0.1.0",
+  "artifact_sha256": "b57d87f3ca61f65c6173d7f96620aad1e0eee406dbaeb453667ffb96bf4903c8",
+  "unsigned_internal_build_acknowledged": true,
+  "results": {
+    "install": "pass",
+    "first_run": "pass",
+    "wake": "pass",
+    "conversation": "pass",
+    "interruption": "pass",
+    "cleanup": "pass",
+    "relaunch": "pass"
+  },
+  "support_friction": "The trial exposed Keychain authorization, TCC recovery, settings navigation, and diagnostics-clear wording issues; the corrected build then passed install and rollback.",
+  "qualitative_feedback": "Answers were correct, follow-up was continuous, interruption switched questions, and goodbye restored Python wake listening.",
+  "release_blockers": [],
+  "sensitive_material_committed": false
+}

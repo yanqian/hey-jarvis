@@ -17,6 +17,15 @@ Silicon DMG can now be built for explicitly trusted internal testing. Developer
 ID signing, notarization, launch-at-login, automatic updates, and public binary
 distribution of a distributable `.app` remain deferred.
 
+## Project goals
+
+This project solves a personal hands-free need while preserving the CLI as the
+simplest interface. It is also an exercise in disciplined AI-assisted
+engineering, a job-portfolio case study, and a way to collect feedback from a
+small trusted group. Commercial defensibility is not a success criterion; the
+engineering decisions and evidence remain useful even if a platform later
+ships equivalent wake-word behavior.
+
 ## Requirements
 
 - macOS with microphone permission for the launching terminal
@@ -100,9 +109,9 @@ The pipeline supports:
 - Finnhub stock quotes when `FINNHUB_API_KEY` is configured;
 - Chinese or English replies based on the current request.
 
-Realtime supports a continuous voice session, interruption, the safe
-calculator, and spoken conversation ending. Weather, FX, and stocks are
-currently pipeline-only.
+Realtime supports a continuous voice session, interruption, and the same six
+allowlisted functions: calculator, weather, local time, foreign exchange,
+stock quote, and spoken conversation ending.
 
 Current/live facts are never guessed from model memory when a suitable provider
 is unavailable. General knowledge answers do not browse the web or claim that
@@ -134,6 +143,13 @@ Start with the document matching your task:
   sidecar protocol, lifecycle, identity, and release freeze points.
 - [Unsigned internal Mac testing](docs/INTERNAL_MAC_APP_TESTING.md) — trusted
   install, privacy/cost, feedback, update, rollback, and uninstall workflow.
+- [Portfolio case study](docs/PORTFOLIO_CASE_STUDY.md) — goals, architecture,
+  failures, measured tradeoffs, and completion boundary.
+- [Portfolio demo](docs/PORTFOLIO_DEMO.md) — privacy-safe 3:30 recording plan.
+- [Completion record](docs/PORTFOLIO_COMPLETION.md) — measured readiness,
+  unresolved limits, feedback, and explicit go/hold status.
+- [Trusted trial evidence](feedback/README.md) — structured feedback and
+  release-blocker gate; it never publishes the unsigned DMG.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common failures and audio debug.
 
 Developer references:

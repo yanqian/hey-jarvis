@@ -34,6 +34,13 @@ for path in \
   packaging/internal-macos/INTERNAL-UNSIGNED.txt \
   docs/MAC_APP_DIAGNOSTICS.md \
   docs/INTERNAL_MAC_APP_TESTING.md \
+  docs/PORTFOLIO_CASE_STUDY.md \
+  docs/PORTFOLIO_COMPLETION.md \
+  docs/PORTFOLIO_DEMO.md \
+  feedback/README.md \
+  feedback/demo-evidence-template.json \
+  feedback/trial-template.json \
+  feedback/trusted-trials/owner-f092.json \
   .env.example \
   requirements.txt \
   requirements-vad.txt \
@@ -51,6 +58,7 @@ for path in \
   scripts/inventory_macos_sidecar.py \
   scripts/build_internal_macos_release.sh \
   scripts/internal_macos_release.py \
+  scripts/verify_portfolio_completion.py \
   scripts/normalize_zip.py \
   tests/test_audio_input.py \
   tests/test_config.py \
@@ -58,6 +66,7 @@ for path in \
   tests/test_mac_app_shell.py \
   tests/test_macos_sidecar_packaging.py \
   tests/test_internal_macos_release.py \
+  tests/test_portfolio_completion.py \
   tests/test_openai_client.py \
   tests/test_player.py \
   tests/test_recorder.py \
