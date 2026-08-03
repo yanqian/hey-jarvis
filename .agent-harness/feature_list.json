@@ -2302,6 +2302,66 @@
       "depends_on": [
         "F099"
       ]
+    },
+    {
+      "id": "F101",
+      "title": "Replace the Mac app and menu-bar icon system",
+      "description": "Ship the accepted minimal J and listening-orb identity as reproducible native app-icon sizes plus a fringe-free macOS menu-bar template asset.",
+      "acceptance": [
+        "A project-owned editable vector master preserves the approved rounded mint J with its short upper platform, separated outlined listening orb, three warm-white bars, deep green-charcoal rounded-square background, and coherent existing UI palette without depending on the generated concept raster.",
+        "A reproducible asset workflow emits exact native macOS PNG dimensions and an ICNS bundle, every Tauri-declared bundle icon exists, and reduced-size/contact-sheet inspection keeps the mark recognizable from 16 through 1024 pixels.",
+        "The tray loads a dedicated transparent monochrome template asset, enables macOS template rendering, preserves existing Show, Settings, and Quit behavior, and does not shrink or reuse the opaque rounded-square application icon.",
+        "Automated RGBA checks prove transparent menu-bar corners, exact dimensions, bounded glyph coverage, and no near-white RGB contamination in transparent or partially transparent edge pixels that could produce a white box or fringe in light or dark mode.",
+        "Focused asset/native contracts, Rust tests, real Debug app Dock and menu-bar inspection in light and dark appearances, full project tests, final ./init.sh, fast coding evidence, and separate evaluator approval pass without credential, microphone, network, or paid API actions."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F100"
+      ]
+    },
+    {
+      "id": "F102",
+      "title": "Correct the selected icon geometry",
+      "description": "Match the approved slim reference by reducing the J stroke and centering the listening orb over the platform's full rendered width.",
+      "acceptance": [
+        "The color SVG reduces the J stroke from 104 to 76 units while preserving the rounded hook and short upper platform, and the monochrome template receives a proportionate slimmer stroke that remains legible at menu-bar size.",
+        "In both SVG masters, the listening orb center equals the exact midpoint of the platform's rendered left and right extents including round-cap and stem stroke width, rather than aligning to the vertical stem.",
+        "The orb remains separated above the platform by a clean reference-like gap, the three bars and approved palette remain unchanged, and generated 16/32/128/512 inspection renders visibly preserve the slim J plus supported-orb relationship.",
+        "The full icon family, ICNS, and 18/36 transparent menu-bar assets regenerate successfully while F101 exact-size, transparent-corner, black-only antialiased template pixels, macOS template mode, and unchanged menu handlers continue to pass.",
+        "Focused icon tests, saved contact-sheet evidence, final ./init.sh, fast coding evidence, and separate evaluator approval pass without credential, microphone, network, or paid API actions."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F101"
+      ]
+    },
+    {
+      "id": "F103",
+      "title": "Strengthen the menu-bar icon at native size",
+      "description": "Give the dedicated 18-point macOS tray template more optical weight without changing the approved slim color App Icon.",
+      "acceptance": [
+        "Only the tray SVG increases optical weight: the J stroke becomes 4.4 units, the orb ring 2.4, and all three listening bars 1.8, while the color icon SVG and generated application icon family remain unchanged.",
+        "The heavier tray geometry preserves rounded ends, the clean orb/platform gap, safe outer margins, and an orb center at the exact midpoint of the platform's rendered width rather than the vertical stem.",
+        "Regenerated 18px and 36px template PNGs retain exact RGBA sizes, transparent corners, black-only visible RGB including antialiased edges, bounded coverage below 48%, and measurably greater visible coverage than the F102 template.",
+        "The native tray continues to use template mode with unchanged Show, Settings, and Quit behavior, and light/dark composites plus a rebuilt Debug app show a more substantial recognizable mark at real menu-bar size.",
+        "Focused icon tests, saved visual evidence, final ./init.sh, fast coding evidence, and separate evaluator approval pass without credential, microphone, network, or paid API actions."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F102"
+      ]
     }
   ]
 }

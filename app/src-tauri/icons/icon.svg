@@ -1,15 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1b2a3a"/>
-      <stop offset="1" stop-color="#0d1117"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="112" fill="url(#background)"/>
-  <path d="M152 174v112c0 66 38 96 104 96s104-30 104-96V174"
-        fill="none" stroke="#72d6b1" stroke-width="42" stroke-linecap="round"/>
-  <circle cx="180" cy="138" r="22" fill="#e8ecf2"/>
-  <circle cx="332" cy="138" r="22" fill="#e8ecf2"/>
-  <path d="M216 272c24 18 56 18 80 0" fill="none" stroke="#e8ecf2"
-        stroke-width="22" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Hey Jarvis app icon</title>
+  <rect x="16" y="16" width="992" height="992" rx="224" fill="#0b1110"/>
+  <path
+    d="M 540 414 H 620 V 675 C 620 772 557 820 458 820 C 370 820 326 775 326 700"
+    fill="none"
+    stroke="#72deb9"
+    stroke-width="76"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="580" cy="295" r="60" fill="#0b1110" stroke="#72deb9" stroke-width="14"/>
+  <rect x="542" y="280" width="16" height="38" rx="8" fill="#f2f0e8"/>
+  <rect x="572" y="263" width="16" height="72" rx="8" fill="#f2f0e8"/>
+  <rect x="602" y="280" width="16" height="38" rx="8" fill="#f2f0e8"/>
 </svg>

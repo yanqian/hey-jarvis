@@ -380,10 +380,10 @@ pub fn run() {
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Hey Jarvis", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &settings, &quit])?;
-            let mut tray = TrayIconBuilder::with_id("hey-jarvis").menu(&menu);
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
-            }
+            let tray = TrayIconBuilder::with_id("hey-jarvis")
+                .menu(&menu)
+                .icon(tauri::include_image!("icons/trayTemplate@2x.png"))
+                .icon_as_template(true);
             tray.on_menu_event(|app, event| match event.id.as_ref() {
                 "show" => {
                     if let Some(window) = app.get_webview_window("main") {

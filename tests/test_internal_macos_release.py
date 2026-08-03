@@ -46,7 +46,16 @@ class InternalMacOSReleaseTests(unittest.TestCase):
         self.assertEqual(config["version"], package["version"])
         self.assertIn(f'version = "{config["version"]}"', cargo)
         self.assertEqual(config["identifier"], release.BUNDLE_ID)
-        self.assertEqual(config["bundle"]["icon"], ["icons/icon.png"])
+        self.assertEqual(
+            config["bundle"]["icon"],
+            [
+                "icons/32x32.png",
+                "icons/128x128.png",
+                "icons/128x128@2x.png",
+                "icons/icon.icns",
+                "icons/icon.png",
+            ],
+        )
         self.assertEqual(config["bundle"]["macOS"]["minimumSystemVersion"], "14.0")
 
     def test_inspection_inventories_arm64_code_and_rejects_private_material(self):

@@ -177,19 +177,28 @@ class DocumentationTests(unittest.TestCase):
         )
         features = json.loads(read(FEATURE_LIST))["features"]
         f100 = next(feature for feature in features if feature["id"] == "F100")
-        if f100["status"] in {"todo", "in_progress"}:
-            self.assertIn("F100 - Unify the Home and Settings desktop shell", current_feature)
-            self.assertIn("same shell header origin", normalized_current_feature)
-            self.assertIn("compact-to-fullscreen desktop layout", normalized_current_feature)
-        elif f100["status"] == "done":
+        f101 = next(feature for feature in features if feature["id"] == "F101")
+        f102 = next(feature for feature in features if feature["id"] == "F102")
+        f103 = next(feature for feature in features if feature["id"] == "F103")
+        self.assertEqual(f100["status"], "done")
+        self.assertEqual(f101["status"], "done")
+        self.assertEqual(f102["status"], "done")
+        if f103["status"] in {"todo", "in_progress"}:
+            self.assertIn("F103 coding is complete", current_feature)
+            self.assertIn("optical weight", normalized_current_feature)
+            self.assertIn("cold-start evaluator for F103", next_feature)
+            self.assertIn("resume F093", next_feature)
+        elif f103["status"] == "done":
             self.assertIn("No feature is currently in progress", current_feature)
-            self.assertIn("F100 is evaluator-approved", normalized_current_feature)
+            self.assertIn("F103 is evaluator-approved", normalized_current_feature)
+            self.assertIn("Resume F093", next_feature)
         self.assertIn("F093 is pending (`status=todo`)", current_feature)
         self.assertIn("internal artifact", current_feature)
         self.assertIn("machine-readable decision is `HOLD`", current_feature)
-        self.assertIn("Resume F093", next_feature)
         self.assertIn("two additional trusted Apple Silicon", normalized_next_feature)
-        self.assertIn("Public binary distribution remains on hold", next_feature)
+        self.assertIn(
+            "Public binary distribution remains on hold", normalized_next_feature
+        )
         self.assertNotIn("No unfinished features remain", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
         self.assertIn("F094 - Create the minimal voice interaction surface", recently_completed)

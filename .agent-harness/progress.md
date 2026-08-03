@@ -401,9 +401,11 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F100 is evaluator-approved after unifying
-the Home and Settings desktop shell across compact, default, and fullscreen
-window sizes without changing the accepted F096-F099 lifecycle behavior.
+No feature is currently in progress. F103 is evaluator-approved after giving
+only the 18-point menu-bar template more optical weight while leaving the
+accepted slim full-color App Icon unchanged. Its independent approval is
+recorded as `EVAL_PASS: F103` in
+`.agent-harness/runs/20260803T104134Z-F103-evaluation-pass.md`.
 
 F093 is pending (`status=todo`) and intentionally deferred behind the
 owner-prioritized interaction/settings work. It owns the public engineering narrative
@@ -428,6 +430,46 @@ additional trusted Apple Silicon tester or distinct clean-profile trials.
 Public binary distribution remains on hold.
 
 ## Recently Completed
+
+F103 - Strengthen the menu-bar icon at native size.
+
+F103 gives only the dedicated tray template more optical weight: the `J`
+stroke is 4.4 units, the orb ring is 2.4, and the three listening bars are 1.8.
+The platform moved down slightly to preserve a 1.4-unit vector gap while its
+orb remains centered at x=17.5. Visible coverage increased to 29.9% at 18px
+and 25.8% at 36px, with transparent corners, black-only template pixels, and
+unchanged Show, Settings, and Quit behavior. The full-color App Icon remains
+unchanged. Coding evidence is in `.agent-harness/runs/F103-fast-coding.md`;
+independent approval is recorded as `EVAL_PASS: F103` in
+`.agent-harness/runs/20260803T104134Z-F103-evaluation-pass.md`.
+
+F102 - Correct the selected icon geometry.
+
+F102 reduces the color `J` stroke from 104 to 76 SVG units and the menu-bar
+template stroke from 4 to 3.2. The listening orb now sits at the exact visual
+midpoint of the short platform, including round-cap and stem stroke width,
+while preserving the approved gap, palette, and three listening bars. The full
+PNG/ICNS family and transparent 18/36 menu-bar assets were regenerated. Six
+focused icon tests, final recovery, and the saved multi-size contact sheet pass.
+Coding evidence is in `.agent-harness/runs/F102-fast-coding.md`; independent
+approval is recorded as `EVAL_PASS: F102` in
+`.agent-harness/runs/20260803T094121Z-F102-evaluation-pass.md`.
+
+F101 - Replace the Mac app and menu-bar icon system.
+
+F101 replaced the face-like icon with an editable SVG master containing the
+approved mint `J`, original short upper platform, separated listening orb, and
+three warm-white bars. Its reproducible generator emits exact 16-through-1024
+iconset members, Tauri PNGs, and ICNS. The native tray embeds a dedicated
+36-pixel black/transparent image and enables macOS template rendering instead
+of shrinking the opaque app icon. Pixel contracts verify transparent corners,
+bounded glyph coverage, and black-only RGB on every antialiased template pixel;
+the saved contact sheet covers app sizes plus light/dark menu-bar composites.
+Final recovery passed with 417 project tests, ten Mac frontend/sidecar tests,
+seventeen Rust tests, and all smoke paths. Coding evidence is in
+`.agent-harness/runs/F101-fast-coding.md`; independent approval is recorded as
+`EVAL_PASS: F101` in
+`.agent-harness/runs/20260803T092422Z-F101-evaluation-pass.md`.
 
 F094 - Create the minimal voice interaction surface.
 

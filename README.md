@@ -84,6 +84,7 @@ Before wake, audio remains local to the Python wake detector.
 | --- | --- |
 | `./init.sh` | Compile, test, and run dependency-free recovery smoke paths |
 | `./scripts/build_internal_macos_release.sh` | Build and verify the Apple Silicon `INTERNAL-UNSIGNED` DMG |
+| `./scripts/generate_macos_icons.sh` | Rebuild the native app-icon family and transparent menu-bar template from SVG masters |
 | `python -m src.main --dry-run` | Verify the entry point without devices or APIs |
 | `python -m src.main --fake-backend` | Exercise the full pipeline state machine with fakes |
 | `python -m src.realtime.fake_smoke` | Exercise the Realtime lifecycle without browser, audio, or network |
