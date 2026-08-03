@@ -176,14 +176,14 @@ class DocumentationTests(unittest.TestCase):
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
         features = json.loads(read(FEATURE_LIST))["features"]
-        f099 = next(feature for feature in features if feature["id"] == "F099")
-        if f099["status"] == "in_progress":
-            self.assertIn("F099 - Make Settings return lifecycle deterministic", current_feature)
-            self.assertIn("requestAnimationFrame", normalized_current_feature)
-            self.assertIn("BFCache", normalized_current_feature)
-        elif f099["status"] == "done":
+        f100 = next(feature for feature in features if feature["id"] == "F100")
+        if f100["status"] in {"todo", "in_progress"}:
+            self.assertIn("F100 - Unify the Home and Settings desktop shell", current_feature)
+            self.assertIn("same shell header origin", normalized_current_feature)
+            self.assertIn("compact-to-fullscreen desktop layout", normalized_current_feature)
+        elif f100["status"] == "done":
             self.assertIn("No feature is currently in progress", current_feature)
-            self.assertIn("F099 is evaluator-approved", normalized_current_feature)
+            self.assertIn("F100 is evaluator-approved", normalized_current_feature)
         self.assertIn("F093 is pending (`status=todo`)", current_feature)
         self.assertIn("internal artifact", current_feature)
         self.assertIn("machine-readable decision is `HOLD`", current_feature)

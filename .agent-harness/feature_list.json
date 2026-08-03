@@ -2159,7 +2159,7 @@
       "status": "todo",
       "attempts": 1,
       "last_error": "",
-      "priority": "P0",
+      "priority": "P2",
       "depends_on": [
         "F092"
       ]
@@ -2281,6 +2281,26 @@
       "priority": "P0",
       "depends_on": [
         "F098"
+      ]
+    },
+    {
+      "id": "F100",
+      "title": "Unify the Home and Settings desktop shell",
+      "description": "Keep one Hey Jarvis window identity, align Home and Settings headers in a stable shared frame, and make Settings use compact through fullscreen widths as a desktop layout.",
+      "acceptance": [
+        "The bundled and loopback documents plus every native Settings entry keep the window/document title exactly Hey Jarvis, and the Settings surface removes the duplicate HEY JARVIS eyebrow.",
+        "Home Hey Jarvis and Settings Settings share the same top-left title geometry and leading-icon slot, while the Home gear and Settings Done action share the same top-right control geometry; the Returning state preserves that spatial frame.",
+        "Settings uses a top-aligned desktop shell whose navigation rail and outer frame expand through regular and wide/fullscreen windows while the detail pane retains a readable maximum instead of centering the entire interface like a phone screen.",
+        "Compact widths preserve navigation, focus order, status meaning, API-key action visibility, and existing Keychain, microphone, diagnostics, Done, reduced-motion, and F096-F099 lifecycle behavior.",
+        "Focused DOM/CSS/native contracts, JavaScript syntax, Rust tests, compact/default/wide real Debug app inspection, full project tests, final ./init.sh, and separate evaluator approval pass without credential, microphone, or paid API actions."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F099"
       ]
     }
   ]

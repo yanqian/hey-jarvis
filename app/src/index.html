@@ -3,28 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hey Jarvis Settings</title>
+    <title>Hey Jarvis</title>
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./main.js" defer></script>
   </head>
   <body>
     <main id="returning-view" class="returning-view" aria-labelledby="returning-title" hidden>
-      <div class="returning-brand"><span aria-hidden="true"></span>Hey Jarvis</div>
-      <div class="returning-orb" aria-hidden="true"><span></span></div>
-      <p class="section-label">STARTING</p>
-      <h1 id="returning-title">Returning to Jarvis</h1>
-      <p id="returning-status" role="status" aria-live="polite">Starting the local voice runtime…</p>
+      <header class="app-header returning-header">
+        <div class="app-context" aria-label="Hey Jarvis">
+          <span class="context-icon"><span class="status-dot" aria-hidden="true"></span></span>
+          <span class="context-title">Hey Jarvis</span>
+        </div>
+      </header>
+      <div class="returning-content">
+        <div class="returning-orb" aria-hidden="true"><span></span></div>
+        <p class="section-label">STARTING</p>
+        <h1 id="returning-title">Returning to Jarvis</h1>
+        <p id="returning-status" role="status" aria-live="polite">Starting the local voice runtime…</p>
+      </div>
     </main>
 
     <main id="settings-shell" class="settings-shell" aria-labelledby="settings-title">
-      <header class="settings-header">
-        <div>
-          <p class="eyebrow">HEY JARVIS</p>
-          <h1 id="settings-title">Settings</h1>
-          <p id="page-summary">Listening is off while Settings is open.</p>
+      <header class="app-header settings-header">
+        <div class="app-context">
+          <span class="context-icon settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 8.75A3.25 3.25 0 1 0 12 15.25 3.25 3.25 0 0 0 12 8.75ZM19 12a6.93 6.93 0 0 0-.08-1l1.66-1.3-1.8-3.12-1.96.79a7.3 7.3 0 0 0-1.72-1L14.8 4.3h-3.6l-.3 2.07a7.3 7.3 0 0 0-1.72 1l-1.96-.79-1.8 3.12L7.08 11a6.93 6.93 0 0 0 0 2l-1.66 1.3 1.8 3.12 1.96-.79a7.3 7.3 0 0 0 1.72 1l.3 2.07h3.6l.3-2.07a7.3 7.3 0 0 0 1.72-1l1.96.79 1.8-3.12L18.92 13c.05-.33.08-.66.08-1Z" />
+            </svg>
+          </span>
+          <h1 id="settings-title" class="context-title">Settings</h1>
         </div>
         <button id="return-assistant" class="done-button" type="button" hidden>Done</button>
       </header>
+
+      <p id="page-summary">Listening is off while Settings is open.</p>
 
       <div class="privacy-state" role="status">
         <span class="privacy-state-icon" aria-hidden="true"></span>

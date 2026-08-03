@@ -231,6 +231,21 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
+F100 - Unify the Home and Settings desktop shell.
+
+F100 keeps the native and document title at `Hey Jarvis`, aligns the Home
+`Hey Jarvis` and Settings `Settings` context labels at one shared header
+origin, and places gear/Done in the same trailing control slot. Settings now
+uses a left-anchored desktop workspace at regular and fullscreen widths while
+retaining a compact, scrollable layout with visible credential actions.
+Default, compact, API-key, and fullscreen Debug app views were inspected; the
+real-window pass found and corrected a six-pixel compact gutter drift. Full
+recovery verification passed with 412 project tests, seventeen Rust tests, and
+all smoke paths. Coding evidence is in
+`.agent-harness/runs/F100-fast-coding.md`; independent approval is recorded as
+`EVAL_PASS: F100` in
+`.agent-harness/runs/20260803T074732Z-F100-evaluation-pass.md`.
+
 F099 - Make Settings return lifecycle deterministic.
 
 F099 removed Done's throttled `requestAnimationFrame` gate, moved blocking
@@ -386,9 +401,9 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F099 is evaluator-approved; its cold-start
-approval is recorded as `EVAL_PASS: F099` in
-`.agent-harness/runs/20260803T070255Z-F099-evaluation-pass.md`.
+No feature is currently in progress. F100 is evaluator-approved after unifying
+the Home and Settings desktop shell across compact, default, and fullscreen
+window sizes without changing the accepted F096-F099 lifecycle behavior.
 
 F093 is pending (`status=todo`) and intentionally deferred behind the
 owner-prioritized interaction/settings work. It owns the public engineering narrative

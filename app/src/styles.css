@@ -3,6 +3,9 @@
   background: #090d0c;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
+  --shell-gutter: clamp(24px, 4vw, 52px);
+  --shell-top: 24px;
+  --header-control-size: 38px;
 }
 
 * { box-sizing: border-box; }
@@ -21,31 +24,62 @@ button { font: inherit; }
 
 .returning-view {
   display: grid;
-  place-items: center;
-  align-content: center;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 100vh;
-  padding: 36px;
-  text-align: center;
+  padding: var(--shell-top) var(--shell-gutter) 22px;
 }
 
-.returning-brand {
-  position: absolute;
-  top: 38px;
-  left: 42px;
+.app-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #c7d1ce;
-  font-size: 12px;
-  font-weight: 500;
+  justify-content: space-between;
+  min-height: var(--header-control-size);
 }
 
-.returning-brand span {
-  width: 7px;
-  height: 7px;
+.app-context {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #d8dfdc;
+}
+
+.context-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #6ed8b6;
   box-shadow: 0 0 12px rgb(110 216 182 / 42%);
+}
+
+.settings-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: #8f9a96;
+}
+
+.context-title {
+  margin: 0;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 620;
+  letter-spacing: -.01em;
+  line-height: 1.2;
+}
+
+.returning-content {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  padding-bottom: calc(var(--header-control-size) + var(--shell-top));
+  text-align: center;
 }
 
 .returning-orb {
@@ -76,20 +110,11 @@ button { font: inherit; }
 }
 
 .settings-shell {
-  width: min(100%, 760px);
+  width: 100%;
   min-height: 100vh;
-  margin: 0 auto;
-  padding: 30px 30px 32px;
+  padding: var(--shell-top) var(--shell-gutter) 28px;
 }
 
-.settings-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.eyebrow,
 .section-label {
   margin: 0;
   color: #65d9b4;
@@ -98,18 +123,17 @@ button { font: inherit; }
   letter-spacing: .15em;
 }
 
-h1 {
-  margin: 5px 0 2px;
-  font-size: 31px;
-  letter-spacing: -.035em;
-}
-
 #page-summary,
 .panel-heading > p:last-child {
   margin: 0;
   color: #87938f;
   font-size: 13px;
   line-height: 1.45;
+}
+
+#page-summary {
+  margin-top: 4px;
+  padding-left: 23px;
 }
 
 .done-button,
@@ -124,6 +148,11 @@ button.danger {
   font-weight: 500;
   cursor: pointer;
   transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.done-button {
+  min-height: var(--header-control-size);
+  padding-inline: 13px;
 }
 
 .done-button,
@@ -174,8 +203,9 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 
 .settings-layout {
   display: grid;
-  grid-template-columns: 142px minmax(0, 1fr);
-  min-height: 410px;
+  grid-template-columns: clamp(142px, 18vw, 210px) minmax(0, 1fr);
+  width: min(100%, 1180px);
+  min-height: max(410px, calc(100vh - 154px));
   margin-top: 17px;
   overflow: hidden;
   border: 1px solid #202925;
@@ -211,7 +241,8 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 .nav-item[aria-current="page"] { color: #e9f4f0; background: #22322d; }
 .nav-item:focus-visible { outline: 2px solid #75dcbc; outline-offset: -1px; }
 
-.settings-content { min-width: 0; padding: 23px 24px 18px; }
+.settings-content { min-width: 0; padding: 28px clamp(24px, 4vw, 46px) 22px; }
+.settings-panel { width: min(100%, 760px); }
 .settings-panel h2 { margin: 6px 0 5px; font-size: 22px; letter-spacing: -.025em; }
 .settings-panel h2:focus { outline: none; }
 
@@ -359,12 +390,17 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 .about-list dd { margin: 0; color: #cbd4d1; }
 
 @media (max-width: 700px) {
-  .settings-shell { padding: 24px 18px; }
   .settings-layout { grid-template-columns: 118px minmax(0, 1fr); }
   .settings-content { padding: 20px 18px 16px; }
   .setting-row { align-items: flex-start; flex-direction: column; }
   .row-actions { justify-content: flex-start; width: 100%; }
   .row-actions button { flex: 1 1 108px; }
+}
+
+@media (min-width: 1100px) {
+  .settings-layout { grid-template-columns: 210px minmax(0, 1fr); }
+  .settings-nav { padding: 20px 14px; }
+  .settings-content { padding-top: 36px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

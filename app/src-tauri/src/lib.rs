@@ -268,7 +268,7 @@ fn open_settings_window(app: &tauri::AppHandle) {
         if let Ok(url) = settings_url(app) {
             let _ = window.navigate(url);
         }
-        let _ = window.set_title("Hey Jarvis Settings");
+        let _ = window.set_title("Hey Jarvis");
         let _ = window.show();
         let _ = window.set_focus();
     }

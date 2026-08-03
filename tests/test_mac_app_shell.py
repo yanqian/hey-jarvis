@@ -25,6 +25,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertEqual(capability["permissions"], ["core:default"])
 
         window = config["app"]["windows"][0]
+        self.assertEqual(window["title"], "Hey Jarvis")
         self.assertEqual((window["width"], window["height"]), (560, 600))
         self.assertEqual((window["minWidth"], window["minHeight"]), (480, 520))
 
@@ -230,6 +231,45 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("@media (max-width: 700px)", styles)
         self.assertIn(".row-actions { justify-content: flex-start; width: 100%; }", styles)
         self.assertIn(".row-actions button { flex: 1 1 108px; }", styles)
+
+    def test_home_and_settings_share_one_responsive_desktop_shell(self):
+        settings_page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        settings_styles = (APP / "src" / "styles.css").read_text(encoding="utf-8")
+        home_page = (
+            ROOT / "src" / "realtime_host" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        home_styles = (
+            ROOT / "src" / "realtime_host" / "static" / "styles.css"
+        ).read_text(encoding="utf-8")
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("<title>Hey Jarvis</title>", settings_page)
+        self.assertIn("<title>Hey Jarvis</title>", home_page)
+        self.assertNotIn("Hey Jarvis Settings", settings_page)
+        self.assertNotIn("Hey Jarvis Settings", native)
+        self.assertIn('window.set_title("Hey Jarvis")', native)
+        self.assertNotIn('class="eyebrow"', settings_page)
+        self.assertIn('id="settings-title" class="context-title">Settings</h1>', settings_page)
+        self.assertIn('class="app-header returning-header"', settings_page)
+        self.assertIn('class="brand-icon"', home_page)
+
+        for styles in (settings_styles, home_styles):
+            self.assertIn("--shell-gutter: clamp(24px, 4vw, 52px);", styles)
+            self.assertIn("--shell-top: 24px;", styles)
+            self.assertIn("--header-control-size: 38px;", styles)
+            self.assertIn("padding: var(--shell-top) var(--shell-gutter)", styles)
+
+        self.assertIn(".settings-shell {\n  width: 100%;", settings_styles)
+        self.assertIn("width: min(100%, 1180px);", settings_styles)
+        self.assertIn("min-height: max(410px, calc(100vh - 154px));", settings_styles)
+        self.assertIn(".settings-panel { width: min(100%, 760px); }", settings_styles)
+        self.assertIn("@media (min-width: 1100px)", settings_styles)
+        self.assertNotIn("--shell-gutter: 18px", settings_styles)
+        self.assertIn(".voice-shell {", home_styles)
+        self.assertIn("  width: 100%;", home_styles)
+        self.assertIn("width: min(100%, 620px);", home_styles)
 
     def test_wkwebview_media_surface_preserves_accepted_realtime_boundary(self):
         script = (ROOT / "src" / "realtime_host" / "static" / "app.js").read_text(
