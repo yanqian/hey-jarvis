@@ -8,7 +8,15 @@
     <script type="module" src="./main.js" defer></script>
   </head>
   <body>
-    <main class="settings-shell" aria-labelledby="settings-title">
+    <main id="returning-view" class="returning-view" aria-labelledby="returning-title" hidden>
+      <div class="returning-brand"><span aria-hidden="true"></span>Hey Jarvis</div>
+      <div class="returning-orb" aria-hidden="true"><span></span></div>
+      <p class="section-label">STARTING</p>
+      <h1 id="returning-title">Returning to Jarvis</h1>
+      <p id="returning-status" role="status" aria-live="polite">Starting the local voice runtime…</p>
+    </main>
+
+    <main id="settings-shell" class="settings-shell" aria-labelledby="settings-title">
       <header class="settings-header">
         <div>
           <p class="eyebrow">HEY JARVIS</p>
@@ -69,7 +77,7 @@
                   <p id="openai-status">Checking macOS Keychain…</p>
                 </div>
                 <div class="row-actions">
-                  <button id="save-openai" class="secondary" type="button">Add key…</button>
+                  <button id="save-openai" class="secondary" type="button">Add key</button>
                   <button id="delete-openai" class="danger" type="button">Delete</button>
                 </div>
               </article>
@@ -80,7 +88,7 @@
                   <p id="finnhub-status">Used only for stock quotes.</p>
                 </div>
                 <div class="row-actions">
-                  <button id="save-finnhub" class="secondary" type="button">Add key…</button>
+                  <button id="save-finnhub" class="secondary" type="button">Add key</button>
                   <button id="delete-finnhub" class="danger" type="button">Delete</button>
                 </div>
               </article>

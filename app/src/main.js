@@ -1,6 +1,9 @@
 const invoke = window.__TAURI__?.core?.invoke;
 
 const elements = {
+  settingsShell: document.querySelector("#settings-shell"),
+  returningView: document.querySelector("#returning-view"),
+  returningStatus: document.querySelector("#returning-status"),
   panels: [...document.querySelectorAll("[data-settings-panel]")],
   navItems: [...document.querySelectorAll("[data-panel]")],
   openaiStatus: document.querySelector("#openai-status"),
@@ -29,9 +32,20 @@ function isSettingsReturn() {
   return window.location.hash === SETTINGS_RETURN_HASH;
 }
 
+function afterCommittedPaint() {
+  return new Promise(resolve => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+  });
+}
+
+function resetSettingsSurface() {
+  elements.returningView.hidden = true;
+  elements.settingsShell.hidden = false;
+}
+
 function recordLifecycle(event, sessionId = null) {
-  if (!invoke) return;
-  invoke("record_webview_lifecycle", { event, sessionId }).catch(() => {});
+  if (!invoke) return Promise.resolve();
+  return invoke("record_webview_lifecycle", { event, sessionId }).catch(() => {});
 }
 
 const recoveryMessages = {
@@ -89,8 +103,8 @@ function renderSetup(snapshot) {
   elements.finnhubStatus.textContent = snapshot.finnhub_configured
     ? "Stored in macOS Keychain. Stock quotes are enabled."
     : "Not configured. Other assistant features still work.";
-  elements.saveOpenai.textContent = snapshot.openai_configured ? "Replace key…" : "Add key…";
-  elements.saveFinnhub.textContent = snapshot.finnhub_configured ? "Replace key…" : "Add key…";
+  elements.saveOpenai.textContent = snapshot.openai_configured ? "Replace key" : "Add key";
+  elements.saveFinnhub.textContent = snapshot.finnhub_configured ? "Replace key" : "Add key";
   elements.deleteOpenai.hidden = !snapshot.openai_configured;
   elements.deleteFinnhub.hidden = !snapshot.finnhub_configured;
   elements.start.disabled = !snapshot.openai_configured;
@@ -109,8 +123,10 @@ function renderSetup(snapshot) {
 }
 
 async function showSettings() {
+  resetSettingsSurface();
   try {
     if (!isSettingsReturn()) window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
+    await afterCommittedPaint();
     renderSetup(await invoke("enter_settings"));
     recordLifecycle("settings_opened");
     elements.message.textContent = "Voice listening is stopped while Settings is open.";
@@ -140,6 +156,10 @@ async function load() {
   try {
     recordLifecycle("loaded");
     const settingsMode = isSettingsReturn();
+    if (settingsMode) {
+      resetSettingsSurface();
+      await afterCommittedPaint();
+    }
     const snapshot = await invoke(settingsMode ? "enter_settings" : "onboarding_status");
     renderSetup(snapshot);
     if (settingsMode) {
@@ -230,11 +250,17 @@ async function checkMicrophoneAndStart() {
 }
 
 async function returnToAssistant() {
-  elements.message.textContent = "Starting the local voice runtime…";
+  elements.settingsShell.hidden = true;
+  elements.returningView.hidden = false;
+  elements.returningStatus.textContent = "Starting the local voice runtime…";
   try {
+    await recordLifecycle("runtime_restart_requested");
     navigateToAssistant(await invoke("restart_sidecar"));
   } catch (error) {
+    elements.returningView.hidden = true;
+    elements.settingsShell.hidden = false;
     elements.message.textContent = friendlyError(error);
+    elements.returnAssistant.focus();
   }
 }
 
@@ -290,6 +316,9 @@ elements.clearDiagnostics.addEventListener("click", async () => {
 window.addEventListener("pageshow", (event) => {
   if (event.persisted && isSettingsReturn()) showSettings();
 });
-window.addEventListener("pagehide", () => recordLifecycle("pagehide"));
+window.addEventListener("pagehide", () => {
+  if (isSettingsReturn()) resetSettingsSurface();
+  recordLifecycle("pagehide");
+});
 
 load();

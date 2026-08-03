@@ -2223,6 +2223,65 @@
       "depends_on": [
         "F095"
       ]
+    },
+    {
+      "id": "F097",
+      "title": "Polish Settings interaction and compact layout",
+      "description": "Acknowledge Done immediately while the voice runtime starts, quiet button styling, and keep all API-key actions visible in compact windows.",
+      "acceptance": [
+        "Done immediately replaces Settings with a truthful bundled starting-assistant presentation, navigates only after restart_sidecar returns a validated loopback URL, and restores Settings with actionable guidance if startup fails.",
+        "The UI and documentation do not imply that Done saves settings: Keychain credential changes remain separate, and Settings stays non-listening until the user activates Done.",
+        "Settings buttons use smaller, lighter typography and lower-contrast surfaces while preserving semantic primary/danger meaning, hover, disabled, and visible keyboard-focus states.",
+        "API-key controls use Add key and Replace key without ellipses, and responsive rows keep Replace/Add and Delete fully visible and operable at the configured window size and narrower supported layouts without horizontal clipping.",
+        "Focused frontend/static tests, JavaScript syntax, normal and compact real Debug app inspection, Done transition observation, full project tests, final ./init.sh, and separate evaluator approval pass without microphone, credential, or paid API actions."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F096"
+      ]
+    },
+    {
+      "id": "F098",
+      "title": "Reset Settings state on every native entry",
+      "description": "Force every native Settings request to load a fresh bundled Settings document instead of reusing a mutated Returning to Jarvis page.",
+      "acceptance": [
+        "Tray Settings, the standard macOS Settings shortcut, and the conversation-surface Settings request render the Settings shell even when the WebView currently shows Returning to Jarvis.",
+        "Each native Settings navigation receives a unique same-origin request token while preserving the settings-return fragment, so an identical current URL cannot turn the navigation into a no-op.",
+        "The fresh Settings document remains the sole owner of enter_settings and the intentional sidecar stop; Done, Keychain, microphone, diagnostics, privacy, and accessibility behavior remain unchanged.",
+        "Focused source contracts, app regressions, repeated-entry Debug app inspection, final ./init.sh, and separate evaluator approval pass without microphone, credential, or paid API actions."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F097"
+      ]
+    },
+    {
+      "id": "F099",
+      "title": "Make Settings return lifecycle deterministic",
+      "description": "Remove the throttled paint gate before Done restart, keep blocking sidecar startup off the UI path, and reset the bundled Settings document across BFCache navigation.",
+      "acceptance": [
+        "Done synchronously renders the returning state and immediately requests restart without a requestAnimationFrame gate; native sidecar startup runs off the Tauri UI/IPC execution path and failures still restore Settings with focus.",
+        "Sanitized lifecycle timestamps show runtime_restart_requested followed promptly by sidecar_starting, while the remaining sidecar_starting-to-ready interval is reported honestly rather than described as settings saving.",
+        "Assistant gear emits only the exact data-free hey-jarvis://settings/open intent; a native navigation hook cancels it and calls the same unique-URL Settings helper used by menu/tray/shortcut, while load/pageshow/pagehide keep the bundled surface idempotent.",
+        "At least three real Debug app Settings → Done → assistant → Settings cycles render the correct surface and URL without credential, microphone, or paid API actions.",
+        "Focused frontend/native/source contracts, Rust tests, full project tests, final ./init.sh, and separate evaluator approval pass without adding remote-loopback native IPC privileges or an asynchronous sidecar protocol channel."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F098"
+      ]
     }
   ]
 }

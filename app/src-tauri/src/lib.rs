@@ -13,7 +13,10 @@ use diagnostics::{Diagnostics, SupportExport};
 use onboarding::{load as load_onboarding, save as save_onboarding, OnboardingRecord};
 use serde::Serialize;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 use std::time::Duration;
 use supervisor::{RuntimeSnapshot, SidecarSupervisor};
@@ -31,6 +34,8 @@ struct AppRuntime {
     diagnostics: Diagnostics,
 }
 
+static SETTINGS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
 #[tauri::command]
 fn record_webview_lifecycle(
     event: String,
@@ -40,6 +45,7 @@ fn record_webview_lifecycle(
     const ALLOWED: &[&str] = &[
         "loaded",
         "settings_opened",
+        "runtime_restart_requested",
         "microphone_check_started",
         "microphone_check_passed",
         "microphone_denied",
@@ -95,8 +101,7 @@ fn sidecar_health(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, Str
         .health()
 }
 
-#[tauri::command]
-fn restart_sidecar(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, String> {
+fn restart_sidecar_runtime(runtime: &AppRuntime) -> Result<RuntimeSnapshot, String> {
     let record = load_onboarding(&runtime.onboarding_path)?;
     if !record.completed || record.microphone_permission != "granted" {
         return Err("onboarding_incomplete".into());
@@ -107,6 +112,16 @@ fn restart_sidecar(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, St
         .lock()
         .map_err(|_| "sidecar supervisor is unavailable".to_string())?
         .start_with_credentials(Some(&credentials))
+}
+
+#[tauri::command]
+async fn restart_sidecar(app: tauri::AppHandle) -> Result<RuntimeSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let runtime = app.state::<AppRuntime>();
+        restart_sidecar_runtime(&runtime)
+    })
+    .await
+    .map_err(|_| "sidecar restart task failed".to_string())?
 }
 
 fn stop_sidecar(runtime: &AppRuntime, reason: &str) {
@@ -241,6 +256,9 @@ fn settings_url(app: &tauri::AppHandle) -> Result<tauri::Url, String> {
         .dev_url
         .clone()
         .unwrap_or(tauri::Url::parse("tauri://localhost").map_err(|_| "settings_unavailable")?);
+    let request_id = SETTINGS_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+    url.query_pairs_mut()
+        .append_pair("settings-request", &request_id.to_string());
     url.set_fragment(Some("settings-return"));
     Ok(url)
 }
@@ -259,6 +277,23 @@ fn open_settings_window(app: &tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(
+            tauri::plugin::Builder::<_, ()>::new("settings-navigation")
+                .on_navigation(|webview, url| {
+                    let is_settings_intent = url.scheme() == "hey-jarvis"
+                        && url.host_str() == Some("settings")
+                        && url.path() == "/open"
+                        && url.query().is_none()
+                        && url.fragment().is_none();
+                    if is_settings_intent {
+                        let app = webview.app_handle().clone();
+                        let _ = webview.run_on_main_thread(move || open_settings_window(&app));
+                        return false;
+                    }
+                    true
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();

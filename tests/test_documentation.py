@@ -1,3 +1,4 @@
+import json
 import re
 import unittest
 from pathlib import Path
@@ -20,6 +21,7 @@ PORTFOLIO_DEMO = ROOT / "docs" / "PORTFOLIO_DEMO.md"
 PORTFOLIO_COMPLETION = ROOT / "docs" / "PORTFOLIO_COMPLETION.md"
 TRUSTED_FEEDBACK = ROOT / "feedback" / "README.md"
 PROGRESS = ROOT / ".agent-harness" / "progress.md"
+FEATURE_LIST = ROOT / ".agent-harness" / "feature_list.json"
 
 PROJECT_DOCS = (
     README,
@@ -167,14 +169,21 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F096 - Stabilize the runtime-to-Settings transition", last_completed)
-        self.assertIn("EVAL_PASS: F096", last_completed)
+        self.assertIn("F097 - Polish Settings interaction and compact layout", last_completed)
+        self.assertIn("EVAL_PASS: F097", last_completed)
         self.assertIn("standard `⌘,` shortcut", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
-        self.assertIn("No feature is currently in progress", current_feature)
-        self.assertIn("F096 is evaluator-approved", normalized_current_feature)
+        features = json.loads(read(FEATURE_LIST))["features"]
+        f099 = next(feature for feature in features if feature["id"] == "F099")
+        if f099["status"] == "in_progress":
+            self.assertIn("F099 - Make Settings return lifecycle deterministic", current_feature)
+            self.assertIn("requestAnimationFrame", normalized_current_feature)
+            self.assertIn("BFCache", normalized_current_feature)
+        elif f099["status"] == "done":
+            self.assertIn("No feature is currently in progress", current_feature)
+            self.assertIn("F099 is evaluator-approved", normalized_current_feature)
         self.assertIn("F093 is pending (`status=todo`)", current_feature)
         self.assertIn("internal artifact", current_feature)
         self.assertIn("machine-readable decision is `HOLD`", current_feature)

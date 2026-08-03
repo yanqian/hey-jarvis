@@ -274,8 +274,7 @@ async function openAppSettings(){
   stopInputLevels();
   if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}inputTrack=null;
   const audio=$("remoteAudio");audio.pause();audio.srcObject=null;
-  if(window.history.length>1)window.history.back();
-  else setUiState("error","Open Settings from the Hey Jarvis menu bar icon.");
+  window.location.assign("hey-jarvis://settings/open");
 }
 
 async function sendFixtureAudio(command){

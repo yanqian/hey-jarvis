@@ -231,7 +231,49 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F096 - Stabilize the runtime-to-Settings transition.
+F099 - Make Settings return lifecycle deterministic.
+
+F099 removed Done's throttled `requestAnimationFrame` gate, moved blocking
+sidecar readiness work off the Tauri UI/IPC path, and replaced the assistant
+gear's BFCache-prone `history.back()` with an exact data-free navigation intent
+that is cancelled and handled by the native Settings helper. Three consecutive
+Debug app cycles opened Settings with request tokens 1, 2, and 3 and returned to
+the Ready assistant surface. Request-to-native-start measured 18, 12, and 24 ms;
+the remaining 1.7–1.8 seconds was the observed sidecar/model readiness interval.
+Full recovery verification passed, coding evidence is in
+`.agent-harness/runs/F099-fast-coding.md`, and independent approval is recorded
+as `EVAL_PASS: F099` in
+`.agent-harness/runs/20260803T070255Z-F099-evaluation-pass.md`.
+
+F098 - Reset Settings state on every native entry.
+
+F098 prevents the bundled `Returning to Jarvis` transition from surviving a
+new native Settings request. Each tray, menu, or `⌘,` entry now receives a
+unique process-local `settings-request` query token, forcing WKWebView to load
+a fresh same-origin Settings document while preserving `#settings-return` and
+`enter_settings` as the sole intentional sidecar-stop boundary. The rebuilt
+Debug app reproduced the old state, then rendered Settings at request IDs 1
+and 2 on successive entries. Final recovery passes with 411 project tests,
+ten Mac app/Python tests, seventeen Rust tests, and all smoke paths. Coding
+evidence is in `.agent-harness/runs/F098-fast-coding.md`; independent approval
+is recorded as `EVAL_PASS: F098` in
+`.agent-harness/runs/20260803T033621Z-F098-evaluation-pass.md`.
+
+F097 - Polish Settings interaction and compact layout.
+
+F097 makes Done acknowledge immediately with a bundled **Returning to Jarvis**
+startup state while the local runtime performs its real cold start; failures
+restore Settings and focus instead of leaving an inert button. Buttons use
+smaller, lighter, quieter styling, Add/Replace key labels omit ellipses, and
+responsive API-key rows keep Delete visible through the supported compact
+width. A two-frame committed-paint boundary also closes the intermittent
+Settings disconnect race. Final recovery passes with 411 project tests, ten
+Mac app/Python tests, seventeen Rust tests, and all smoke paths. Coding evidence
+is in `.agent-harness/runs/F097-fast-coding.md`; independent approval is
+recorded as `EVAL_PASS: F097` in
+`.agent-harness/runs/20260803T031331Z-F097-evaluation-pass.md`.
+
+F096 stabilized the runtime-to-Settings transition.
 
 F096 removes the native pre-navigation sidecar stop that could blank WKWebView
 before it committed the bundled Settings document. The loaded Settings page
@@ -344,8 +386,9 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F096 is evaluator-approved and the
-runtime-to-Settings blank-screen regression is fixed.
+No feature is currently in progress. F099 is evaluator-approved; its cold-start
+approval is recorded as `EVAL_PASS: F099` in
+`.agent-harness/runs/20260803T070255Z-F099-evaluation-pass.md`.
 
 F093 is pending (`status=todo`) and intentionally deferred behind the
 owner-prioritized interaction/settings work. It owns the public engineering narrative
