@@ -54,9 +54,13 @@ shasum -a 256 Hey-Jarvis-0.1.0-INTERNAL-UNSIGNED-arm64.dmg
    Jarvis**, and select **Check microphone & start**.
 6. Select **Enable voice assistant**, say “Hey Jarvis,” complete one short
    conversation, try a follow-up and “再见,” then verify wake listening returns.
-7. In Settings, use **Export support bundle** if reporting a problem. The
-   bundle excludes keys, raw audio, and transcripts. Quit from the tray and
-   confirm listening and the sidecar stop; relaunch once.
+7. Open the same dedicated Settings presentation from the conversation-window
+   gear, the menu-bar **Settings…** item, and `⌘,`. Confirm its General, API
+   Keys, Microphone, Privacy & Diagnostics, and About sections all show
+   **Not listening** while open. Use **Done** to return to the assistant.
+8. In Privacy & Diagnostics, use **Export support bundle** if reporting a
+   problem. The bundle excludes keys, raw audio, and transcripts. Quit from
+   the tray and confirm listening and the sidecar stop; relaunch once.
 
 **Clear diagnostics** deletes the diagnostic history present at that moment;
 it does not disable diagnostics or delete previously exported support bundles.

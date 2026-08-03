@@ -98,6 +98,14 @@ The CLI also supports `--wake-debug-output`, `--prepare-wake-word`,
 focused guides below before changing audio, VAD, Realtime, or provider
 settings.
 
+The Mac app keeps the conversation window intentionally minimal. Open the
+secondary Settings presentation from its top-right button, the menu-bar icon,
+or `⌘,`. Opening Settings stops voice listening; **Done** restarts the local
+runtime and returns to the assistant. Credentials, microphone recovery,
+readiness, privacy-bounded support export, diagnostics clearing, and build
+information live in General, API Keys, Microphone, Privacy & Diagnostics, and
+About.
+
 ## What it can do
 
 The pipeline supports:

@@ -231,25 +231,39 @@ F047 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Last Completed Feature
 
-F094 - Create the minimal voice interaction surface.
+F096 - Stabilize the runtime-to-Settings transition.
 
-F094 replaces the production WKWebView engineering dashboard with a focused
-560x600 Hey Jarvis conversation surface. A CSS-only orb and concise copy map
-ready, wake-ready, connecting, listening, thinking, speaking, stopping, and
-error states without exposing audio settings, event logs, or test controls in
-the ordinary interface. The 480x520 minimum, visible focus, semantic live
-status, responsive layout, and reduced-motion behavior passed local browser
-inspection. Existing media arming, disabled-track input gating, explicit stop,
-semantic ending, playback lifecycle, settings cleanup, privacy, and wake
-recovery boundaries remain accepted.
+F096 removes the native pre-navigation sidecar stop that could blank WKWebView
+before it committed the bundled Settings document. The loaded Settings page
+now remains the single intentional shutdown owner through `enter_settings`, so
+the gear, tray item, and `⌘,` share one stable non-listening transition without
+a timing delay. The rebuilt Debug app remained rendered after the former
+failure window, **Done** returned to wake-ready, and the shortcut reopened the
+same persistent Settings page. Final recovery passes with 411 project tests,
+ten Mac app/Python tests, seventeen Rust tests, and all smoke paths. Coding
+evidence is in `.agent-harness/runs/F096-fast-coding.md`; independent approval
+is recorded as `EVAL_PASS: F096` in
+`.agent-harness/runs/20260803T023742Z-F096-evaluation-pass.md`.
 
-The first evaluator rejection found a recovery-documentation assertion that
-had fallen behind the progress handoff text. The synchronized retry passed 409
-project tests, ten Mac app/Python tests, seventeen Rust tests, and all smoke
-paths. Coding evidence is in `.agent-harness/runs/F094-fast-coding.md` and
-`.agent-harness/runs/F094-coding-retry.md`; independent approval is recorded as
-`EVAL_PASS: F094` in
-`.agent-harness/runs/20260802T133342Z-F094-evaluation-pass.md`.
+F095 created the secondary Settings and diagnostics surface.
+
+F095 replaces the bootstrap engineering/setup card with a dedicated modern
+Settings presentation organized as General, API Keys, Microphone, Privacy &
+Diagnostics, and About. The conversation-window gear, tray **Settings…** item,
+and standard `⌘,` shortcut share one native helper and route. Entering Settings
+stops the sidecar before the visible non-listening state; **Done** explicitly
+restarts the local runtime and returns to the minimal conversation surface.
+Keychain add/replace/delete, durable microphone permission recovery,
+non-starting readiness checks, privacy-bounded support export, confirmed
+diagnostics clearing, keyboard focus, reduced motion, media cleanup, and crash
+recovery remain accepted without exposing credentials, raw audio, transcripts,
+provider bodies, protocol/session fields, or internal endpoints.
+
+The final recovery run passed 411 project tests, ten Mac app/Python tests,
+seventeen Rust tests, and all smoke paths. Coding evidence is in
+`.agent-harness/runs/F095-fast-coding.md`; independent approval is recorded as
+`EVAL_PASS: F095` in
+`.agent-harness/runs/20260802T143136Z-F095-evaluation-pass.md`.
 
 ## Recent Completed Feature History
 
@@ -330,14 +344,11 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F094 is evaluator-approved after a
-corrective documentation-contract retry. F095 is the next owner-prioritized
-optimization and will move credentials, microphone recovery, diagnostics, and
-support actions into a dedicated secondary Settings presentation that shares
-F094's visual language.
+No feature is currently in progress. F096 is evaluator-approved and the
+runtime-to-Settings blank-screen regression is fixed.
 
 F093 is pending (`status=todo`) and intentionally deferred behind the
-owner-prioritized F094-F095 product optimizations. It owns the public engineering narrative
+owner-prioritized interaction/settings work. It owns the public engineering narrative
 and bounded demo plus privacy-safe feedback from at least three explicitly
 trusted trials or clean profiles. It must use the evaluator-approved F092
 internal artifact without publishing the unsigned binary or describing it as
@@ -354,12 +365,20 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Implement and independently evaluate F095 as its own feature. Resume F093 later by
-recording the bounded production-app demo and running two additional trusted Apple Silicon
-tester or distinct clean-profile trials.
+Resume F093 by recording the bounded production-app demo and running two
+additional trusted Apple Silicon tester or distinct clean-profile trials.
 Public binary distribution remains on hold.
 
 ## Recently Completed
+
+F094 - Create the minimal voice interaction surface.
+
+F094 replaced the production WKWebView engineering dashboard with a focused
+560x600 Hey Jarvis conversation surface. A CSS-only orb and concise copy map
+ready, wake-ready, connecting, listening, thinking, speaking, stopping, and
+error states without exposing engineering controls. Independent approval is
+recorded as `EVAL_PASS: F094` in
+`.agent-harness/runs/20260802T133342Z-F094-evaluation-pass.md`.
 
 F091 - Harden app diagnostics and sidecar recovery.
 

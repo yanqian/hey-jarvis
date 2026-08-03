@@ -1,29 +1,23 @@
 const invoke = window.__TAURI__?.core?.invoke;
 
 const elements = {
-  onboarding: document.querySelector("#onboarding"),
-  runtime: document.querySelector("#runtime"),
+  panels: [...document.querySelectorAll("[data-settings-panel]")],
+  navItems: [...document.querySelectorAll("[data-panel]")],
   openaiStatus: document.querySelector("#openai-status"),
   finnhubStatus: document.querySelector("#finnhub-status"),
   microphoneStatus: document.querySelector("#microphone-status"),
+  readiness: document.querySelector("#assistant-readiness"),
   message: document.querySelector("#setup-message"),
   saveOpenai: document.querySelector("#save-openai"),
   deleteOpenai: document.querySelector("#delete-openai"),
   saveFinnhub: document.querySelector("#save-finnhub"),
   deleteFinnhub: document.querySelector("#delete-finnhub"),
   start: document.querySelector("#start"),
+  microphoneCheck: document.querySelector("#microphone-check"),
   microphoneSettings: document.querySelector("#microphone-settings"),
-  dot: document.querySelector("#status-dot"),
-  title: document.querySelector("#status-title"),
-  detail: document.querySelector("#status-detail"),
-  protocol: document.querySelector("#protocol"),
-  session: document.querySelector("#session"),
-  appSupport: document.querySelector("#app-support"),
-  health: document.querySelector("#health-check"),
-  restart: document.querySelector("#restart"),
-  runtimeSettings: document.querySelector("#runtime-settings"),
+  readinessCheck: document.querySelector("#readiness-check"),
+  returnAssistant: document.querySelector("#return-assistant"),
   exportSupport: document.querySelector("#export-support"),
-  runtimeExportSupport: document.querySelector("#runtime-export-support"),
   clearDiagnostics: document.querySelector("#clear-diagnostics"),
   diagnosticsMessage: document.querySelector("#diagnostics-message"),
 };
@@ -70,10 +64,25 @@ function friendlyError(error) {
   return "The local runtime could not start. Retry, then quit and reopen Hey Jarvis if the problem continues.";
 }
 
+function activatePanel(name, focus = false) {
+  for (const panel of elements.panels) panel.hidden = panel.dataset.settingsPanel !== name;
+  for (const item of elements.navItems) {
+    const active = item.dataset.panel === name;
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  }
+  if (focus) document.querySelector(`[data-settings-panel="${name}"] h2`)?.focus();
+}
+
+function readinessText(snapshot) {
+  if (!snapshot.openai_configured) return "OpenAI key required before voice listening can start.";
+  if (snapshot.microphone_permission === "denied") return "Microphone access needs attention in System Settings.";
+  if (snapshot.microphone_permission !== "granted") return "OpenAI is configured. Complete the microphone check to start.";
+  return "API key and microphone permission are ready.";
+}
+
 function renderSetup(snapshot) {
   setup = snapshot;
-  elements.onboarding.hidden = false;
-  elements.runtime.hidden = true;
   elements.openaiStatus.textContent = snapshot.openai_configured
     ? "Stored in macOS Keychain. The value is never displayed."
     : "Not configured. A key is required before listening can start.";
@@ -85,49 +94,42 @@ function renderSetup(snapshot) {
   elements.deleteOpenai.hidden = !snapshot.openai_configured;
   elements.deleteFinnhub.hidden = !snapshot.finnhub_configured;
   elements.start.disabled = !snapshot.openai_configured;
+  elements.returnAssistant.hidden = !snapshot.completed || !snapshot.openai_configured;
+  elements.readiness.textContent = readinessText(snapshot);
   if (snapshot.microphone_permission === "denied") {
-    elements.microphoneStatus.textContent = "Microphone access was denied. Enable Hey Jarvis in Privacy & Security → Microphone, then retry.";
+    elements.microphoneStatus.textContent = "Access was denied. Enable Hey Jarvis in Privacy & Security → Microphone, then retry.";
     elements.microphoneSettings.hidden = false;
   } else if (snapshot.microphone_permission === "granted") {
-    elements.microphoneStatus.textContent = "Microphone access was granted. You can rerun the check at any time.";
+    elements.microphoneStatus.textContent = "Access granted. Settings is not using the microphone.";
+    elements.microphoneSettings.hidden = true;
   } else {
-    elements.microphoneStatus.textContent = "Permission is requested only when you click Check microphone & start.";
+    elements.microphoneStatus.textContent = "Permission has not been checked yet.";
     elements.microphoneSettings.hidden = true;
   }
 }
 
 async function showSettings() {
   try {
-    if (!isSettingsReturn()) {
-      window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
-    }
+    if (!isSettingsReturn()) window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
     renderSetup(await invoke("enter_settings"));
     recordLifecycle("settings_opened");
     elements.message.textContent = "Voice listening is stopped while Settings is open.";
   } catch (error) {
-    elements.detail.textContent = friendlyError(error);
+    elements.message.textContent = friendlyError(error);
   }
 }
 
-function renderRuntime(snapshot) {
-  elements.onboarding.hidden = true;
-  elements.runtime.hidden = false;
-  const ready = snapshot.state === "ready";
-  elements.dot.dataset.ready = String(ready);
-  elements.title.textContent = ready ? "Voice runtime ready" : "Voice runtime unavailable";
-  elements.detail.textContent = snapshot.detail;
-  elements.protocol.textContent = `v${snapshot.protocol_version}`;
-  elements.session.textContent = snapshot.session_id || "—";
-  elements.appSupport.textContent = snapshot.app_support_dir || "—";
-  if (ready && snapshot.control_url) {
-    const endpoint = new URL(snapshot.control_url);
-    if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1") {
-      throw new Error("Sidecar returned an invalid control endpoint.");
-    }
-    window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
-    recordLifecycle("runtime_navigation", snapshot.session_id);
-    window.location.assign(endpoint.href);
+function navigateToAssistant(snapshot) {
+  if (snapshot.state !== "ready" || !snapshot.control_url) {
+    throw new Error(snapshot.detail || "sidecar_readiness_timed_out");
   }
+  const endpoint = new URL(snapshot.control_url);
+  if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1") {
+    throw new Error("Sidecar returned an invalid control endpoint.");
+  }
+  window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
+  recordLifecycle("runtime_navigation", snapshot.session_id);
+  window.location.assign(endpoint.href);
 }
 
 async function load() {
@@ -141,10 +143,13 @@ async function load() {
     const snapshot = await invoke(settingsMode ? "enter_settings" : "onboarding_status");
     renderSetup(snapshot);
     if (settingsMode) {
+      recordLifecycle("settings_opened");
       elements.message.textContent = "Voice listening is stopped while Settings is open.";
     }
     if (!settingsMode && snapshot.completed && snapshot.openai_configured) {
-      renderRuntime(await invoke("sidecar_status"));
+      navigateToAssistant(await invoke("sidecar_status"));
+    } else if (!snapshot.openai_configured) {
+      activatePanel("api-keys");
     }
   } catch (error) {
     elements.message.textContent = friendlyError(error);
@@ -158,15 +163,15 @@ async function saveCredential(kind) {
     renderSetup(await invoke("onboarding_status"));
     elements.message.textContent = "Saved in macOS Keychain.";
   } catch (error) {
-    if (String(error).includes("credential_prompt_cancelled")) {
-      elements.message.textContent = "No changes were made.";
-    } else {
-      elements.message.textContent = friendlyError(error);
-    }
+    elements.message.textContent = String(error).includes("credential_prompt_cancelled")
+      ? "No changes were made."
+      : friendlyError(error);
   }
 }
 
 async function deleteCredential(kind) {
+  const label = kind === "openai" ? "OpenAI" : "Finnhub";
+  if (!window.confirm(`Delete the ${label} key from macOS Keychain?`)) return;
   try {
     await invoke("delete_credential", { kind });
     renderSetup(await invoke("onboarding_status"));
@@ -176,9 +181,7 @@ async function deleteCredential(kind) {
   }
 }
 
-async function checkMicrophoneAndStart() {
-  if (!setup?.openai_configured) return;
-  elements.message.textContent = "Checking the built-in microphone…";
+async function acquireMicrophone() {
   recordLifecycle("microphone_check_started");
   let stream;
   try {
@@ -195,25 +198,78 @@ async function checkMicrophoneAndStart() {
     } else {
       elements.message.textContent = "The microphone check failed and listening remains off. Check the input device and retry.";
     }
-    return;
+    return false;
   }
-
   for (const track of stream.getTracks()) track.stop();
   recordLifecycle("microphone_check_passed");
-  elements.microphoneStatus.textContent = "Microphone access granted; the temporary check stream was released.";
+  elements.microphoneStatus.textContent = "Access granted; the temporary check stream was released.";
+  return true;
+}
+
+async function checkMicrophoneOnly() {
+  elements.message.textContent = "Checking the microphone…";
+  if (!await acquireMicrophone()) return;
+  renderSetup(await invoke("record_microphone_granted"));
+  elements.message.textContent = "Microphone access is ready. Settings is not listening.";
+}
+
+async function checkMicrophoneAndStart() {
+  if (!setup?.openai_configured) {
+    activatePanel("api-keys");
+    elements.message.textContent = "Add an OpenAI key before starting Hey Jarvis.";
+    return;
+  }
+  elements.message.textContent = "Checking the built-in microphone…";
+  if (!await acquireMicrophone()) return;
   elements.message.textContent = "Microphone access is ready. Starting the local voice runtime…";
   try {
-    renderRuntime(await invoke("complete_onboarding"));
+    navigateToAssistant(await invoke("complete_onboarding"));
   } catch (error) {
     elements.message.textContent = friendlyError(error);
   }
 }
 
+async function returnToAssistant() {
+  elements.message.textContent = "Starting the local voice runtime…";
+  try {
+    navigateToAssistant(await invoke("restart_sidecar"));
+  } catch (error) {
+    elements.message.textContent = friendlyError(error);
+  }
+}
+
+async function runReadinessCheck() {
+  try {
+    const snapshot = await invoke("onboarding_status");
+    renderSetup(snapshot);
+    elements.message.textContent = snapshot.openai_configured && snapshot.microphone_permission === "granted"
+      ? "Local setup is ready. Listening remains off until you return to the assistant."
+      : "Setup needs attention. Review API Keys and Microphone before starting.";
+  } catch (error) {
+    elements.message.textContent = friendlyError(error);
+  }
+}
+
+async function exportSupport() {
+  try {
+    const result = await invoke("export_support_bundle");
+    elements.diagnosticsMessage.textContent = `Support bundle exported (${result.records} events, ${result.bytes} bytes): ${result.path}`;
+  } catch (_error) {
+    elements.diagnosticsMessage.textContent = "Support export was rejected or unavailable; diagnostics were not changed.";
+  }
+}
+
+for (const item of elements.navItems) {
+  item.addEventListener("click", () => activatePanel(item.dataset.panel, true));
+}
 elements.saveOpenai.addEventListener("click", () => saveCredential("openai"));
 elements.saveFinnhub.addEventListener("click", () => saveCredential("finnhub"));
 elements.deleteOpenai.addEventListener("click", () => deleteCredential("openai"));
 elements.deleteFinnhub.addEventListener("click", () => deleteCredential("finnhub"));
 elements.start.addEventListener("click", checkMicrophoneAndStart);
+elements.microphoneCheck.addEventListener("click", checkMicrophoneOnly);
+elements.returnAssistant.addEventListener("click", returnToAssistant);
+elements.readinessCheck.addEventListener("click", runReadinessCheck);
 elements.microphoneSettings.addEventListener("click", async () => {
   try {
     await invoke("open_microphone_settings");
@@ -221,33 +277,9 @@ elements.microphoneSettings.addEventListener("click", async () => {
     elements.message.textContent = friendlyError(error);
   }
 });
-elements.health.addEventListener("click", async () => {
-  try {
-    renderRuntime(await invoke("sidecar_health"));
-  } catch (error) {
-    elements.detail.textContent = friendlyError(error);
-  }
-});
-elements.restart.addEventListener("click", async () => {
-  try {
-    renderRuntime(await invoke("restart_sidecar"));
-  } catch (error) {
-    elements.detail.textContent = friendlyError(error);
-  }
-});
-elements.runtimeSettings.addEventListener("click", showSettings);
-async function exportSupport() {
-  const target = elements.diagnosticsMessage || elements.detail;
-  try {
-    const result = await invoke("export_support_bundle");
-    target.textContent = `Support bundle exported (${result.records} events, ${result.bytes} bytes): ${result.path}`;
-  } catch (_error) {
-    target.textContent = "Support export was rejected or unavailable; diagnostics were not changed.";
-  }
-}
 elements.exportSupport.addEventListener("click", exportSupport);
-elements.runtimeExportSupport.addEventListener("click", exportSupport);
 elements.clearDiagnostics.addEventListener("click", async () => {
+  if (!window.confirm("Clear all local Hey Jarvis diagnostics? This cannot be undone.")) return;
   try {
     await invoke("clear_diagnostics");
     elements.diagnosticsMessage.textContent = "Local diagnostics were cleared.";

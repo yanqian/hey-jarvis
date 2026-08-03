@@ -2196,13 +2196,32 @@
         "Window lifecycle, return-to-conversation behavior, menu-bar show/quit behavior, media cleanup, crash recovery, keyboard navigation, and reduced-motion/accessibility boundaries remain deterministic and regression tested.",
         "Focused Tauri/frontend/static tests, local visual inspection, credential/privacy regressions, full project tests, and final ./init.sh pass with separate evaluator approval."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [
         "F094"
+      ]
+    },
+    {
+      "id": "F096",
+      "title": "Stabilize the runtime-to-Settings transition",
+      "description": "Prevent the active loopback runtime page from blanking WKWebView while the app switches to the bundled non-listening Settings presentation.",
+      "acceptance": [
+        "The native Settings entry point navigates away from the active loopback page before that page's sidecar can be stopped, and the bundled Settings page owns the intentional stop through enter_settings without a fixed delay.",
+        "The main-window gear, tray Settings item, and Command-, shortcut continue to use the same transition and leave a persistent rendered Settings page with a truthful non-listening state.",
+        "Existing Keychain, microphone recovery, diagnostics, Done/restart, privacy, menu, and accessibility behavior remains unchanged and no microphone or paid API interaction is required for verification.",
+        "Focused source-contract tests, Rust/frontend regressions, a built Debug app visual check after the former failure window, full project tests, and final ./init.sh pass with separate evaluator approval."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F095"
       ]
     }
   ]

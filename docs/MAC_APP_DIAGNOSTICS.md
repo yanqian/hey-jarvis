@@ -9,10 +9,16 @@ events cross a native allowlist; arbitrary JavaScript strings cannot be logged.
 Records contain only schema version, timestamp, component, event, bounded
 session correlation, and state. Credentials, authorization values, raw audio,
 SDP/ICE, transcripts, answers, tool arguments, and provider request/response
-bodies are excluded. The Settings page can export a versioned, size-bounded
-`hey-jarvis-support-v1` JSON bundle or clear all local diagnostic generations.
+bodies are excluded. The dedicated Privacy & Diagnostics Settings section can
+export a versioned, size-bounded `hey-jarvis-support-v1` JSON bundle or clear
+all local diagnostic generations after an explicit confirmation.
 Exports are written under the app-owned `support-exports/` directory and must
 pass the same forbidden-content scanner.
+
+The conversation gear, tray **Settings…** item, and standard `⌘,` shortcut all
+resolve to the same Settings route. Entering that route intentionally stops the
+sidecar before the non-listening banner is shown. The **Done** action explicitly
+restarts the local runtime before returning to the conversation surface.
 
 The native supervisor distinguishes intentional stops from unexpected exits.
 An intentional Settings, permission, credential, sleep/wake, or quit stop never

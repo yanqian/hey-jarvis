@@ -155,9 +155,11 @@ class DocumentationTests(unittest.TestCase):
         current_feature = progress.split("## Current Feature", 1)[1].split(
             "## Next Feature", 1
         )[0]
+        normalized_current_feature = " ".join(current_feature.split())
         next_feature = progress.split("## Next Feature", 1)[1].split(
             "## Recently Completed", 1
         )[0]
+        normalized_next_feature = " ".join(next_feature.split())
         recently_completed = progress.split("## Recently Completed", 1)[1].split(
             "## Known Issues", 1
         )[0]
@@ -165,22 +167,23 @@ class DocumentationTests(unittest.TestCase):
             "## Operational and Verification Constraints", 1
         )[0]
 
-        self.assertIn("F094 - Create the minimal voice interaction surface", last_completed)
-        self.assertIn("EVAL_PASS: F094", last_completed)
+        self.assertIn("F096 - Stabilize the runtime-to-Settings transition", last_completed)
+        self.assertIn("EVAL_PASS: F096", last_completed)
+        self.assertIn("standard `⌘,` shortcut", last_completed)
         self.assertNotIn(
             "F070 - Keep Realtime input-level diagnostics", last_completed
         )
         self.assertIn("No feature is currently in progress", current_feature)
-        self.assertIn("F095 is the next", current_feature)
+        self.assertIn("F096 is evaluator-approved", normalized_current_feature)
         self.assertIn("F093 is pending (`status=todo`)", current_feature)
         self.assertIn("internal artifact", current_feature)
         self.assertIn("machine-readable decision is `HOLD`", current_feature)
-        self.assertIn("Implement and independently evaluate F095", next_feature)
-        self.assertIn("Resume F093 later", next_feature)
-        self.assertIn("two additional trusted Apple Silicon", next_feature)
+        self.assertIn("Resume F093", next_feature)
+        self.assertIn("two additional trusted Apple Silicon", normalized_next_feature)
         self.assertIn("Public binary distribution remains on hold", next_feature)
         self.assertNotIn("No unfinished features remain", next_feature)
         self.assertIn("F077 - Measure acknowledgement playback lifecycle", recently_completed)
+        self.assertIn("F094 - Create the minimal voice interaction surface", recently_completed)
         self.assertIn("F091 - Harden app diagnostics and sidecar recovery", recently_completed)
         self.assertNotIn("F065 - Make Realtime farewell closure", recently_completed)
         self.assertIn("F061", known_issues)
@@ -194,6 +197,29 @@ class DocumentationTests(unittest.TestCase):
             spec,
         )
         self.assertIn("F083 (foreign exchange), and F084 (stock quotes)", spec)
+
+    def test_mac_settings_documentation_matches_the_non_listening_surface(self):
+        readme = read(README)
+        manual = read(MANUAL_TESTING)
+        internal = read(ROOT / "docs" / "INTERNAL_MAC_APP_TESTING.md")
+        normalized_internal = " ".join(internal.split())
+        diagnostics = read(ROOT / "docs" / "MAC_APP_DIAGNOSTICS.md")
+        normalized_diagnostics = " ".join(diagnostics.split())
+
+        for phrase in (
+            "menu-bar icon",
+            "`⌘,`",
+            "Opening Settings stops voice listening",
+            "Privacy & Diagnostics",
+        ):
+            self.assertIn(phrase, readme)
+        self.assertIn("| M095 | Dedicated Settings presentation |", manual)
+        self.assertIn(
+            "General, API Keys, Microphone, Privacy & Diagnostics, and About",
+            normalized_internal,
+        )
+        self.assertIn("standard `⌘,` shortcut", diagnostics)
+        self.assertIn("intentionally stops the sidecar", normalized_diagnostics)
 
     def test_all_env_keys_are_owned_by_configuration_reference(self):
         configuration = read(CONFIGURATION)

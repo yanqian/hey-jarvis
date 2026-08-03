@@ -3,91 +3,158 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hey Jarvis</title>
+    <title>Hey Jarvis Settings</title>
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./main.js" defer></script>
   </head>
   <body>
-    <main>
-      <header>
-        <span class="eyebrow">MAC APP</span>
-        <h1>Hey Jarvis</h1>
-        <p id="page-summary">Private, local wake listening with OpenAI-powered conversations.</p>
+    <main class="settings-shell" aria-labelledby="settings-title">
+      <header class="settings-header">
+        <div>
+          <p class="eyebrow">HEY JARVIS</p>
+          <h1 id="settings-title">Settings</h1>
+          <p id="page-summary">Listening is off while Settings is open.</p>
+        </div>
+        <button id="return-assistant" class="done-button" type="button" hidden>Done</button>
       </header>
 
-      <section id="onboarding" class="setup-card" aria-labelledby="setup-title">
-        <div class="step-label">FIRST RUN &amp; SETTINGS</div>
-        <h2 id="setup-title">Set up your voice assistant</h2>
-        <div class="disclosure">
-          <p><strong>Local until you wake it.</strong> Hey Jarvis listens for the wake phrase on this Mac. Conversation audio reaches OpenAI only after wake and stops at the end of the session.</p>
-          <p><strong>Your API usage.</strong> You provide the OpenAI key and are responsible for its usage. OpenAI Project budgets and rate limits are monitoring controls, not a guaranteed hard spending cap.</p>
-          <p><strong>Private diagnostics.</strong> Keys stay in macOS Keychain and never enter this web interface. Local diagnostics exclude keys, raw audio, and transcripts. Quitting the tray app stops listening.</p>
-        </div>
+      <div class="privacy-state" role="status">
+        <span class="privacy-state-icon" aria-hidden="true"></span>
+        <span><strong>Not listening</strong> — the local voice runtime is stopped.</span>
+      </div>
 
-        <div class="setting-row">
-          <div>
-            <h3>OpenAI API key <span class="required">Required</span></h3>
-            <p id="openai-status">Checking macOS Keychain…</p>
-          </div>
-          <div class="row-actions">
-            <button id="save-openai" type="button">Add key…</button>
-            <button id="delete-openai" class="danger" type="button">Delete</button>
-          </div>
-        </div>
+      <div class="settings-layout">
+        <nav class="settings-nav" aria-label="Settings sections">
+          <button class="nav-item" type="button" data-panel="general" aria-current="page">General</button>
+          <button class="nav-item" type="button" data-panel="api-keys">API Keys</button>
+          <button class="nav-item" type="button" data-panel="microphone">Microphone</button>
+          <button class="nav-item" type="button" data-panel="privacy">Privacy &amp; Diagnostics</button>
+          <button class="nav-item" type="button" data-panel="about">About</button>
+        </nav>
 
-        <div class="setting-row">
-          <div>
-            <h3>Finnhub API key <span class="optional">Optional</span></h3>
-            <p id="finnhub-status">Used only for stock quotes.</p>
-          </div>
-          <div class="row-actions">
-            <button id="save-finnhub" class="secondary" type="button">Add key…</button>
-            <button id="delete-finnhub" class="danger" type="button">Delete</button>
-          </div>
-        </div>
+        <div class="settings-content">
+          <section class="settings-panel" data-settings-panel="general" aria-labelledby="general-title">
+            <div class="panel-heading">
+              <p class="section-label">GENERAL</p>
+              <h2 id="general-title" tabindex="-1">Voice assistant</h2>
+              <p>Hey Jarvis uses local wake detection and starts an OpenAI conversation only after the wake phrase.</p>
+            </div>
 
-        <div class="permission-panel">
-          <h3>Microphone permission</h3>
-          <p id="microphone-status">Permission is requested only when you click the button below.</p>
-          <div class="actions">
-            <button id="start" type="button">Check microphone &amp; start</button>
-            <button id="microphone-settings" class="secondary" type="button">Open System Settings</button>
-          </div>
-        </div>
+            <div class="summary-card">
+              <div class="summary-icon" aria-hidden="true">J</div>
+              <div>
+                <h3>Hey Jarvis is ready when you are</h3>
+                <p id="assistant-readiness">Checking local setup…</p>
+              </div>
+            </div>
 
-        <div class="permission-panel diagnostics-panel">
-          <h3>Private diagnostics</h3>
-          <p>Exported support data contains bounded lifecycle events only—never keys, audio, transcripts, answers, tool arguments, SDP, ICE, or provider bodies.</p>
-          <div class="actions">
-            <button id="export-support" class="secondary" type="button">Export support bundle</button>
-            <button id="clear-diagnostics" class="danger" type="button">Clear diagnostics</button>
-          </div>
-          <p id="diagnostics-message" class="message" role="status"></p>
-        </div>
+            <div class="action-row">
+              <button id="start" class="primary" type="button">Check microphone &amp; start</button>
+              <button id="readiness-check" class="secondary" type="button">Run readiness check</button>
+            </div>
+            <p class="boundary-note"><strong>Local until you wake it.</strong> Wake phrase detection stays on this Mac. Conversation audio reaches OpenAI only after wake.</p>
+          </section>
 
-        <p id="setup-message" class="message" role="status"></p>
-      </section>
+          <section class="settings-panel" data-settings-panel="api-keys" aria-labelledby="keys-title" hidden>
+            <div class="panel-heading">
+              <p class="section-label">API KEYS</p>
+              <h2 id="keys-title" tabindex="-1">Private credentials</h2>
+              <p>Keys are entered in a native secure prompt and stored in macOS Keychain. Their values never appear here.</p>
+            </div>
 
-      <section id="runtime" class="status-card" aria-live="polite" hidden>
-        <div class="status-heading">
-          <span id="status-dot" class="status-dot"></span>
-          <div>
-            <h2 id="status-title">Checking sidecar…</h2>
-            <p id="status-detail">Waiting for the native supervisor.</p>
-          </div>
+            <div class="setting-list">
+              <article class="setting-row">
+                <div>
+                  <div class="setting-title"><h3>OpenAI</h3><span class="badge required">Required</span></div>
+                  <p id="openai-status">Checking macOS Keychain…</p>
+                </div>
+                <div class="row-actions">
+                  <button id="save-openai" class="secondary" type="button">Add key…</button>
+                  <button id="delete-openai" class="danger" type="button">Delete</button>
+                </div>
+              </article>
+
+              <article class="setting-row">
+                <div>
+                  <div class="setting-title"><h3>Finnhub</h3><span class="badge optional">Optional</span></div>
+                  <p id="finnhub-status">Used only for stock quotes.</p>
+                </div>
+                <div class="row-actions">
+                  <button id="save-finnhub" class="secondary" type="button">Add key…</button>
+                  <button id="delete-finnhub" class="danger" type="button">Delete</button>
+                </div>
+              </article>
+            </div>
+
+            <div class="disclosure compact">
+              <h3>Your API usage</h3>
+              <p>You provide the OpenAI key and are responsible for its usage. OpenAI Project budgets and rate limits are monitoring controls, not a guaranteed hard spending cap.</p>
+            </div>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="microphone" aria-labelledby="microphone-title" hidden>
+            <div class="panel-heading">
+              <p class="section-label">MICROPHONE</p>
+              <h2 id="microphone-title" tabindex="-1">Input permission</h2>
+              <p>Permission is requested only during an explicit check or while a voice conversation is active.</p>
+            </div>
+
+            <div class="permission-card">
+              <span class="permission-icon" aria-hidden="true"></span>
+              <div>
+                <h3>Microphone access</h3>
+                <p id="microphone-status">Permission has not been checked yet.</p>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <button id="microphone-check" class="primary" type="button">Check microphone</button>
+              <button id="microphone-settings" class="secondary" type="button">Open System Settings</button>
+            </div>
+            <p class="boundary-note">The temporary check stream is released immediately. Settings never keeps the microphone open.</p>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="privacy" aria-labelledby="privacy-title" hidden>
+            <div class="panel-heading">
+              <p class="section-label">PRIVACY &amp; DIAGNOSTICS</p>
+              <h2 id="privacy-title" tabindex="-1">Local support data</h2>
+              <p>Diagnostics contain bounded lifecycle events only—never keys, raw audio, transcripts, answers, tool arguments, SDP, ICE, or provider bodies.</p>
+            </div>
+
+            <div class="disclosure privacy-grid">
+              <div><span class="check" aria-hidden="true">✓</span><p>Wake detection stays local.</p></div>
+              <div><span class="check" aria-hidden="true">✓</span><p>Credentials stay in Keychain.</p></div>
+              <div><span class="check" aria-hidden="true">✓</span><p>No audio or transcripts in support exports.</p></div>
+            </div>
+
+            <p class="boundary-note">Quitting the tray app stops listening. Support exports remain on this Mac until you choose to share them.</p>
+
+            <div class="action-row">
+              <button id="export-support" class="secondary" type="button">Export support bundle</button>
+              <button id="clear-diagnostics" class="danger" type="button">Clear diagnostics</button>
+            </div>
+            <p id="diagnostics-message" class="message" role="status"></p>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="about" aria-labelledby="about-title" hidden>
+            <div class="panel-heading">
+              <p class="section-label">ABOUT</p>
+              <h2 id="about-title" tabindex="-1">Hey Jarvis</h2>
+              <p>A local-first macOS voice assistant built as a personal AI engineering project.</p>
+            </div>
+
+            <div class="about-mark" aria-hidden="true">J</div>
+            <dl class="about-list">
+              <div><dt>Version</dt><dd>0.1.0 internal beta</dd></div>
+              <div><dt>Distribution</dt><dd>Unsigned trusted testing only</dd></div>
+              <div><dt>Platform</dt><dd>Apple Silicon · macOS 14+</dd></div>
+            </dl>
+            <p class="boundary-note">Public binary distribution, accounts, billing, telemetry, and automatic updates are not part of this build.</p>
+          </section>
+
+          <p id="setup-message" class="message global-message" role="status"></p>
         </div>
-        <dl>
-          <div><dt>Protocol</dt><dd id="protocol">—</dd></div>
-          <div><dt>Session</dt><dd id="session">—</dd></div>
-          <div><dt>App data</dt><dd id="app-support">—</dd></div>
-        </dl>
-        <div class="actions">
-          <button id="health-check" type="button">Run readiness check</button>
-          <button id="restart" class="secondary" type="button">Restart sidecar</button>
-          <button id="runtime-settings" class="secondary" type="button">Settings</button>
-          <button id="runtime-export-support" class="secondary" type="button">Export support</button>
-        </div>
-      </section>
+      </div>
     </main>
   </body>
 </html>

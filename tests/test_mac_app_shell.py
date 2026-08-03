@@ -45,7 +45,7 @@ class MacAppShellTests(unittest.TestCase):
     def test_bootstrap_frontend_redirects_only_to_product_loopback(self):
         page = (APP / "src" / "index.html").read_text(encoding="utf-8")
         self.assertIn("Run readiness check", page)
-        self.assertIn("Restart sidecar", page)
+        self.assertIn("Privacy &amp; Diagnostics", page)
         script = (APP / "src" / "main.js").read_text(encoding="utf-8")
         self.assertIn('endpoint.protocol !== "http:"', script)
         self.assertIn('endpoint.hostname !== "127.0.0.1"', script)
@@ -99,7 +99,7 @@ class MacAppShellTests(unittest.TestCase):
             "record_microphone_denied",
             "track.stop()",
             "Microphone access is ready. Starting the local voice runtime",
-            "renderRuntime(await invoke(\"complete_onboarding\"))",
+            "navigateToAssistant(await invoke(\"complete_onboarding\"))",
         ):
             self.assertIn(phrase, script)
 
@@ -122,11 +122,11 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('data-ui-state="ready"', host_page)
         self.assertNotIn('id="events"', host_page)
         self.assertNotIn('id="settings"', host_page)
-        self.assertIn('id="runtime-settings"', app_page)
+        self.assertIn('id="return-assistant"', app_page)
         self.assertIn("window.history.back()", host_script)
         self.assertNotIn("tauri://localhost", host_script)
         self.assertIn('SETTINGS_RETURN_HASH = "#settings-return"', app_script)
-        self.assertIn('if (settingsMode) {\n      elements.message.textContent = "Voice listening is stopped while Settings is open."', app_script)
+        self.assertIn('recordLifecycle("settings_opened")', app_script)
         self.assertIn("window.location.assign(endpoint.href)", app_script)
         self.assertIn("event.persisted && isSettingsReturn()", app_script)
         self.assertIn('window.history.replaceState(null, "", SETTINGS_RETURN_HASH)', app_script)
@@ -134,13 +134,59 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('invoke(settingsMode ? "enter_settings"', app_script)
         self.assertIn('if (!settingsMode && snapshot.completed', app_script)
         self.assertIn('renderSetup(await invoke("enter_settings"))', app_script)
-        self.assertIn("elements.onboarding.hidden = false", app_script)
-        self.assertIn("elements.runtime.hidden = true", app_script)
+        self.assertIn('navigateToAssistant(await invoke("restart_sidecar"))', app_script)
         self.assertIn("fn enter_settings", native)
         self.assertIn('stop_sidecar(&runtime, "open_settings")', native)
         self.assertIn("fn settings_url", native)
         self.assertIn(".build\n        .dev_url", native)
         self.assertIn('url.set_fragment(Some("settings-return"))', native)
+
+        enter_settings_start = native.index("fn enter_settings")
+        enter_settings_end = native.index("#[tauri::command]", enter_settings_start + 1)
+        enter_settings = native[enter_settings_start:enter_settings_end]
+        self.assertIn('stop_sidecar(&runtime, "open_settings")', enter_settings)
+
+        open_settings_start = native.index("fn open_settings_window")
+        open_settings_end = native.index("#[cfg_attr", open_settings_start)
+        open_settings = native[open_settings_start:open_settings_end]
+        self.assertIn("window.navigate(url)", open_settings)
+        self.assertNotIn("stop_sidecar", open_settings)
+
+    def test_settings_surface_has_unified_entry_points_and_privacy_safe_sections(self):
+        page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        script = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        styles = (APP / "src" / "styles.css").read_text(encoding="utf-8")
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(
+            encoding="utf-8"
+        )
+
+        for section in (
+            "General",
+            "API Keys",
+            "Microphone",
+            "Privacy &amp; Diagnostics",
+            "About",
+        ):
+            self.assertIn(section, page)
+        for phrase in (
+            "Listening is off while Settings is open",
+            "the local voice runtime is stopped",
+            "never keys, raw audio, transcripts, answers, tool arguments, SDP, ICE, or provider bodies",
+            "Unsigned trusted testing only",
+        ):
+            self.assertIn(phrase, page)
+        self.assertNotIn("Protocol", page)
+        self.assertNotIn("Session", page)
+        self.assertNotIn("App data", page)
+        self.assertNotIn('type="password"', page)
+        self.assertIn('invoke("record_microphone_granted")', script)
+        self.assertIn('window.confirm("Clear all local Hey Jarvis diagnostics?', script)
+        self.assertIn("prefers-reduced-motion", styles)
+        self.assertIn(":focus-visible", styles)
+        self.assertIn("fn open_settings_window", native)
+        self.assertIn('"app-settings"', native)
+        self.assertIn('Some("CmdOrCtrl+,")', native)
+        self.assertIn('"settings" => {\n                    open_settings_window(app);', native)
 
     def test_wkwebview_media_surface_preserves_accepted_realtime_boundary(self):
         script = (ROOT / "src" / "realtime_host" / "static" / "app.js").read_text(

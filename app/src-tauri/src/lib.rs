@@ -18,7 +18,7 @@ use std::thread;
 use std::time::Duration;
 use supervisor::{RuntimeSnapshot, SidecarSupervisor};
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem},
     tray::TrayIconBuilder,
     Manager, State,
 };
@@ -166,6 +166,17 @@ fn record_microphone_denied(runtime: State<'_, AppRuntime>) -> Result<Onboarding
 }
 
 #[tauri::command]
+fn record_microphone_granted(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
+    stop_sidecar(&runtime, "microphone_settings_check");
+    let first_run = !runtime.onboarding_path.exists();
+    let mut record = load_onboarding(&runtime.onboarding_path).unwrap_or_default();
+    record.microphone_permission = "granted".into();
+    save_onboarding(&runtime.onboarding_path, &record)?;
+    let credentials = credential_status_value(runtime.credentials.as_ref())?;
+    Ok(onboarding_snapshot(first_run, record, credentials))
+}
+
+#[tauri::command]
 fn complete_onboarding(runtime: State<'_, AppRuntime>) -> Result<RuntimeSnapshot, String> {
     let credentials = RuntimeCredentials::load(runtime.credentials.as_ref())?;
     let record = OnboardingRecord {
@@ -232,6 +243,17 @@ fn settings_url(app: &tauri::AppHandle) -> Result<tauri::Url, String> {
         .unwrap_or(tauri::Url::parse("tauri://localhost").map_err(|_| "settings_unavailable")?);
     url.set_fragment(Some("settings-return"));
     Ok(url)
+}
+
+fn open_settings_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(url) = settings_url(app) {
+            let _ = window.navigate(url);
+        }
+        let _ = window.set_title("Hey Jarvis Settings");
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -303,6 +325,22 @@ pub fn run() {
                 let _ = window.set_focus();
             }
 
+            let application_menu = Menu::default(app.handle())?;
+            if let Some(MenuItemKind::Submenu(application_submenu)) =
+                application_menu.items()?.into_iter().next()
+            {
+                let settings_shortcut =
+                    MenuItem::with_id(app, "app-settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+                application_submenu.insert(&settings_shortcut, 1)?;
+                application_submenu.insert(&PredefinedMenuItem::separator(app)?, 2)?;
+            }
+            app.set_menu(application_menu)?;
+            app.on_menu_event(|app, event| {
+                if event.id.as_ref() == "app-settings" {
+                    open_settings_window(app);
+                }
+            });
+
             let show = MenuItem::with_id(app, "show", "Show Hey Jarvis", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Hey Jarvis", true, None::<&str>)?;
@@ -319,16 +357,7 @@ pub fn run() {
                     }
                 }
                 "settings" => {
-                    if let Some(runtime) = app.try_state::<AppRuntime>() {
-                        stop_sidecar(&runtime, "open_settings");
-                    }
-                    if let Some(window) = app.get_webview_window("main") {
-                        if let Ok(url) = settings_url(app) {
-                            let _ = window.navigate(url);
-                        }
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+                    open_settings_window(app);
                 }
                 "quit" => {
                     if let Some(runtime) = app.try_state::<AppRuntime>() {
@@ -350,6 +379,7 @@ pub fn run() {
             prompt_save_credential,
             delete_credential,
             record_microphone_denied,
+            record_microphone_granted,
             complete_onboarding,
             open_microphone_settings,
             record_webview_lifecycle,
