@@ -2390,13 +2390,13 @@
       "description": "Provide an opt-in General setting that uses a scoped native macOS assertion to keep a genuinely listening Hey Jarvis awake while allowing display sleep and lock.",
       "acceptance": [
         "General settings expose a keyboard-accessible Smart Speaker Mode toggle that defaults off, persists as non-secret app state, explains battery impact, and states that explicit Sleep, shutdown, and lid close remain unavailable boundaries.",
-        "When the mode is enabled and F104 confirms genuine voice listening, native code acquires one process-owned macOS idle-system-sleep assertion without spawning caffeinate, preventing display sleep, or depending on Core Audio's incidental assertions.",
-        "The assertion is acquired and released idempotently and is released immediately when Settings opens, the mode is disabled, listening becomes unavailable, microphone permission is lost, the sidecar stops or crashes, system sleep begins, or the app quits.",
-        "Mode-off behavior is unchanged; enabling the mode before the Enable gesture or while recovery is required cannot hold an assertion or claim appliance readiness, and sanitized diagnostics expose only assertion lifecycle reason and state.",
+        "When the mode is enabled and F104 confirms genuine wake listening, native code acquires one process-owned macOS idle-system-sleep assertion and retains it through the immediately resulting Busy voice conversation without allowing Busy alone to acquire one, spawning caffeinate, preventing display sleep, or depending on Core Audio's incidental assertions.",
+        "The assertion is acquired and released idempotently and is released immediately when Settings opens, the mode is disabled, voice availability leaves the active Wake listening or Busy session, microphone permission is lost, the sidecar stops or crashes, system sleep begins, or the app quits.",
+        "Mode-off behavior is unchanged; enabling the mode before the Enable gesture or while recovery is required cannot hold an assertion or claim appliance readiness. In Smart Speaker Mode, the existing Enable gesture retains a disabled WKWebView microphone track and primes the existing audio element at zero volume so locked wake can reuse already-authorized input and output media pipelines; Settings, page teardown, and mode-off paths release them. Sanitized diagnostics expose only bounded lifecycle and timing evidence.",
         "Injectable power-backend tests, Settings persistence/accessibility tests, source checks for no shell caffeinate and no display-sleep assertion, pmset/process inspection, a display-off and lock trial beyond the configured idle-sleep deadline with a complete voice loop, full project tests, final ./init.sh, fast coding evidence, and separate evaluator approval pass."
       ],
-      "passes": false,
-      "status": "in_progress",
+      "passes": true,
+      "status": "done",
       "attempts": 1,
       "last_error": "",
       "priority": "P0",

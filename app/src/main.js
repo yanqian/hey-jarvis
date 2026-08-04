@@ -151,6 +151,7 @@ function navigateToAssistant(snapshot) {
   if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1") {
     throw new Error("Sidecar returned an invalid control endpoint.");
   }
+  if (setup?.smart_speaker_mode === true) endpoint.hash = "smart-speaker-mode";
   window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
   recordLifecycle("runtime_navigation", snapshot.session_id);
   window.location.assign(endpoint.href);

@@ -3,7 +3,8 @@
 const AUDIO_CONSTRAINTS={echoCancellation:{exact:true},noiseSuppression:true,autoGainControl:true,channelCount:1};
 const REMOTE_AUDIO_VOLUME=0.1;
 const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
-let armed=false,lastCommand=0,pc=null,dc=null,stream=null,inputTrack=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null,sessionCreatedAt=null,dataChannelOpenedAt=null,transportReported=false,configurationReportStarted=false;
+const KEEP_WARM_MICROPHONE=location.hash==="#smart-speaker-mode";
+let armed=false,lastCommand=0,pc=null,dc=null,stream=null,warmStream=null,inputTrack=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null,sessionCreatedAt=null,dataChannelOpenedAt=null,transportReported=false,configurationReportStarted=false;
 let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
@@ -27,6 +28,7 @@ function setUiState(state,detail=null){
   $("status-title").textContent=presentation.title;
   $("status-detail").textContent=detail||presentation.detail;
 }
+function configuredOutputVolume(){return Number.isFinite(sessionConfig?.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;}
 
 function showEndControl(show){
   $("stop").hidden=!show;
@@ -130,9 +132,11 @@ async function arm(){
     const safeSettings=await settingsResponse.json();if(!settingsResponse.ok)throw new Error(safeSettings.message||safeSettings.error);
     sessionConfig=safeSettings;
     renderSettings(warm.getAudioTracks()[0]?.getSettings()||{});
-    warm.getTracks().forEach(track=>track.stop());
-    $("remoteAudio").volume=Number.isFinite(sessionConfig.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;
-    const playAttempt=$("remoteAudio").play();if(playAttempt)playAttempt.catch(()=>{});
+    if(KEEP_WARM_MICROPHONE){warm.getAudioTracks().forEach(track=>{track.enabled=false;});warmStream=warm;}
+    else warm.getTracks().forEach(track=>track.stop());
+    const audio=$("remoteAudio");
+    if(KEEP_WARM_MICROPHONE){audio.srcObject=warmStream;audio.volume=0;await audio.play();}
+    else audio.volume=configuredOutputVolume();
     sessionId=null;await hostEvent("armed");armed=true;$("arm").disabled=true;$("arm").hidden=true;
     setUiState("wake-ready");log("armed");poll();
   }catch(error){$("arm").disabled=false;$("arm").hidden=false;setUiState("error",`Voice setup failed: ${error.message}`);}
@@ -221,17 +225,22 @@ async function start(command){
   await hostEvent("microphone_requested");
   handoffTiming.tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived;
   handoffTiming.microphoneStarted=handoffTiming.commandReceived;
-  $("remoteAudio").volume=Number.isFinite(sessionConfig.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;
-  stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
+  const retainedTrack=warmStream?.getAudioTracks()[0];
+  if(KEEP_WARM_MICROPHONE&&retainedTrack?.readyState==="live")stream=warmStream;
+  else{
+    if(warmStream){warmStream.getTracks().forEach(track=>track.stop());warmStream=null;}
+    stream=await navigator.mediaDevices.getUserMedia({audio:AUDIO_CONSTRAINTS});
+    if(KEEP_WARM_MICROPHONE)warmStream=stream;
+  }
   handoffTiming.microphoneAcquired=performance.now();
   const track=stream.getAudioTracks()[0],echoPreference=await preferStrongestEchoCancellation(track),settings=track.getSettings();renderSettings(settings);
   track.enabled=false;inputTrack=track;
-  await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,echoCancellationRequested:echoPreference.requested,echoCancellationAllSupported:echoPreference.allSupported,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,inputNoiseReduction:sessionConfig.input_noise_reduction,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:$("remoteAudio").volume});
+  await hostEvent("microphone_acquired",{echoCancellation:settings.echoCancellation,echoCancellationRequested:echoPreference.requested,echoCancellationAllSupported:echoPreference.allSupported,noiseSuppression:settings.noiseSuppression,autoGainControl:settings.autoGainControl,inputNoiseReduction:sessionConfig.input_noise_reduction,sampleRate:settings.sampleRate,channelCount:settings.channelCount,outputVolume:configuredOutputVolume()});
   handoffTiming.microphoneReported=performance.now();
   if(command.input_level_diagnostics===true)startInputLevels(stream,handoffTiming);
   else skipInputLevels(handoffTiming);
   pc=new RTCPeerConnection();
-  pc.ontrack=event=>{$("remoteAudio").srcObject=event.streams[0];log("remote_audio_track")};
+  pc.ontrack=event=>{const audio=$("remoteAudio");audio.srcObject=event.streams[0];audio.volume=configuredOutputVolume();const playAttempt=audio.play();if(playAttempt)playAttempt.catch(error=>log("remote_audio_play_failed",{message:String(error.message).slice(0,120)}));log("remote_audio_track")};
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};
   pc.addTrack(track,stream);
   dc=pc.createDataChannel("oai-events");
@@ -262,8 +271,15 @@ async function stop(reason="command",finalState="wake-ready"){
   setUiState("stopping");showEndControl(false);
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
-  if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}inputTrack=null;
-  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;handoffTiming=null;sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
+  if(stream){
+    if(KEEP_WARM_MICROPHONE&&stream===warmStream&&stream.getAudioTracks()[0]?.readyState==="live")stream.getAudioTracks().forEach(track=>{track.enabled=false;});
+    else stream.getTracks().forEach(track=>track.stop());
+    stream=null;
+  }inputTrack=null;
+  const audio=$("remoteAudio");
+  if(KEEP_WARM_MICROPHONE&&warmStream?.getAudioTracks()[0]?.readyState==="live"){audio.srcObject=warmStream;audio.volume=0;const playAttempt=audio.play();if(playAttempt)playAttempt.catch(()=>{});}
+  else{audio.pause();audio.srcObject=null;}
+  handoffTiming=null;sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
   setUiState(finalState);
@@ -273,8 +289,7 @@ async function openAppSettings(){
   armed=false;
   try{if(sessionId)await stop("open_settings");}catch{}
   stopInputLevels();
-  if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}inputTrack=null;
-  const audio=$("remoteAudio");audio.pause();audio.srcObject=null;
+  releasePageMedia();
   window.location.assign("hey-jarvis://settings/open");
 }
 
@@ -313,7 +328,10 @@ function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringi
 
 $("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop").addEventListener("click",()=>{setUiState("stopping");$("stop").disabled=true;post("/api/stop").catch(error=>setUiState("error",`Could not end the conversation: ${error.message}`));});$("app-settings").addEventListener("click",openAppSettings);
 function releasePageMedia(){
-  if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}
+  const activeStream=stream;stream=null;
+  if(activeStream)activeStream.getTracks().forEach(track=>track.stop());
+  if(warmStream&&warmStream!==activeStream)warmStream.getTracks().forEach(track=>track.stop());
+  warmStream=null;
   inputTrack=null;
   const audio=$("remoteAudio");audio.pause();audio.srcObject=null;
   if(dc){try{dc.close()}catch{}dc=null;}

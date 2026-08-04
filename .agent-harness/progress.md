@@ -4,17 +4,26 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
-F105 coding is complete but target-Mac acceptance and evaluator approval are
-pending. General settings now contain a default-off, persisted Smart Speaker
-Mode. A native, injectable power policy holds one
-`PreventUserIdleSystemSleep` assertion only during F104-confirmed
-`wake_listening`, and releases it through the shared Settings, unavailable
-listening, microphone denial, sidecar stop/crash, system sleep, disable, and
-quit paths. Final recovery passes with 424 project tests, ten Mac
-frontend/sidecar tests, and 23 Rust tests. Coding evidence and the deferred
-joint `pmset`, display-off, lock, voice-loop, and release checklist are in
-`.agent-harness/runs/F105-fast-coding.md`; F105 must remain in progress until
-those checks and a separate evaluator pass succeed.
+F105 is evaluator-approved after its owner-led target-Mac lock acceptance. The first two trials
+isolated two independent boundaries: the native assertion was initially
+released on `wake_listening -> busy`, and a corrected run then showed locked
+WKWebView microphone acquisition taking 13,443 ms. An unchanged Chrome A/B
+completed the same locked media lifecycle, narrowing the second issue to
+WKWebView's cold media startup rather than the shared coordinator or Realtime
+path.
+
+The product correction keeps the one-time Enable gesture and, only in Smart
+Speaker Mode, retains its disabled WKWebView microphone track and primes the
+existing `<audio>` element with that live stream at zero volume. Wake then
+reuses the live input track and swaps the already-playing element to the remote
+Realtime stream. The final locked trial acquired the microphone in 5 ms,
+reached browser readiness in 2,019 ms, played ACK and the time answer audibly
+while locked, recognized the semantic end phrase, stopped cleanly, and reopened
+local wake ownership. The native assertion stayed process-owned with no display
+sleep assertion or product `caffeinate`. Full evidence is in
+`.agent-harness/runs/F105-fast-coding.md`; independent approval
+is recorded as `EVAL_PASS: F105` in
+`.agent-harness/runs/20260804T060635Z-F105-evaluation-pass.md`.
 
 F086 is complete at commit `cd8e4d7`. Its isolated Tauri 2, WKWebView, and
 Python-sidecar spike passed offline, packaged-app, Apple Silicon live-device,
@@ -448,14 +457,23 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Implement F105 next to add the opt-in native idle-sleep policy. F106 then adds
-bounded post-wake recovery with
+Implement F106 next to add bounded post-wake recovery with
 a truthful Resume fallback. After F104-F106, Resume F093 by recording the
 bounded production-app demo and running two additional trusted Apple Silicon
 tester or distinct clean-profile trials. Public binary distribution remains
 on hold.
 
 ## Recently Completed
+
+F105 - Add the native Smart Speaker idle-sleep policy.
+
+F105 adds the opt-in native idle-system-sleep assertion and retains it from
+genuine wake listening through the active conversation. Smart Speaker Mode
+also uses the existing Enable gesture to retain a disabled WKWebView microphone
+track and prime the existing audio element silently, avoiding unreliable cold
+media startup after lock. The owner-led locked trial completed audible ACK,
+time answer, semantic end, and wake restoration with 5 ms microphone reuse;
+final recovery and independent evaluation passed.
 
 F104 - Publish truthful voice availability across the Mac app.
 

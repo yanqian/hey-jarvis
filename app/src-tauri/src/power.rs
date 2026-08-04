@@ -76,8 +76,19 @@ impl PowerPolicy {
     }
 
     fn reconcile(&mut self, availability: &str, reason: &str, diagnostics: &Diagnostics) {
-        let should_hold = self.enabled && availability == "wake_listening";
-        if !should_hold {
+        if !self.enabled {
+            self.release(reason, diagnostics);
+            return;
+        }
+
+        // A real wake-listening state is the only state allowed to acquire an
+        // assertion. Once acquired, keep it through the ensuing Busy handoff
+        // so an already-expired idle timer cannot sleep the Mac between wake
+        // detection and acknowledgement playback.
+        if availability == "busy" && self.assertion_id.is_some() {
+            return;
+        }
+        if availability != "wake_listening" {
             self.release(reason, diagnostics);
             return;
         }
@@ -287,8 +298,30 @@ mod tests {
     }
 
     #[test]
-    fn busy_stop_settings_and_disable_release_idempotently() {
-        for availability in ["busy", "ready", "resume_required"] {
+    fn active_conversation_keeps_an_existing_assertion() {
+        let state = Arc::new(Mutex::new(BackendState::default()));
+        let (mut policy, diagnostics) = fixture(Arc::clone(&state));
+        policy.set_enabled(true, "wake_listening", &diagnostics);
+        policy.update_availability("busy", &diagnostics);
+        assert!(policy.snapshot().active);
+        assert!(state.lock().unwrap().released.is_empty());
+
+        policy.update_availability("wake_listening", &diagnostics);
+        assert_eq!(state.lock().unwrap().acquire_calls, 1);
+    }
+
+    #[test]
+    fn busy_cannot_acquire_before_real_wake_listening() {
+        let state = Arc::new(Mutex::new(BackendState::default()));
+        let (mut policy, diagnostics) = fixture(Arc::clone(&state));
+        policy.set_enabled(true, "busy", &diagnostics);
+        assert_eq!(state.lock().unwrap().acquire_calls, 0);
+        assert!(!policy.snapshot().active);
+    }
+
+    #[test]
+    fn stop_settings_and_disable_release_idempotently() {
+        for availability in ["ready", "resume_required"] {
             let state = Arc::new(Mutex::new(BackendState::default()));
             let (mut policy, diagnostics) = fixture(Arc::clone(&state));
             policy.set_enabled(true, "wake_listening", &diagnostics);

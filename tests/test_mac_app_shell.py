@@ -330,8 +330,10 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("This can use more battery", page)
         self.assertIn("explicit Sleep, shutdown, and closing a MacBook lid", page)
         self.assertIn('invoke("set_smart_speaker_mode", { enabled })', frontend)
+        self.assertIn('endpoint.hash = "smart-speaker-mode"', frontend)
         self.assertIn("set_smart_speaker_mode", native)
-        self.assertIn('availability == "wake_listening"', power)
+        self.assertIn('availability != "wake_listening"', power)
+        self.assertIn('availability == "busy" && self.assertion_id.is_some()', power)
         self.assertIn('CFString::new("PreventUserIdleSystemSleep")', power)
         self.assertIn("IOPMAssertionCreateWithName", power)
         self.assertIn("IOPMAssertionRelease", power)
@@ -339,6 +341,16 @@ class MacAppShellTests(unittest.TestCase):
         self.assertNotIn("PreventUserIdleDisplaySleep", power)
         self.assertIn("smart_speaker_mode: false", preferences)
         self.assertIn('preferences-v1.json', preferences)
+
+        host = (ROOT / "src" / "realtime_host" / "static" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('location.hash==="#smart-speaker-mode"', host)
+        self.assertIn('retainedTrack?.readyState==="live"', host)
+        self.assertIn('track.enabled=false', host)
+        self.assertIn('audio.srcObject=warmStream;audio.volume=0;await audio.play()', host)
+        self.assertIn('audio.srcObject=event.streams[0]', host)
+        self.assertIn("if(warmStream){warmStream.getTracks().forEach", host)
 
     def test_product_sidecar_reuses_runtime_without_chrome_or_root_env(self):
         sidecar = (APP / "sidecar" / "product_sidecar.py").read_text(
