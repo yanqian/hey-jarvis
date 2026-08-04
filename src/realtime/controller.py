@@ -76,6 +76,9 @@ class RealtimeSessionController:
                     )
                     self.play_acknowledgement()
                     self.coordinator.record_local_timing_marker("ack_completed")
+                elif self.coordinator.active_acknowledgement_mode == "cached":
+                    if not self._wait_for_cached_acknowledgement(self.connect_timeout_seconds):
+                        self.coordinator.request_stop("cached_acknowledgement_timeout")
                 elif not self._wait_for_realtime_acknowledgement(
                     self.connect_timeout_seconds
                 ):
@@ -153,6 +156,14 @@ class RealtimeSessionController:
                 return True
             self.sleep(self.poll_seconds)
         return self.coordinator.realtime_acknowledgement_complete
+
+    def _wait_for_cached_acknowledgement(self, timeout: float) -> bool:
+        deadline = self.clock() + timeout
+        while self.coordinator.state == HandoffState.HOST_READY and self.clock() < deadline:
+            if self.coordinator.cached_acknowledgement_complete:
+                return True
+            self.sleep(self.poll_seconds)
+        return self.coordinator.cached_acknowledgement_complete
 
     def _wait_for_wake_ownership(self) -> bool:
         if self.coordinator.state == HandoffState.WAKE_OWNED:

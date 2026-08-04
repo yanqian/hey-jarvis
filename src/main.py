@@ -24,6 +24,7 @@ from .openai_client import build_openai_client
 from .player import MacOSPlayer, PlaybackError, audio_sha256, benchmark_audio_playback
 from .recorder import RecordingResult
 from .realtime.controller import RealtimeSessionController
+from .realtime_ack_asset import CANONICAL_ACK_ASSET, CANONICAL_ACK_MANIFEST
 from .state_machine import AssistantState, VoiceAssistantStateMachine
 from .tools.providers import provider_config_from_settings
 from .tools.router import format_text_debug
@@ -435,7 +436,7 @@ def run_assistant_forever(*, backend: str | None = None) -> int:
 def run_realtime_forever(settings: Settings) -> int:
     """Run local wake listening and continuous WebRTC sessions until interrupted."""
 
-    from .realtime_host.server import build_server, launch_chrome_app
+    from .realtime_host.server import HostServerError, build_server, launch_chrome_app
 
     logger = logging.getLogger(LOGGER_NAME)
     missing_acknowledgement = wake_acknowledgement_missing_message(settings)
@@ -447,15 +448,23 @@ def run_realtime_forever(settings: Settings) -> int:
     if hasattr(detector, "preload"):
         logger.info("Preparing %s wake-word detector", settings.wake_phrase)
         detector.preload()
-    server = build_server(
-        settings.realtime_bridge_host,
-        settings.realtime_bridge_port,
-        real_microphone=True,
-        wake_after_arm=True,
-        acknowledgement_mode=settings.realtime_acknowledgement_mode,
-        end_phrases=settings.realtime_end_phrases,
-        tool_provider_config=provider_config_from_settings(settings),
-    )
+    project_root = Path(__file__).resolve().parent.parent
+    try:
+        server = build_server(
+            settings.realtime_bridge_host,
+            settings.realtime_bridge_port,
+            real_microphone=True,
+            wake_after_arm=True,
+            acknowledgement_mode=settings.realtime_acknowledgement_mode,
+            end_phrases=settings.realtime_end_phrases,
+            tool_provider_config=provider_config_from_settings(settings),
+            settings=settings,
+            cached_acknowledgement_audio_path=project_root / CANONICAL_ACK_ASSET,
+            cached_acknowledgement_manifest_path=project_root / CANONICAL_ACK_MANIFEST,
+        )
+    except HostServerError as exc:
+        logger.error("Realtime host startup failed: %s", exc)
+        return 1
     url = f"http://{settings.realtime_bridge_host}:{server.server_port}/"
     launch_chrome_app(url)
     server_thread = threading.Thread(target=server.serve_forever, name="realtime-host", daemon=True)

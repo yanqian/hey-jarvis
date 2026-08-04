@@ -349,7 +349,9 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('retainedTrack?.readyState==="live"', host)
         self.assertIn('track.enabled=false', host)
         self.assertIn('audio.srcObject=warmStream;audio.volume=0;await audio.play()', host)
-        self.assertIn('audio.srcObject=event.streams[0]', host)
+        self.assertIn('remoteStream=event.streams[0]', host)
+        self.assertIn('if(!remoteStream||cachedAcknowledgementPending)return', host)
+        self.assertIn('audio.srcObject=remoteStream', host)
         self.assertIn("if(warmStream){warmStream.getTracks().forEach", host)
 
     def test_product_sidecar_reuses_runtime_without_chrome_or_root_env(self):

@@ -9,6 +9,7 @@ let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelS
 let responseActive=false,turnResponsePending=false,farewellPending=false,farewellStarted=false,farewellCallId=null,farewellResponseActive=false;
 let realtimeAcknowledgement=false,acknowledgementStarted=false,acknowledgementResponseActive=false;
 let acknowledgementCaptureLabel=null,acknowledgementCapture=null,acknowledgementTranscript=null,remoteStream=null;
+let cachedAcknowledgementUrl=null,cachedAcknowledgementPending=false,cachedAcknowledgementToken=0;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
@@ -60,6 +61,39 @@ async function uploadAcknowledgementCapture(){
   const label=acknowledgementCaptureLabel,capture=acknowledgementCapture;acknowledgementCapture=null;
   const wav=await capture.finish();
   await post("/api/acknowledgement-capture/candidate",{label,transcript:acknowledgementTranscript,audio:base64FromBuffer(wav)});
+}
+
+async function prepareCachedAcknowledgement(settings){
+  if(cachedAcknowledgementUrl){URL.revokeObjectURL(cachedAcknowledgementUrl);cachedAcknowledgementUrl=null;}
+  const acknowledgement=settings?.acknowledgement;
+  if(acknowledgement?.mode!=="cached")return;
+  if(acknowledgement.url!=="/acknowledgement.wav"||!Number.isInteger(acknowledgement.duration_ms)||acknowledgement.duration_ms<500||acknowledgement.duration_ms>6000||typeof acknowledgement.sha256!=="string"||!/^[a-f0-9]{64}$/.test(acknowledgement.sha256))throw new Error("Cached acknowledgement metadata is invalid");
+  const response=await fetch(acknowledgement.url,{cache:"no-store"});if(!response.ok)throw new Error("Cached acknowledgement is unavailable");
+  const bytes=await response.arrayBuffer();if(bytes.byteLength<44||bytes.byteLength>1500000)throw new Error("Cached acknowledgement size is invalid");
+  cachedAcknowledgementUrl=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
+}
+function resetCachedAcknowledgementPlayback(){
+  cachedAcknowledgementToken+=1;cachedAcknowledgementPending=false;
+  const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");
+}
+async function attachRemoteAudio(){
+  if(!remoteStream||cachedAcknowledgementPending)return;
+  const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");audio.srcObject=remoteStream;audio.volume=configuredOutputVolume();
+  const playAttempt=audio.play();if(playAttempt)await playAttempt;log("remote_audio_track");
+}
+async function startCachedAcknowledgement(command){
+  if(command.acknowledgement_mode!=="cached"||!cachedAcknowledgementUrl)throw new Error("Cached acknowledgement was not prepared");
+  const expectedSession=command.session_id,token=++cachedAcknowledgementToken,audio=$("remoteAudio");cachedAcknowledgementPending=true;
+  audio.pause();audio.srcObject=null;audio.src=cachedAcknowledgementUrl;audio.volume=configuredOutputVolume();audio.currentTime=0;
+  const ended=new Promise((resolve,reject)=>{audio.onended=resolve;audio.onerror=()=>reject(new Error("Cached acknowledgement playback failed"));});
+  await audio.play();
+  if(token!==cachedAcknowledgementToken||sessionId!==expectedSession)return;
+  await hostEvent("cached_ack_playback_started");
+  await ended;
+  if(token!==cachedAcknowledgementToken||sessionId!==expectedSession)return;
+  cachedAcknowledgementPending=false;audio.onended=null;audio.onerror=null;
+  await attachRemoteAudio();
+  await hostEvent("cached_ack_playback_stopped");
 }
 
 function showEndControl(show){
@@ -163,6 +197,7 @@ async function arm(){
     ]);
     const safeSettings=await settingsResponse.json();if(!settingsResponse.ok)throw new Error(safeSettings.message||safeSettings.error);
     sessionConfig=safeSettings;
+    await prepareCachedAcknowledgement(safeSettings);
     renderSettings(warm.getAudioTracks()[0]?.getSettings()||{});
     if(KEEP_WARM_MICROPHONE){warm.getAudioTracks().forEach(track=>{track.enabled=false;});warmStream=warm;}
     else warm.getTracks().forEach(track=>track.stop());
@@ -171,7 +206,7 @@ async function arm(){
     else audio.volume=configuredOutputVolume();
     sessionId=null;await hostEvent("armed");armed=true;$("arm").disabled=true;$("arm").hidden=true;
     setUiState("wake-ready");log("armed");poll();
-  }catch(error){$("arm").disabled=false;$("arm").hidden=false;setUiState("error",`Voice setup failed: ${error.message}`);}
+  }catch(error){releasePageMedia();sessionConfig=null;$("arm").disabled=false;$("arm").hidden=false;setUiState("error",`Voice setup failed: ${error.message}`);}
 }
 
 function elapsedMs(start,end){return Math.max(0,Math.round(end-start));}
@@ -348,7 +383,9 @@ async function start(command){
   realtimeAcknowledgement=command.acknowledgement_mode==="realtime";acknowledgementStarted=false;acknowledgementResponseActive=false;
   acknowledgementCaptureLabel=typeof command.acknowledgement_capture_label==="string"?command.acknowledgement_capture_label:null;acknowledgementCapture=null;acknowledgementTranscript=null;remoteStream=null;
   sessionId=command.session_id;setUiState("connecting");showEndControl(true);
+  if(command.acknowledgement_mode==="cached")startCachedAcknowledgement(command).catch(async()=>{if(sessionId===command.session_id){await hostEvent("error",{reason:"cached_acknowledgement_failed"}).catch(()=>{});await stop("cached_acknowledgement_failed","error");}});
   await hostEvent("microphone_requested");
+  if(sessionId!==command.session_id)return;
   handoffTiming.tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived;
   handoffTiming.microphoneStarted=handoffTiming.commandReceived;
   const retainedTrack=warmStream?.getAudioTracks()[0];
@@ -366,7 +403,7 @@ async function start(command){
   if(command.input_level_diagnostics===true)startInputLevels(stream,handoffTiming);
   else skipInputLevels(handoffTiming);
   pc=new RTCPeerConnection();
-  pc.ontrack=event=>{const audio=$("remoteAudio");remoteStream=event.streams[0];audio.srcObject=event.streams[0];audio.volume=configuredOutputVolume();if(acknowledgementCaptureLabel&&!acknowledgementCapture){try{acknowledgementCapture=createAcknowledgementCapture(remoteStream);}catch{hostEvent("error",{reason:"acknowledgement_capture_failed"}).catch(()=>{});stop("acknowledgement_capture_failed","error").catch(()=>{});return;}}const playAttempt=audio.play();if(playAttempt)playAttempt.catch(error=>log("remote_audio_play_failed",{message:String(error.message).slice(0,120)}));log("remote_audio_track")};
+  pc.ontrack=event=>{remoteStream=event.streams[0];if(acknowledgementCaptureLabel&&!acknowledgementCapture){try{acknowledgementCapture=createAcknowledgementCapture(remoteStream);}catch{hostEvent("error",{reason:"acknowledgement_capture_failed"}).catch(()=>{});stop("acknowledgement_capture_failed","error").catch(()=>{});return;}}attachRemoteAudio().catch(error=>log("remote_audio_play_failed",{message:String(error.message).slice(0,120)}));};
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};
   pc.addTrack(track,stream);
   dc=pc.createDataChannel("oai-events");
@@ -400,6 +437,7 @@ async function enableInput(command){
 async function stop(reason="command",finalState="wake-ready"){
   const endingSession=sessionId;if(!endingSession)return;stopInputLevels();sessionId=null;
   if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
+  resetCachedAcknowledgementPlayback();
   setUiState("stopping");showEndControl(false);
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
@@ -463,6 +501,8 @@ function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringi
 $("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop").addEventListener("click",()=>{setUiState("stopping");$("stop").disabled=true;post("/api/stop").catch(error=>setUiState("error",`Could not end the conversation: ${error.message}`));});$("app-settings").addEventListener("click",openAppSettings);
 function releasePageMedia(){
   if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
+  resetCachedAcknowledgementPlayback();
+  if(cachedAcknowledgementUrl){URL.revokeObjectURL(cachedAcknowledgementUrl);cachedAcknowledgementUrl=null;}
   acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;
   const activeStream=stream;stream=null;
   if(activeStream)activeStream.getTracks().forEach(track=>track.stop());

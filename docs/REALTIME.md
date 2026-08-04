@@ -11,21 +11,20 @@ wake phrase; Python closes its wake microphone before Chrome obtains WebRTC
 media. Follow-up turns and barge-in then remain inside one session without
 another wake.
 
-The first-turn ready contract is audible: wait until the same-session Mandarin
-“嗯，我在，请说。” acknowledgement finishes, then speak. After wake, Python queues the Realtime
-handoff immediately. Chrome acquires its audio track disabled, negotiates, and
-posts its SDP to the loopback host. The host creates one already-configured
-Realtime call; `session.created` is therefore the configuration barrier. The
-browser separately records SDP-answer-to-data-channel-open and
-data-channel-open-to-`session.created`; those two bounded phases reconcile to
-the existing session-configuration total. RT001 also records the prepared
-acknowledgement asset duration separately from wall-clock playback so player
-and device overhead are not mistaken for spoken audio. Only
-then does the configured Realtime call synthesize the short audio-only bridge;
-after response and playback completion Python sends one session-scoped
-input-enable command. `host_connected` therefore means `input_ready`, not
-merely that a transport exists. Speech before the bridge is intentionally not
-buffered by this version.
+The first-turn ready contract is audible: wait until the Mandarin
+“嗯，我在，请说。” acknowledgement finishes, then speak. After wake, Python
+releases its microphone and queues the Realtime handoff immediately. The
+default `cached` mode starts the validated Realtime-derived WAV in the browser
+while Chrome concurrently acquires a disabled audio track and negotiates the
+single configured Realtime call. `session.created` is the configuration
+barrier. Input opens only after both that barrier and cached playback
+completion, regardless of which finishes first. The cached cue and subsequent
+Realtime answers use the same browser audio element and configured gain;
+switching from the cue to the remote stream does not create a second output
+path. `host_connected` therefore means `input_ready`, not merely that a
+transport exists. Speech before the cue completes is intentionally not
+buffered by this version. Explicit `realtime` and `local` acknowledgement modes
+remain available for comparison and rollback.
 
 ## Lifecycle and ownership
 
@@ -114,20 +113,22 @@ prefers the standardized `all` mode when the active track advertises it.
 Sanitized host evidence records the requested mode, actual browser setting,
 and remote playback-buffer start/stop separately from response generation.
 
-The acknowledgement and answer use the same Realtime session, `alloy` voice,
-and checked-in `0.5` browser gain. That gain is the target-Mac profile, not a
-universal device-loudness guarantee. If local hardware requires another gain,
-repeat both a normal answer and a deliberate barge-in. Do not treat headphones
-alone as built-in-speaker proof. Server-managed interruption remains enabled.
+The default cached acknowledgement and later answer use the same browser audio
+element, `alloy` voice profile, and checked-in `0.5` gain. That gain is the
+target-Mac profile, not a universal device-loudness guarantee. If local hardware
+requires another gain, repeat both a normal answer and a deliberate barge-in.
+Do not treat headphones alone as built-in-speaker proof. Server-managed
+interruption remains enabled.
 
 ### A/B acknowledgement experiment
 
-The completed A/B experiment selected the short Mandarin bridge
-`嗯，我在，请说。` as the normal Realtime-backend acknowledgement. It does not
-make negotiation faster: it replaces post-configuration dead air with an
-audible cue and keeps input gated until the cue finishes. Set
-`REALTIME_ACKNOWLEDGEMENT_MODE=local` to roll back to the checked-in 480 ms
-asset without changing the classic pipeline.
+The completed selection retained a natural Mandarin bridge,
+`嗯，我在，请说。`, as a validated 2,429 ms local WAV. The default `cached`
+mode starts that asset immediately after wake while negotiation runs in
+parallel; input opens only after both playback and configured-session readiness.
+Set `REALTIME_ACKNOWLEDGEMENT_MODE=realtime` to restore the paid same-session
+generated ACK, or `local` to roll back to the prior 480 ms `afplay` asset without
+changing the classic pipeline.
 
 The acknowledgement response is audio-only, disables tools, and uses an explicit
 Mandarin instruction because no user audio exists yet from which to infer a

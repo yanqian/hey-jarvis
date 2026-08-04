@@ -2523,9 +2523,9 @@
         "Playback, asset validation, negotiation, configuration, timeout, cancellation, Settings, sleep, and transport failures converge on bounded cleanup without double ACK, stranded media, or lost wake ownership; explicit live-Realtime and prior-local rollback modes remain available.",
         "Focused concurrency/order/failure/privacy tests, JavaScript syntax, Realtime fake smoke, final ./init.sh, fast coding evidence, one target-Mac overall-flow run measuring wake-to-ACK and wake-to-input-ready with normal answer, farewell, and recovery, and separate cold-start evaluator approval pass."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

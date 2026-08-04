@@ -22,7 +22,7 @@ from typing import Callable, Mapping
 from src.audio_input import open_microphone_stream
 from src.config import ConfigError, DEFAULT_REALTIME_END_PHRASES, load_settings
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffError, SoundDeviceWakeLease
-from src.realtime_ack_asset import RealtimeAckAssetError, store_candidate
+from src.realtime_ack_asset import RealtimeAckAssetError, load_selected_asset, store_candidate
 from src.tools.router import FX_SUPPORTED_CURRENCIES
 
 
@@ -306,6 +306,9 @@ class HostHTTPServer(ThreadingHTTPServer):
     settings: object | None
     capability_lease: str | None
     acknowledgement_candidate_root: Path
+    acknowledgement_mode: str
+    cached_acknowledgement_audio: bytes | None
+    cached_acknowledgement_manifest: dict[str, object] | None
 
 
 def build_server(
@@ -321,9 +324,28 @@ def build_server(
     settings: object | None = None,
     capability_lease: str | None = None,
     acknowledgement_candidate_root: str | Path = "tmp/realtime-ack-candidates",
+    cached_acknowledgement_audio_path: str | Path | None = None,
+    cached_acknowledgement_manifest_path: str | Path | None = None,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
+    cached_audio: bytes | None = None
+    cached_manifest: dict[str, object] | None = None
+    if acknowledgement_mode == "cached":
+        if cached_acknowledgement_audio_path is None or cached_acknowledgement_manifest_path is None:
+            raise HostServerError("Cached Realtime acknowledgement asset is not configured")
+        try:
+            cached_audio, cached_manifest = load_selected_asset(
+                Path(cached_acknowledgement_audio_path),
+                Path(cached_acknowledgement_manifest_path),
+            )
+        except RealtimeAckAssetError as exc:
+            raise HostServerError(str(exc)) from exc
+        if settings is not None and (
+            cached_manifest.get("model") != settings.realtime_model
+            or cached_manifest.get("voice") != settings.realtime_voice
+        ):
+            raise HostServerError("Cached Realtime acknowledgement model or voice does not match settings")
     lease = SoundDeviceWakeLease(open_microphone_stream) if real_microphone else MemoryWakeLease()
     server = HostHTTPServer((host, port), HostRequestHandler)
     server.coordinator = HandoffCoordinator(
@@ -337,6 +359,9 @@ def build_server(
     server.settings = settings
     server.capability_lease = capability_lease
     server.acknowledgement_candidate_root = Path(acknowledgement_candidate_root)
+    server.acknowledgement_mode = acknowledgement_mode
+    server.cached_acknowledgement_audio = cached_audio
+    server.cached_acknowledgement_manifest = cached_manifest
     return server
 
 
@@ -392,15 +417,30 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             except ConfigError as exc:
                 self._json(HTTPStatus.CONFLICT, {"error": "host_control_failed", "message": str(exc)})
                 return
-            self._json(
-                HTTPStatus.OK,
-                {
-                    "model": settings.realtime_model,
-                    "voice": settings.realtime_voice,
-                    "output_volume": settings.realtime_output_volume,
-                    "input_noise_reduction": settings.realtime_input_noise_reduction,
-                },
-            )
+            payload: dict[str, object] = {
+                "model": settings.realtime_model,
+                "voice": settings.realtime_voice,
+                "output_volume": settings.realtime_output_volume,
+                "input_noise_reduction": settings.realtime_input_noise_reduction,
+            }
+            host_server = getattr(self, "server", None)
+            mode = getattr(host_server, "acknowledgement_mode", "local")
+            manifest = getattr(host_server, "cached_acknowledgement_manifest", None)
+            if mode == "cached" and isinstance(manifest, dict):
+                payload["acknowledgement"] = {
+                    "mode": "cached",
+                    "url": "/acknowledgement.wav",
+                    "duration_ms": manifest["duration_ms"],
+                    "sha256": manifest["sha256"],
+                }
+            self._json(HTTPStatus.OK, payload)
+            return
+        if parsed.path == "/acknowledgement.wav":
+            body = getattr(self.server, "cached_acknowledgement_audio", None)
+            if not isinstance(body, bytes):
+                self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                return
+            self._bytes(HTTPStatus.OK, body, "audio/wav")
             return
         asset = resolve_static(parsed.path)
         if asset is None:

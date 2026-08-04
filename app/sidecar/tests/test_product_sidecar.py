@@ -12,6 +12,8 @@ sys.path.insert(0, str(SIDECAR_DIR))
 
 from product_sidecar import (  # noqa: E402
     ACKNOWLEDGEMENT_RESOURCE,
+    CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE,
+    CACHED_ACKNOWLEDGEMENT_RESOURCE,
     LifecycleDiagnostics,
     ProductRuntimeError,
     parse_private_credentials,
@@ -216,6 +218,14 @@ class ProductSidecarTests(unittest.TestCase):
         self.assertEqual(
             ACKNOWLEDGEMENT_RESOURCE.as_posix(),
             "assets/wake_acknowledgement_alloy.mp3",
+        )
+        self.assertEqual(
+            CACHED_ACKNOWLEDGEMENT_RESOURCE.as_posix(),
+            "assets/realtime_acknowledgement_alloy_zh.wav",
+        )
+        self.assertEqual(
+            CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE.as_posix(),
+            "assets/realtime_acknowledgement_alloy_zh.json",
         )
 
 

@@ -38,6 +38,8 @@ from src.tools.providers import provider_config_from_settings  # noqa: E402
 
 LOGGER = logging.getLogger("hey_jarvis.mac_sidecar")
 ACKNOWLEDGEMENT_RESOURCE = Path("assets/wake_acknowledgement_alloy.mp3")
+CACHED_ACKNOWLEDGEMENT_RESOURCE = Path("assets/realtime_acknowledgement_alloy_zh.wav")
+CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE = Path("assets/realtime_acknowledgement_alloy_zh.json")
 PRIVATE_BOOTSTRAP_MAX_BYTES = 4096
 OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 DIAGNOSTIC_LIMIT_BYTES = 512 * 1024
@@ -218,6 +220,10 @@ class ProductRuntime:
         )
         validate_openai_credential(settings.openai_api_key)
         acknowledgement = (resource_dir / ACKNOWLEDGEMENT_RESOURCE).resolve()
+        cached_acknowledgement = (resource_dir / CACHED_ACKNOWLEDGEMENT_RESOURCE).resolve()
+        cached_acknowledgement_manifest = (
+            resource_dir / CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE
+        ).resolve()
         settings = replace(
             settings,
             wake_acknowledgement_audio_path=acknowledgement,
@@ -236,10 +242,13 @@ class ProductRuntime:
             0,
             real_microphone=True,
             wake_after_arm=True,
+            acknowledgement_mode=settings.realtime_acknowledgement_mode,
             end_phrases=settings.realtime_end_phrases,
             tool_provider_config=provider_config_from_settings(settings),
             settings=settings,
             capability_lease=session_id,
+            cached_acknowledgement_audio_path=cached_acknowledgement,
+            cached_acknowledgement_manifest_path=cached_acknowledgement_manifest,
         )
         server_thread = threading.Thread(
             target=server.serve_forever,

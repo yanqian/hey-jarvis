@@ -141,7 +141,7 @@ def run_fake_smoke() -> FakeSmokeResult:
         lease,
         clock=clock,
         session_ids=lambda: "fake-session",
-        acknowledgement_mode="realtime",
+        acknowledgement_mode="cached",
         end_phrases=("goodbye",),
         tool_provider_config=ProviderConfig(
             default_location="Singapore",
@@ -182,17 +182,13 @@ def run_fake_smoke() -> FakeSmokeResult:
             exclusive_handoff = not lease.is_open
             coordinator.host_event("microphone_requested", session_id)
             coordinator.host_event("microphone_acquired", session_id, echoCancellation=True)
+            coordinator.host_event("cached_ack_playback_started", session_id)
             coordinator.host_event("transport_connected", session_id)
             coordinator.host_event("session_created", session_id)
             coordinator.host_event("session_configured", session_id)
         elif coordinator.state == HandoffState.HOST_READY:
             if not acknowledgement_completed:
-                coordinator.host_event("realtime_ack_response_created", session_id)
-                coordinator.host_event("realtime_ack_playback_started", session_id)
-                coordinator.host_event(
-                    "realtime_ack_response_done", session_id, reason="completed"
-                )
-                coordinator.host_event("realtime_ack_playback_stopped", session_id)
+                coordinator.host_event("cached_ack_playback_stopped", session_id)
                 acknowledgement_completed = True
             else:
                 coordinator.host_event("connected", session_id)

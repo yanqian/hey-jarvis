@@ -36,7 +36,7 @@ MAX_HANDOFF_TIMING_MS = 60_000
 FIXTURE_AUDIO_NAMES = frozenset({"turn-1", "turn-2"})
 INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 LOCAL_TIMING_MARKERS = frozenset({"wake_confirmed", "ack_started", "ack_completed"})
-ACKNOWLEDGEMENT_MODES = frozenset({"local", "realtime"})
+ACKNOWLEDGEMENT_MODES = frozenset({"cached", "local", "realtime"})
 ACKNOWLEDGEMENT_CAPTURE_LABEL = re.compile(r"^candidate-[0-9]{2}$")
 HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
@@ -178,7 +178,7 @@ class HandoffCoordinator:
         tool_now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         if acknowledgement_mode not in ACKNOWLEDGEMENT_MODES:
-            raise ValueError("acknowledgement_mode must be 'realtime' or 'local'")
+            raise ValueError("acknowledgement_mode must be 'cached', 'realtime', or 'local'")
         self._wake_lease = wake_lease
         self._clock = clock
         self._session_ids = session_ids
@@ -197,6 +197,8 @@ class HandoffCoordinator:
         self._next_acknowledgement_capture_label: str | None = None
         self._active_acknowledgement_capture_label: str | None = None
         self._acknowledgement_capture_saved = False
+        self._cached_ack_playback_started = False
+        self._cached_ack_playback_stopped = False
         self._realtime_ack_response_created = False
         self._realtime_ack_response_done = False
         self._realtime_ack_playback_started = False
@@ -394,6 +396,15 @@ class HandoffCoordinator:
                 )
             )
 
+    @property
+    def cached_acknowledgement_complete(self) -> bool:
+        with self._lock:
+            return (
+                self._active_acknowledgement_mode == "cached"
+                and self._cached_ack_playback_started
+                and self._cached_ack_playback_stopped
+            )
+
     def begin_handoff(self) -> str:
         with self._lock:
             if not self._armed:
@@ -418,6 +429,7 @@ class HandoffCoordinator:
             self._active_acknowledgement_capture_label = self._next_acknowledgement_capture_label
             self._next_acknowledgement_capture_label = None
             self._acknowledgement_capture_saved = False
+            self._reset_cached_acknowledgement()
             self._reset_realtime_acknowledgement()
             self._connected_at = None
             self._last_activity_at = self._clock()
@@ -435,6 +447,8 @@ class HandoffCoordinator:
                 detail["input_level_diagnostics"] = True
             if self._active_acknowledgement_mode == "realtime":
                 detail["acknowledgement_mode"] = "realtime"
+            elif self._active_acknowledgement_mode == "cached":
+                detail["acknowledgement_mode"] = "cached"
             if self._active_acknowledgement_capture_label is not None:
                 detail["acknowledgement_capture_label"] = self._active_acknowledgement_capture_label
             self._enqueue("start", session_id, **detail)
@@ -658,6 +672,22 @@ class HandoffCoordinator:
                     raise HandoffError("Farewell playback completion was out of order")
                 self._farewell_playback_stopped = True
                 self._finish_farewell_if_ready()
+            elif event_type == "cached_ack_playback_started":
+                if (
+                    self._state not in {HandoffState.HOST_STARTING, HandoffState.HOST_READY}
+                    or self._active_acknowledgement_mode != "cached"
+                    or self._cached_ack_playback_started
+                ):
+                    raise HandoffError("Cached acknowledgement playback start was unexpected")
+                self._cached_ack_playback_started = True
+            elif event_type == "cached_ack_playback_stopped":
+                if (
+                    self._state not in {HandoffState.HOST_STARTING, HandoffState.HOST_READY}
+                    or not self._cached_ack_playback_started
+                    or self._cached_ack_playback_stopped
+                ):
+                    raise HandoffError("Cached acknowledgement playback completion was out of order")
+                self._cached_ack_playback_stopped = True
             elif event_type == "realtime_ack_response_created":
                 if (
                     self._state != HandoffState.HOST_READY
@@ -850,6 +880,7 @@ class HandoffCoordinator:
         self._active_acknowledgement_mode = "local"
         self._active_acknowledgement_capture_label = None
         self._acknowledgement_capture_saved = False
+        self._reset_cached_acknowledgement()
         self._reset_realtime_acknowledgement()
         self._connected_at = None
         self._last_activity_at = None
@@ -898,6 +929,10 @@ class HandoffCoordinator:
         self._realtime_ack_response_done = False
         self._realtime_ack_playback_started = False
         self._realtime_ack_playback_stopped = False
+
+    def _reset_cached_acknowledgement(self) -> None:
+        self._cached_ack_playback_started = False
+        self._cached_ack_playback_stopped = False
 
     def _enqueue(self, command_type: str, session_id: str, **detail: object) -> None:
         command = HostCommand(self._next_command_id, command_type, session_id, dict(detail) or None)

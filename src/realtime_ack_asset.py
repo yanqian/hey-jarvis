@@ -184,6 +184,18 @@ def prepare_selected_asset(
 ) -> dict[str, object]:
     source = project_root / CANONICAL_ACK_ASSET
     manifest_path = project_root / CANONICAL_ACK_MANIFEST
+    data, manifest = load_selected_asset(source, manifest_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(destination, data)
+    return {"audio_path": str(destination), **manifest}
+
+
+def load_selected_asset(
+    source: Path,
+    manifest_path: Path,
+) -> tuple[bytes, dict[str, object]]:
+    """Load an owner-selected ACK only after complete manifest verification."""
+
     if not source.is_file() or not manifest_path.is_file():
         raise RealtimeAckAssetError("Selected Realtime ACK asset is missing; capture and promote one first")
     data = source.read_bytes()
@@ -198,9 +210,14 @@ def prepare_selected_asset(
         raise RealtimeAckAssetError("Selected Realtime ACK digest did not match")
     if manifest.get("duration_ms") != info.duration_ms or manifest.get("sample_rate") != info.sample_rate:
         raise RealtimeAckAssetError("Selected Realtime ACK manifest did not match its WAV")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(destination, data)
-    return {"audio_path": str(destination), **manifest}
+    playback_gain = manifest.get("playback_gain")
+    if (
+        isinstance(playback_gain, bool)
+        or not isinstance(playback_gain, (int, float))
+        or not 0 <= playback_gain <= 1
+    ):
+        raise RealtimeAckAssetError("Selected Realtime ACK playback gain was invalid")
+    return data, dict(manifest)
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
