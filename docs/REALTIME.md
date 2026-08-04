@@ -11,8 +11,8 @@ wake phrase; Python closes its wake microphone before Chrome obtains WebRTC
 media. Follow-up turns and barge-in then remain inside one session without
 another wake.
 
-The first-turn ready contract is audible: wait until the local “嗯”
-acknowledgement finishes, then speak. After wake, Python queues the Realtime
+The first-turn ready contract is audible: wait until the same-session Mandarin
+“嗯，我在，请说。” acknowledgement finishes, then speak. After wake, Python queues the Realtime
 handoff immediately. Chrome acquires its audio track disabled, negotiates, and
 posts its SDP to the loopback host. The host creates one already-configured
 Realtime call; `session.created` is therefore the configuration barrier. The
@@ -21,10 +21,10 @@ data-channel-open-to-`session.created`; those two bounded phases reconcile to
 the existing session-configuration total. RT001 also records the prepared
 acknowledgement asset duration separately from wall-clock playback so player
 and device overhead are not mistaken for spoken audio. Only
-then does Python play “嗯” through the exact metadata-duration-bounded local
-path; after process completion it sends one session-scoped
+then does the configured Realtime call synthesize the short audio-only bridge;
+after response and playback completion Python sends one session-scoped
 input-enable command. `host_connected` therefore means `input_ready`, not
-merely that a transport exists. Speech before “嗯” is intentionally not
+merely that a transport exists. Speech before the bridge is intentionally not
 buffered by this version.
 
 ## Lifecycle and ownership
@@ -114,24 +114,22 @@ prefers the standardized `all` mode when the active track advertises it.
 Sanitized host evidence records the requested mode, actual browser setting,
 and remote playback-buffer start/stop separately from response generation.
 
-The local acknowledgement and Realtime answer both use the `alloy` voice
-profile, though their separate synthesis models and playback paths are not
-expected to sound identical. The checked-in `0.5` gain is the target-Mac
-profile, not a universal device-loudness guarantee. If local hardware requires
-another gain, repeat both a normal answer and a deliberate barge-in. Do not
-treat headphones alone as built-in-speaker proof. Server-managed interruption
-remains enabled.
+The acknowledgement and answer use the same Realtime session, `alloy` voice,
+and checked-in `0.5` browser gain. That gain is the target-Mac profile, not a
+universal device-loudness guarantee. If local hardware requires another gain,
+repeat both a normal answer and a deliberate barge-in. Do not treat headphones
+alone as built-in-speaker proof. Server-managed interruption remains enabled.
 
 ### A/B acknowledgement experiment
 
-Production continues to use the checked-in 480 ms local acknowledgement. The
-bounded experiment runner can arm exactly one next handoff to synthesize the
-short Mandarin bridge `嗯，我在，请说。` on that handoff's Realtime session; it
-does not expose a persistent production switch or alter later sessions. The
-bridge does not make negotiation faster: it replaces post-configuration dead
-air with an audible cue and keeps input gated until the cue finishes.
+The completed A/B experiment selected the short Mandarin bridge
+`嗯，我在，请说。` as the normal Realtime-backend acknowledgement. It does not
+make negotiation faster: it replaces post-configuration dead air with an
+audible cue and keeps input gated until the cue finishes. Set
+`REALTIME_ACKNOWLEDGEMENT_MODE=local` to roll back to the checked-in 480 ms
+asset without changing the classic pipeline.
 
-The experimental response is audio-only, disables tools, and uses an explicit
+The acknowledgement response is audio-only, disables tools, and uses an explicit
 Mandarin instruction because no user audio exists yet from which to infer a
 language. It intentionally uses the Realtime API's default output-token limit:
 low numeric caps can truncate even a very short audio response before its

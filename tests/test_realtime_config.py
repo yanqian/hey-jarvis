@@ -19,6 +19,7 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertEqual(defaults.realtime_idle_timeout_seconds, 60.0)
         self.assertEqual(defaults.realtime_server_vad_threshold, 0.8)
         self.assertEqual(defaults.realtime_input_noise_reduction, "far_field")
+        self.assertEqual(defaults.realtime_acknowledgement_mode, "realtime")
         settings = load_settings(
             env={
                 "BACKEND": "pipeline",
@@ -43,7 +44,7 @@ class RealtimeConfigTests(unittest.TestCase):
                 "REALTIME_SERVER_VAD_THRESHOLD": "0.75",
                 "REALTIME_INPUT_NOISE_REDUCTION": "near_field",
                 "REALTIME_INPUT_TRANSCRIPTION_ENABLED": "1",
-                "REALTIME_ACKNOWLEDGEMENT_MODE": "none",
+                "REALTIME_ACKNOWLEDGEMENT_MODE": "local",
                 "REALTIME_DEBUG": "1",
                 "REALTIME_END_PHRASES": "结束,goodbye",
                 "REALTIME_BRIDGE_PORT": "9876",
@@ -60,7 +61,7 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertEqual(settings.realtime_server_vad_threshold, 0.75)
         self.assertEqual(settings.realtime_input_noise_reduction, "near_field")
         self.assertTrue(settings.realtime_input_transcription_enabled)
-        self.assertEqual(settings.realtime_acknowledgement_mode, "none")
+        self.assertEqual(settings.realtime_acknowledgement_mode, "local")
         self.assertTrue(settings.realtime_debug)
         self.assertEqual(settings.realtime_end_phrases, ("结束", "goodbye"))
         self.assertEqual(settings.realtime_bridge_port, 9876)

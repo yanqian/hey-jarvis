@@ -310,6 +310,7 @@ def build_server(
     *,
     real_microphone: bool = False,
     wake_after_arm: bool = False,
+    acknowledgement_mode: str = "local",
     end_phrases: tuple[str, ...] = DEFAULT_REALTIME_END_PHRASES,
     tool_provider_config: object | None = None,
     tool_http_client: object | None = None,
@@ -323,6 +324,7 @@ def build_server(
     server.coordinator = HandoffCoordinator(
         lease,
         open_wake_on_init=not wake_after_arm,
+        acknowledgement_mode=acknowledgement_mode,
         end_phrases=end_phrases,
         tool_provider_config=tool_provider_config,
         tool_http_client=tool_http_client,

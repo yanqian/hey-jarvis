@@ -36,7 +36,7 @@ MAX_HANDOFF_TIMING_MS = 60_000
 FIXTURE_AUDIO_NAMES = frozenset({"turn-1", "turn-2"})
 INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 LOCAL_TIMING_MARKERS = frozenset({"wake_confirmed", "ack_started", "ack_completed"})
-ACKNOWLEDGEMENT_MODES = frozenset({"local", "realtime_experiment"})
+ACKNOWLEDGEMENT_MODES = frozenset({"local", "realtime"})
 HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
         "command_to_token_ms",
@@ -170,11 +170,14 @@ class HandoffCoordinator:
         clock: Callable[[], float] = time.monotonic,
         session_ids: Callable[[], str] = lambda: uuid.uuid4().hex,
         open_wake_on_init: bool = True,
+        acknowledgement_mode: str = "local",
         end_phrases: tuple[str, ...] = (),
         tool_provider_config: object | None = None,
         tool_http_client: object | None = None,
         tool_now_provider: Callable[[], datetime] | None = None,
     ) -> None:
+        if acknowledgement_mode not in ACKNOWLEDGEMENT_MODES:
+            raise ValueError("acknowledgement_mode must be 'realtime' or 'local'")
         self._wake_lease = wake_lease
         self._clock = clock
         self._session_ids = session_ids
@@ -187,7 +190,8 @@ class HandoffCoordinator:
         self._session_created = False
         self._session_configured = False
         self._input_enable_requested = False
-        self._next_acknowledgement_mode = "local"
+        self._acknowledgement_mode = acknowledgement_mode
+        self._next_acknowledgement_mode: str | None = None
         self._active_acknowledgement_mode = "local"
         self._realtime_ack_response_created = False
         self._realtime_ack_response_done = False
@@ -322,7 +326,7 @@ class HandoffCoordinator:
                 raise HandoffError(
                     "Realtime acknowledgement evaluation can only be armed while wake owns the microphone"
                 )
-            self._next_acknowledgement_mode = "realtime_experiment"
+            self._next_acknowledgement_mode = "realtime"
             self._record("realtime_acknowledgement_experiment_armed")
 
     @property
@@ -334,7 +338,7 @@ class HandoffCoordinator:
     def realtime_acknowledgement_complete(self) -> bool:
         with self._lock:
             return (
-                self._active_acknowledgement_mode == "realtime_experiment"
+                self._active_acknowledgement_mode == "realtime"
                 and self._realtime_ack_response_done
                 and self._realtime_ack_playback_started
                 and self._realtime_ack_playback_stopped
@@ -357,8 +361,10 @@ class HandoffCoordinator:
             self._session_created = False
             self._session_configured = False
             self._input_enable_requested = False
-            self._active_acknowledgement_mode = self._next_acknowledgement_mode
-            self._next_acknowledgement_mode = "local"
+            self._active_acknowledgement_mode = (
+                self._next_acknowledgement_mode or self._acknowledgement_mode
+            )
+            self._next_acknowledgement_mode = None
             self._reset_realtime_acknowledgement()
             self._connected_at = None
             self._last_activity_at = self._clock()
@@ -374,8 +380,8 @@ class HandoffCoordinator:
             detail: dict[str, object] = {}
             if input_level_diagnostics:
                 detail["input_level_diagnostics"] = True
-            if self._active_acknowledgement_mode == "realtime_experiment":
-                detail["acknowledgement_mode"] = "realtime_experiment"
+            if self._active_acknowledgement_mode == "realtime":
+                detail["acknowledgement_mode"] = "realtime"
             self._enqueue("start", session_id, **detail)
             return session_id
 
@@ -600,7 +606,7 @@ class HandoffCoordinator:
             elif event_type == "realtime_ack_response_created":
                 if (
                     self._state != HandoffState.HOST_READY
-                    or self._active_acknowledgement_mode != "realtime_experiment"
+                    or self._active_acknowledgement_mode != "realtime"
                     or self._realtime_ack_response_created
                 ):
                     raise HandoffError("Realtime acknowledgement response creation was unexpected")

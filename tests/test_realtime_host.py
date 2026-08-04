@@ -250,8 +250,8 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator.request_realtime_acknowledgement_experiment()
         session_id = coordinator.begin_handoff()
         command = coordinator.command_after(0)
-        self.assertEqual(command["acknowledgement_mode"], "realtime_experiment")
-        self.assertEqual(coordinator.active_acknowledgement_mode, "realtime_experiment")
+        self.assertEqual(command["acknowledgement_mode"], "realtime")
+        self.assertEqual(coordinator.active_acknowledgement_mode, "realtime")
         coordinator.host_event("transport_connected", session_id)
         coordinator.host_event("session_created", session_id)
         coordinator.host_event("session_configured", session_id)
@@ -268,6 +268,29 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertEqual(next_command["session_id"], next_session)
         self.assertNotIn("acknowledgement_mode", next_command)
 
+    def test_realtime_acknowledgement_mode_applies_to_every_handoff(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(
+            lease,
+            session_ids=lambda: "session-1",
+            acknowledgement_mode="realtime",
+        )
+        coordinator.host_event("armed")
+        last_command_id = 0
+        for _ in range(2):
+            session_id = coordinator.begin_handoff()
+            command = coordinator.command_after(last_command_id)
+            while command["type"] != "start":
+                last_command_id = command["command_id"]
+                command = coordinator.command_after(last_command_id)
+            self.assertEqual(command["acknowledgement_mode"], "realtime")
+            last_command_id = command["command_id"]
+            coordinator.host_event("transport_connected", session_id)
+            coordinator.host_event("session_created", session_id)
+            coordinator.host_event("session_configured", session_id)
+            coordinator.request_stop("test")
+            coordinator.host_event("stopped", session_id, reason="test")
+
     def test_realtime_acknowledgement_endpoint_arms_only_the_next_handoff(self):
         coordinator, _lease = self.build_coordinator()
         coordinator.host_event("armed")
@@ -281,7 +304,7 @@ class RealtimeHostTests(unittest.TestCase):
         coordinator.begin_handoff()
         self.assertEqual(
             coordinator.command_after(0)["acknowledgement_mode"],
-            "realtime_experiment",
+            "realtime",
         )
 
     def test_only_the_armed_browser_instance_can_consume_commands_or_emit_events(self):
@@ -1216,12 +1239,12 @@ class RealtimeHostTests(unittest.TestCase):
             "async function requestFarewell",
             "async function startFarewell",
             "function startRealtimeAcknowledgement",
-            'metadata:{purpose:"acknowledgement_experiment"}',
+            'metadata:{purpose:"acknowledgement"}',
             'hostEvent("realtime_ack_response_created")',
             'hostEvent("realtime_ack_response_done"',
             'hostEvent("realtime_ack_playback_started")',
             'hostEvent("realtime_ack_playback_stopped")',
-            'acknowledgement_mode==="realtime_experiment"',
+            'acknowledgement_mode==="realtime"',
             'result.status==="farewell"',
             'inputTrack.enabled=false',
             'hostEvent("farewell_started")',
@@ -1249,6 +1272,13 @@ class RealtimeHostTests(unittest.TestCase):
             "async function finishIfStopping", 1
         )[0]
         self.assertNotIn("max_output_tokens", farewell)
+        request_farewell = javascript.split("async function requestFarewell", 1)[1].split(
+            "async function startFarewell", 1
+        )[0]
+        self.assertIn(
+            'if(responseActive&&!farewellCallId&&dc?.readyState==="open")',
+            request_farewell,
+        )
         for forbidden_tool in ('name:"weather"', 'name:"stock"', 'name:"fx"'):
             self.assertNotIn(forbidden_tool, javascript)
         self.assertNotIn("transcript decides", javascript)

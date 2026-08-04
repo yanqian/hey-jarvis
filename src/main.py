@@ -452,6 +452,7 @@ def run_realtime_forever(settings: Settings) -> int:
         settings.realtime_bridge_port,
         real_microphone=True,
         wake_after_arm=True,
+        acknowledgement_mode=settings.realtime_acknowledgement_mode,
         end_phrases=settings.realtime_end_phrases,
         tool_provider_config=provider_config_from_settings(settings),
     )

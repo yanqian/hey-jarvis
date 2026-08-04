@@ -2289,3 +2289,87 @@ while acknowledgement comparison is an experimental measurement capability
 that can fail or be deferred without invalidating farewell. F107 intentionally
 keeps semantic and exact-phrase entry together because both converge on one
 farewell state and one teardown verification surface.
+
+### Promote Realtime-Native Acknowledgement To Production
+
+Feature mapping: F109.
+
+Goal: make the F108-accepted same-session Realtime Mandarin bridge the normal
+acknowledgement for every Realtime backend wake, so acknowledgement, answers,
+and farewell use the same active voice, gain, and WebRTC playback path.
+
+Included scope: default the Realtime backend to the native short bridge; keep
+browser input disabled until both ACK response and playback complete; reuse the
+existing active Realtime model, voice, remote audio element, and output gain;
+provide a validated environment-level `local` rollback mode; retain the local
+asset implementation for the classic pipeline and explicit rollback; rename
+experimental lifecycle language to production language where externally
+visible; document the added perceived/observed latency; and verify one complete
+owner-led flow from wake through ACK, normal or tool-backed turns, follow-up,
+native farewell, teardown, and wake recovery.
+
+Excluded scope: removing the local ACK asset/player, changing the classic
+pipeline backend, adding a Settings UI toggle, changing the Realtime model,
+voice, output volume, prompt policy, ordinary VAD/barge-in, tools, idle or
+maximum duration, wake detector, Smart Speaker power policy, or claiming a
+latency improvement. No automatic local ACK is played after a Realtime ACK
+failure.
+
+Core flows: a normal Realtime wake closes local wake capture and starts one
+configured WebRTC session with input disabled. The browser creates exactly one
+audio-only, no-tool Mandarin bridge on that session, waits for response and
+speaker-buffer completion, then enables input. Conversation turns and tools
+continue in the same session. An end intent plays the accepted native farewell,
+then existing teardown restores wake ownership. If ACK generation, playback,
+transport, timeout, explicit stop, Settings, sleep, or cancellation fails, the
+session cleans up once and returns to wake listening without a second cue. An
+operator can set the validated rollback mode to `local` and recover the F108
+pre-promotion behavior.
+
+Constraints: the selected default accepts F108's measured 3,436 ms input-ready
+regression in exchange for the owner's preferred voice consistency and natural
+short bridge; physical acoustic onset remains unmeasured; input cannot open
+before ACK playback completion; response tools remain disabled; production
+must not require the A/B endpoint or one-shot arming; privacy-safe reporting
+retains no audio, transcripts, response text, credentials, SDP, ICE, provider
+payloads, or private tool data; automated verification uses no live devices,
+network, credentials, or paid API; any real overall-flow test requires explicit
+owner authorization.
+
+Ambiguities or assumptions: the production bridge is fixed Mandarin because no
+user audio exists before the first response and the accepted local cue was also
+Chinese. `REALTIME_ACKNOWLEDGEMENT_MODE=realtime` is assumed to be the smallest
+truthful rollback control; `local` is the only alternative. Failure favors
+silent safe recovery over an unexpected duplicate local cue. The user has
+selected Realtime based on F108's target-Mac perceptual verdict despite its
+slower measured input-ready boundary.
+
+Required capabilities: F107 farewell lifecycle, F108 production-ready
+same-session ACK lifecycle and accepted live evidence, configuration validation,
+coordinator/browser input gating, deterministic fake server events, JavaScript
+syntax checking, full project recovery, explicit live-device/API authorization,
+fast coding evidence, and a separate cold-start Evaluator Agent.
+
+Implementation paths: `src/config.py`, `.env.example`,
+`src/realtime_host/server.py`, `src/realtime_host/coordinator.py`,
+`src/realtime_host/static/app.js`, `src/realtime/controller.py`,
+`src/realtime/fake_smoke.py`, `docs/CONFIGURATION.md`, `docs/REALTIME.md`,
+`MANUAL_TESTING.md`, focused tests under `tests/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: default and explicit local-mode configuration; every
+ordinary Realtime handoff selects exactly one native ACK without calling the A/B
+arming endpoint; response/playback completion precedes input-ready; rollback
+uses the existing local path; ACK failure never double-plays and restores wake;
+ordinary answers, tools, follow-up, barge-in, farewell, idle/max duration,
+Settings/sleep/stop, privacy, and classic pipeline behavior remain intact;
+focused tests; JavaScript syntax; full project tests; Realtime fake smoke; final
+`./init.sh`; one explicitly authorized target-Mac overall flow; fast coding
+evidence; and separate evaluator approval.
+
+Decomposition decision: F109 is one feature because production selection,
+validated rollback, lifecycle wording, documentation, and regression tests form
+one user-visible acknowledgement policy with one configuration and Realtime
+handoff verification surface. Settings UI and broader language selection remain
+separate potential work.

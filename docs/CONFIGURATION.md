@@ -20,15 +20,16 @@ diagnostics.
 | `REALTIME_SERVER_VAD_THRESHOLD` | `0.8` | Server speech activation threshold. |
 | `REALTIME_INPUT_NOISE_REDUCTION` | `far_field` | Input preprocessing: `far_field` for built-in speaker/mic, `near_field` for a headset, or `none`. |
 | `REALTIME_INPUT_TRANSCRIPTION_ENABLED` | `1` | Enable rough-guide asynchronous input transcription. |
-| `REALTIME_ACKNOWLEDGEMENT_MODE` | `local` | Play acknowledgement before browser handoff. |
+| `REALTIME_ACKNOWLEDGEMENT_MODE` | `realtime` | Use the same-session Realtime Mandarin acknowledgement; set `local` for rollback to the prepared asset. |
 | `REALTIME_DEBUG` | `0` | Add bounded local lifecycle diagnostics. |
 | `REALTIME_END_PHRASES` | bilingual list | Exact conservative transcription fallback phrases. |
 | `REALTIME_BRIDGE_HOST` | `127.0.0.1` | Loopback host; keep local. |
 | `REALTIME_BRIDGE_PORT` | `8770` | Loopback host port. |
 
-The shared target-Mac profile uses `alloy` for both the prepared local cue and
-Realtime output, with checked-in browser gain `0.5`. Separate synthesis models
-and playback paths mean the voices are perceptually closer, not identical.
+The default Realtime path synthesizes its acknowledgement and later answers in
+the same session with the same `alloy` voice and browser gain `0.5`. The
+`local` rollback uses the prepared asset and its separate playback path, so it
+is perceptually close rather than identical.
 The built-in Mac profile uses
 `REALTIME_INPUT_NOISE_REDUCTION=far_field`; a close headset microphone should
 use `near_field`. The browser prefers standardized all-system-audio echo

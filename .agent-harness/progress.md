@@ -436,7 +436,20 @@ readiness followed playback completion by 284 ms. The evidence therefore
 recommends considering Realtime for voice consistency without claiming faster
 negotiation, an acoustic-onset SLO, or an automatic production switch.
 
-No feature is currently in progress.
+F109 is evaluator-approved. The normal Realtime backend now uses the accepted
+same-session Mandarin acknowledgement on every wake, keeps the classic pipeline
+local, and retains `REALTIME_ACKNOWLEDGEMENT_MODE=local` as an environment-level
+rollback. Input remains gated through ACK playback completion, and failures
+recover silently rather than double-playing a local cue. An authorized run
+confirmed the audible ACK and normal answer after correcting a private `.env`
+override. It also exposed and fixed an intermittent farewell ordering race by
+letting semantic end-tool responses finish naturally instead of sending an
+unnecessary cancellation immediately before farewell creation. In the final
+authorized retry, the owner heard both the Mandarin ACK and `再见`; sanitized
+evidence confirms input enablement only after ACK playback, same-session
+answers/tools/follow-up/interruption, `farewell_complete`, and wake recovery 93
+ms after media teardown. Independent approval is recorded as `EVAL_PASS: F109`
+in `.agent-harness/runs/20260804T084407Z-F109-evaluation-pass.md`.
 
 F103 is evaluator-approved as the completed desktop icon-consistency baseline.
 
@@ -476,6 +489,12 @@ tester or distinct clean-profile trials. Public binary distribution remains
 on hold.
 
 ## Recently Completed
+
+F109 - Make Realtime acknowledgement the production default.
+
+F109 promotes the accepted same-session Mandarin ACK while preserving local
+rollback, fixes the semantic-farewell cancellation race found in live testing,
+and passes owner-heard ACK-to-farewell acceptance plus independent evaluation.
 
 F108 - Compare local and Realtime acknowledgement latency.
 

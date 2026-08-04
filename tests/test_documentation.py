@@ -182,6 +182,7 @@ class DocumentationTests(unittest.TestCase):
         f103 = next(feature for feature in features if feature["id"] == "F103")
         f107 = next(feature for feature in features if feature["id"] == "F107")
         f108 = next(feature for feature in features if feature["id"] == "F108")
+        f109 = next(feature for feature in features if feature["id"] == "F109")
         self.assertEqual(f100["status"], "done")
         self.assertEqual(f101["status"], "done")
         self.assertEqual(f102["status"], "done")
@@ -191,7 +192,10 @@ class DocumentationTests(unittest.TestCase):
             self.assertIn("cold-start evaluator for F103", next_feature)
             self.assertIn("resume F093", next_feature)
         elif f103["status"] == "done":
-            if f108["status"] == "in_progress":
+            if f109["status"] == "in_progress":
+                self.assertIn("F109 is in progress", current_feature)
+                self.assertIn("Complete F109", next_feature)
+            elif f108["status"] == "in_progress":
                 self.assertIn("F108 is in progress", current_feature)
                 self.assertIn("Complete F108", next_feature)
             elif f107["status"] == "in_progress":
@@ -199,7 +203,10 @@ class DocumentationTests(unittest.TestCase):
                 self.assertIn("Implement F108 next", next_feature)
             else:
                 self.assertIn("F103 is evaluator-approved", normalized_current_feature)
-                self.assertIn("No feature is currently in progress", current_feature)
+                if f109["status"] == "done":
+                    self.assertIn("F109 is evaluator-approved", current_feature)
+                else:
+                    self.assertIn("No feature is currently in progress", current_feature)
                 self.assertIn("Resume F093", next_feature)
         self.assertIn("F093 is pending (`status=todo`)", current_feature)
         self.assertIn("internal artifact", current_feature)

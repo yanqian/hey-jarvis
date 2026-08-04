@@ -141,6 +141,7 @@ def run_fake_smoke() -> FakeSmokeResult:
         lease,
         clock=clock,
         session_ids=lambda: "fake-session",
+        acknowledgement_mode="realtime",
         end_phrases=("goodbye",),
         tool_provider_config=ProviderConfig(
             default_location="Singapore",
@@ -161,6 +162,7 @@ def run_fake_smoke() -> FakeSmokeResult:
     user_turns = 0
     assistant_completions = 0
     connected = False
+    acknowledgement_completed = False
     exclusive_handoff = False
     barge_in = False
     calculator_output = False
@@ -171,7 +173,7 @@ def run_fake_smoke() -> FakeSmokeResult:
 
     def sleep(seconds: float) -> None:
         nonlocal stage, user_turns, assistant_completions
-        nonlocal connected, exclusive_handoff, barge_in
+        nonlocal connected, acknowledgement_completed, exclusive_handoff, barge_in
         nonlocal calculator_output, weather_output, local_time_output, fx_output
         nonlocal stock_output
         clock.advance(max(seconds, 0.1))
@@ -184,8 +186,17 @@ def run_fake_smoke() -> FakeSmokeResult:
             coordinator.host_event("session_created", session_id)
             coordinator.host_event("session_configured", session_id)
         elif coordinator.state == HandoffState.HOST_READY:
-            coordinator.host_event("connected", session_id)
-            connected = coordinator.state == HandoffState.HOST_ACTIVE
+            if not acknowledgement_completed:
+                coordinator.host_event("realtime_ack_response_created", session_id)
+                coordinator.host_event("realtime_ack_playback_started", session_id)
+                coordinator.host_event(
+                    "realtime_ack_response_done", session_id, reason="completed"
+                )
+                coordinator.host_event("realtime_ack_playback_stopped", session_id)
+                acknowledgement_completed = True
+            else:
+                coordinator.host_event("connected", session_id)
+                connected = coordinator.state == HandoffState.HOST_ACTIVE
         elif coordinator.state == HandoffState.HOST_ACTIVE and stage == 0:
             user_turns += 1
             coordinator.host_event("speech_started", session_id)

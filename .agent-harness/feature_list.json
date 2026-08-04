@@ -2470,6 +2470,27 @@
         "F080",
         "F107"
       ]
+    },
+    {
+      "id": "F109",
+      "title": "Make Realtime acknowledgement the production default",
+      "description": "Use the accepted same-session Mandarin Realtime bridge on every normal Realtime wake while retaining a validated local rollback mode and deterministic safe recovery.",
+      "acceptance": [
+        "The Realtime backend defaults every ordinary wake handoff to exactly one audio-only, no-tool same-session Mandarin bridge using the active model, voice, WebRTC audio element, and output gain; it no longer depends on the experimental arming endpoint, while the classic pipeline remains on its local acknowledgement.",
+        "Browser input stays disabled until the correlated ACK response and output-buffer playback both complete, then becomes ready for normal answers, tools, follow-ups, barge-in, and the F107 native farewell without opening a second Realtime connection or changing their behavior.",
+        "A validated REALTIME_ACKNOWLEDGEMENT_MODE accepts only realtime or local, defaults to realtime, and restores the existing local Realtime-backend ACK path when explicitly selected without deleting its asset/player implementation or exposing a new Settings UI.",
+        "ACK generation, playback, timeout, cancellation, transport, explicit-stop, Settings, and sleep failures use one bounded cleanup and wake-recovery path without automatically playing a second local cue, stranding media, or retaining private audio, transcript, response text, credentials, SDP, ICE, provider payloads, or tool data.",
+        "Focused configuration/coordinator/controller/browser/privacy/documentation tests, JavaScript syntax, full project tests, Realtime fake smoke, final ./init.sh, one explicitly authorized target-Mac ACK-to-farewell overall-flow run, fast coding evidence, and separate cold-start evaluator approval pass while documenting F108's accepted latency tradeoff rather than claiming a latency improvement."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F107",
+        "F108"
+      ]
     }
   ]
 }

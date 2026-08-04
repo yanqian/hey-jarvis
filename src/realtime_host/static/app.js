@@ -7,7 +7,7 @@ const KEEP_WARM_MICROPHONE=location.hash==="#smart-speaker-mode";
 let armed=false,lastCommand=0,pc=null,dc=null,stream=null,warmStream=null,inputTrack=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null,sessionCreatedAt=null,dataChannelOpenedAt=null,transportReported=false,configurationReportStarted=false;
 let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
 let responseActive=false,turnResponsePending=false,farewellPending=false,farewellStarted=false,farewellCallId=null,farewellResponseActive=false;
-let acknowledgementExperiment=false,acknowledgementStarted=false,acknowledgementResponseActive=false;
+let realtimeAcknowledgement=false,acknowledgementStarted=false,acknowledgementResponseActive=false;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
@@ -190,7 +190,7 @@ async function requestFarewell(callId=null){
     farewellPending=true;farewellCallId=typeof callId==="string"?callId:null;
     if(inputTrack)inputTrack.enabled=false;
     setUiState("stopping","Saying goodbye before returning to wake listening.");showEndControl(false);
-    if(responseActive&&dc?.readyState==="open"){
+    if(responseActive&&!farewellCallId&&dc?.readyState==="open"){
       if(assistantSpeaking)dc.send(JSON.stringify({type:"output_audio_buffer.clear"}));
       dc.send(JSON.stringify({type:"response.cancel"}));
     }
@@ -218,7 +218,7 @@ async function startFarewell(){
 async function finishIfStopping(result,reason){if(result?.status==="stopping")await stop(reason);}
 
 function startRealtimeAcknowledgement(){
-  if(!acknowledgementExperiment||acknowledgementStarted||dc?.readyState!=="open")return;
+  if(!realtimeAcknowledgement||acknowledgementStarted||dc?.readyState!=="open")return;
   acknowledgementStarted=true;
   dc.send(JSON.stringify({
     type:"response.create",
@@ -227,7 +227,7 @@ function startRealtimeAcknowledgement(){
       instructions:"请只用自然、温暖的普通话说：嗯，我在，请说。不要添加其他内容。",
       tools:[],
       tool_choice:"none",
-      metadata:{purpose:"acknowledgement_experiment"},
+      metadata:{purpose:"acknowledgement"},
     },
   }));
 }
@@ -253,8 +253,8 @@ async function handleServerEvent(event){
   if(event.type==="input_audio_buffer.speech_stopped"){turnResponsePending=true;setUiState("thinking");await hostEvent("speech_stopped");}
   if(event.type==="response.created"){
     responseActive=true;turnResponsePending=false;flushInputLevels();
-    if(event.response?.metadata?.purpose==="acknowledgement_experiment"){
-      acknowledgementResponseActive=true;setUiState("connecting","Playing the experimental acknowledgement.");
+    if(event.response?.metadata?.purpose==="acknowledgement"){
+      acknowledgementResponseActive=true;setUiState("connecting","Playing the acknowledgement.");
       await hostEvent("realtime_ack_response_created");
     }else if(event.response?.metadata?.purpose==="farewell"){
       farewellResponseActive=true;setUiState("stopping","Saying goodbye before returning to wake listening.");
@@ -267,7 +267,7 @@ async function handleServerEvent(event){
   }
   if(event.type==="response.done"){
     responseActive=false;turnResponsePending=false;flushInputLevels();
-    if(event.response?.metadata?.purpose==="acknowledgement_experiment"){
+    if(event.response?.metadata?.purpose==="acknowledgement"){
       await finishIfStopping(await hostEvent("realtime_ack_response_done",{reason:String(event.response?.status||"unknown")}),"realtime_acknowledgement_failed");
     }else if(event.response?.metadata?.purpose==="farewell"){
       await finishIfStopping(await hostEvent("farewell_response_done",{reason:String(event.response?.status||"unknown")}),"farewell_complete");
@@ -279,7 +279,7 @@ async function handleServerEvent(event){
   }
   if(event.type==="output_audio_buffer.started"){
     flushInputLevels();assistantSpeaking=true;
-    if(acknowledgementResponseActive){setUiState("connecting","Playing the experimental acknowledgement.");await hostEvent("realtime_ack_playback_started");}
+    if(acknowledgementResponseActive){setUiState("connecting","Playing the acknowledgement.");await hostEvent("realtime_ack_playback_started");}
     else if(farewellResponseActive){setUiState("stopping","Saying goodbye before returning to wake listening.");await hostEvent("farewell_playback_started");}
     else{setUiState("speaking");await hostEvent("playback_started");}
   }
@@ -308,7 +308,7 @@ async function start(command){
   if(!armed||pc)throw new Error("host is not ready for start");
   handoffTiming={commandReceived:performance.now()};sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   responseActive=false;turnResponsePending=false;farewellPending=false;farewellStarted=false;farewellCallId=null;farewellResponseActive=false;
-  acknowledgementExperiment=command.acknowledgement_mode==="realtime_experiment";acknowledgementStarted=false;acknowledgementResponseActive=false;
+  realtimeAcknowledgement=command.acknowledgement_mode==="realtime";acknowledgementStarted=false;acknowledgementResponseActive=false;
   sessionId=command.session_id;setUiState("connecting");showEndControl(true);
   await hostEvent("microphone_requested");
   handoffTiming.tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived;
@@ -369,7 +369,7 @@ async function stop(reason="command",finalState="wake-ready"){
   else{audio.pause();audio.srcObject=null;}
   handoffTiming=null;sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   responseActive=false;turnResponsePending=false;farewellPending=false;farewellStarted=false;farewellCallId=null;farewellResponseActive=false;assistantSpeaking=false;
-  acknowledgementExperiment=false;acknowledgementStarted=false;acknowledgementResponseActive=false;
+  realtimeAcknowledgement=false;acknowledgementStarted=false;acknowledgementResponseActive=false;
   log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
   setUiState(finalState);
