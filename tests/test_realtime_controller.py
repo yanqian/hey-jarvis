@@ -302,6 +302,115 @@ class RealtimeControllerTests(unittest.TestCase):
         stop_events = [event for event in coordinator.report()["events"] if event.get("command") == "stop"]
         self.assertEqual(stop_events[-1]["reason"], "shutdown")
 
+    def test_farewell_timeout_uses_existing_stop_and_wake_recovery(self):
+        clock, lease, coordinator, detector = build_runtime()
+        farewell_requested = False
+
+        def sleep(seconds: float) -> None:
+            nonlocal farewell_requested
+            clock.advance(max(seconds, 0.1))
+            if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_READY:
+                coordinator.host_event("connected", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_ACTIVE and not farewell_requested:
+                farewell_requested = True
+                coordinator.host_event(
+                    "tool_call",
+                    coordinator.session_id,
+                    call_id="end-call",
+                    name="end_conversation",
+                    arguments="{}",
+                )
+            elif coordinator.state == HandoffState.HOST_STOPPING:
+                coordinator.host_event("stopped", coordinator.session_id)
+
+        result = RealtimeSessionController(
+            coordinator=coordinator,
+            wake_detector=detector,
+            play_acknowledgement=lambda: None,
+            idle_timeout_seconds=60.0,
+            max_duration_seconds=600.0,
+            farewell_timeout_seconds=0.3,
+            clock=clock,
+            sleep=sleep,
+        ).run_once()
+        self.assertTrue(farewell_requested)
+        self.assertEqual(result.reason, "farewell_timeout")
+        self.assertTrue(result.recovered_to_wake)
+        self.assertTrue(lease.is_open)
+
+    def test_realtime_acknowledgement_gates_input_without_local_playback(self):
+        clock, lease, coordinator, detector = build_runtime()
+        coordinator.request_realtime_acknowledgement_experiment()
+        local_acknowledgements: list[str] = []
+        acknowledgement_finished = False
+
+        def sleep(seconds: float) -> None:
+            nonlocal acknowledgement_finished
+            clock.advance(max(seconds, 0.1))
+            if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_READY and not acknowledgement_finished:
+                coordinator.host_event("realtime_ack_response_created", coordinator.session_id)
+                coordinator.host_event("realtime_ack_playback_started", coordinator.session_id)
+                coordinator.host_event(
+                    "realtime_ack_response_done", coordinator.session_id, reason="completed"
+                )
+                coordinator.host_event("realtime_ack_playback_stopped", coordinator.session_id)
+                acknowledgement_finished = True
+            elif coordinator.state == HandoffState.HOST_READY:
+                coordinator.host_event("connected", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_ACTIVE:
+                coordinator.request_stop("test")
+            elif coordinator.state == HandoffState.HOST_STOPPING:
+                coordinator.host_event("stopped", coordinator.session_id)
+
+        result = RealtimeSessionController(
+            coordinator=coordinator,
+            wake_detector=detector,
+            play_acknowledgement=lambda: local_acknowledgements.append("played"),
+            acknowledgement_duration_ms=480,
+            idle_timeout_seconds=1.0,
+            max_duration_seconds=10.0,
+            clock=clock,
+            sleep=sleep,
+        ).run_once()
+        self.assertEqual(local_acknowledgements, [])
+        self.assertTrue(acknowledgement_finished)
+        self.assertTrue(result.recovered_to_wake)
+
+    def test_realtime_acknowledgement_timeout_uses_bounded_cleanup(self):
+        clock, lease, coordinator, detector = build_runtime()
+        coordinator.request_realtime_acknowledgement_experiment()
+
+        def sleep(seconds: float) -> None:
+            clock.advance(max(seconds, 0.1))
+            if coordinator.state == HandoffState.HOST_STARTING:
+                coordinator.host_event("transport_connected", coordinator.session_id)
+                coordinator.host_event("session_created", coordinator.session_id)
+                coordinator.host_event("session_configured", coordinator.session_id)
+            elif coordinator.state == HandoffState.HOST_STOPPING:
+                coordinator.host_event("stopped", coordinator.session_id)
+
+        result = RealtimeSessionController(
+            coordinator=coordinator,
+            wake_detector=detector,
+            play_acknowledgement=lambda: self.fail("local ACK must remain disabled"),
+            idle_timeout_seconds=1.0,
+            max_duration_seconds=10.0,
+            connect_timeout_seconds=0.3,
+            clock=clock,
+            sleep=sleep,
+        ).run_once()
+        self.assertEqual(result.reason, "realtime_acknowledgement_timeout")
+        self.assertTrue(result.recovered_to_wake)
+        self.assertTrue(lease.is_open)
+
 
 if __name__ == "__main__":
     unittest.main()

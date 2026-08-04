@@ -2194,3 +2194,98 @@ Decomposition decision: F085 intentionally keeps the timeout default,
 playback-aware lifecycle guard, documentation, and tests together because they
 form one user-visible behavior with one coordinator/configuration verification
 surface. None of the pieces has independent product value.
+
+### Realtime-Native Farewell And Acknowledgement Comparison
+
+Feature mapping: F107 provides the Realtime-native farewell lifecycle. F108
+then measures the accepted local acknowledgement against a Realtime-native
+acknowledgement without changing the selected production acknowledgement path.
+
+Goal: let Hey Jarvis audibly say a brief goodbye in the active Realtime voice
+and at the active Realtime output volume before deterministic media teardown,
+then use bounded A/B evidence to decide whether the wake acknowledgement can
+also move to that native Realtime path without regressing the optimized
+wake-to-input-ready latency.
+
+Included scope: replace the current no-reply semantic and exact-phrase close
+with one input-muted farewell phase; generate exactly one short farewell through
+the already connected Realtime session with per-response tools disabled; play it
+through the existing WebRTC remote stream and configured browser volume; wait
+for both response completion and browser output-buffer completion before the
+existing close path; retain a bounded failure timeout and immediate-cleanup
+fallback; add privacy-safe lifecycle timing; and subsequently add a repeatable
+A/B runner comparing the existing local acknowledgement with a
+Realtime-generated acknowledgement on the same target Mac and configuration.
+
+Excluded scope: changing the Realtime model, configured voice, output volume,
+normal answer prompts, ordinary tool behavior, VAD profile, barge-in during
+ordinary answers, wake-word detection, local acknowledgement production
+selection during F107, pipeline TTS, media permissions, Smart Speaker sleep
+policy, public telemetry, or claiming identical perceived loudness across all
+devices. F108 does not switch the production acknowledgement automatically.
+
+Core flows: after an unambiguous semantic `end_conversation` tool call or an
+exact configured end phrase, browser microphone input is disabled immediately;
+the active session creates one audio-only, no-tool response instructed to say a
+single brief farewell in the current user's language; the existing remote audio
+element plays it at `REALTIME_OUTPUT_VOLUME`; confirmed response and playback
+completion enter the existing idempotent stop path, tear down browser media,
+and restore local wake ownership. Duplicate, stale, late, malformed, timed-out,
+cancelled, missing-playback, provider-error, explicit-stop, Settings, sleep, and
+Ctrl+C paths remain bounded and cannot strand microphone ownership. After F107
+approval, F108 records local and Realtime acknowledgement readiness/playback
+timings plus a user perceptual verdict without retaining audio or transcripts.
+
+Constraints: normal-turn response and interruption latency must be unchanged;
+farewell adds time only after the user has requested session closure; input must
+remain muted throughout farewell; the hard maximum-duration and a dedicated
+short farewell timeout remain authoritative; only the active same-session
+farewell may delay teardown; output uses the already selected Realtime voice and
+the same browser volume scalar as ordinary answers; durable reports contain no
+audio, transcript, response text, tool arguments, credentials, SDP, ICE, or
+provider payloads; automated tests require no network, credential, microphone,
+or speaker; live A/B work requires explicit user authorization before sending
+audio or incurring API cost.
+
+Ambiguities or assumptions: a Chinese current turn should receive `再见` and an
+English current turn should receive `Goodbye`; for other languages the model
+may use one natural brief farewell in that language. "Same voice and volume"
+means the same active Realtime session voice configuration and the same browser
+playback element/volume scalar, not a universal psychoacoustic loudness claim.
+The accepted 480 ms local `alloy` cue remains production default until F108
+evidence supports a separate user decision. A farewell generation/playback
+failure should favor immediate safe cleanup over silence retries.
+
+Required capabilities: the existing F065 semantic close tool and exact-phrase
+fallback, F073 playback-buffer lifecycle, F080 alloy/0.5 profile, F085
+playback-aware timeout, WebRTC data-channel `response.create`, per-response
+instructions and `tool_choice=none`, disabled input tracks, deterministic fake
+server events, JavaScript syntax checking, full project recovery, fast coding
+evidence, and a separate cold-start Evaluator Agent. F108 additionally requires
+the existing RT001/F076/F077 timing and acknowledgement benchmark surfaces and
+an explicitly authorized target-Mac live session.
+
+Implementation paths: `src/realtime_host/server.py`,
+`src/realtime_host/coordinator.py`, `src/realtime_host/static/app.js`,
+`src/realtime/controller.py`, `src/realtime/fake_smoke.py`,
+`src/evals/`, `evals/realtime/`, `docs/REALTIME.md`, `MANUAL_TESTING.md`,
+focused tests under `tests/`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: strict session instructions and response shape; semantic
+and exact-phrase farewell entry; immediate input mute; no duplicate farewell;
+same-session audio-only generation with tools disabled; ordered response and
+playback completion before stop; timeout, cancellation, error, duplicate, stale,
+late, explicit-stop, Settings, and missing-event cleanup; unchanged ordinary
+tools, normal responses, barge-in, idle/max duration, Smart Speaker media reuse,
+privacy, and wake recovery; JavaScript syntax; focused and full tests; Realtime
+fake smoke; final `./init.sh`; fast coding evidence; independent evaluator
+approval; then F108 offline/live A/B evidence and a user decision without an
+automatic production switch.
+
+Decomposition decision: F107 and F108 are separate because audible farewell is
+an independently valuable production behavior with a lifecycle-safety gate,
+while acknowledgement comparison is an experimental measurement capability
+that can fail or be deferred without invalidating farewell. F107 intentionally
+keeps semantic and exact-phrase entry together because both converge on one
+farewell state and one teardown verification surface.

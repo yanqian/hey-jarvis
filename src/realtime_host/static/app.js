@@ -6,6 +6,8 @@ const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
 const KEEP_WARM_MICROPHONE=location.hash==="#smart-speaker-mode";
 let armed=false,lastCommand=0,pc=null,dc=null,stream=null,warmStream=null,inputTrack=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null,sessionCreatedAt=null,dataChannelOpenedAt=null,transportReported=false,configurationReportStarted=false;
 let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
+let responseActive=false,turnResponsePending=false,farewellPending=false,farewellStarted=false,farewellCallId=null,farewellResponseActive=false;
+let acknowledgementExperiment=false,acknowledgementStarted=false,acknowledgementResponseActive=false;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
@@ -178,8 +180,56 @@ function handoffTimingSummary(readyAt){
 
 async function forwardToolCall(item){
   const result=await hostEvent("tool_call",{call_id:item.call_id,name:item.name,arguments:item.arguments});
+  if(result.status==="farewell"){await requestFarewell(item.call_id);return true;}
   if(result.status==="stopping"){await stop("end_phrase");return true;}
   return false;
+}
+
+async function requestFarewell(callId=null){
+  if(!farewellPending){
+    farewellPending=true;farewellCallId=typeof callId==="string"?callId:null;
+    if(inputTrack)inputTrack.enabled=false;
+    setUiState("stopping","Saying goodbye before returning to wake listening.");showEndControl(false);
+    if(responseActive&&dc?.readyState==="open"){
+      if(assistantSpeaking)dc.send(JSON.stringify({type:"output_audio_buffer.clear"}));
+      dc.send(JSON.stringify({type:"response.cancel"}));
+    }
+  }else if(!farewellCallId&&typeof callId==="string")farewellCallId=callId;
+  if(!responseActive&&!turnResponsePending&&!farewellStarted)await startFarewell();
+}
+
+async function startFarewell(){
+  if(farewellStarted||!farewellPending||dc?.readyState!=="open")return;
+  farewellStarted=true;
+  await hostEvent("farewell_started");
+  if(farewellCallId)dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:farewellCallId,output:JSON.stringify({status:"ending"})}}));
+  dc.send(JSON.stringify({
+    type:"response.create",
+    response:{
+      output_modalities:["audio"],
+      instructions:"Say exactly one brief, warm farewell in the language of the user's current utterance. For Mandarin Chinese say only 再见. For English say only Goodbye. Do not add anything else.",
+      tools:[],
+      tool_choice:"none",
+      metadata:{purpose:"farewell"},
+    },
+  }));
+}
+
+async function finishIfStopping(result,reason){if(result?.status==="stopping")await stop(reason);}
+
+function startRealtimeAcknowledgement(){
+  if(!acknowledgementExperiment||acknowledgementStarted||dc?.readyState!=="open")return;
+  acknowledgementStarted=true;
+  dc.send(JSON.stringify({
+    type:"response.create",
+    response:{
+      output_modalities:["audio"],
+      instructions:"请只用自然、温暖的普通话说：嗯，我在，请说。不要添加其他内容。",
+      tools:[],
+      tool_choice:"none",
+      metadata:{purpose:"acknowledgement_experiment"},
+    },
+  }));
 }
 
 async function reportConfiguredSession(){
@@ -191,6 +241,7 @@ async function reportConfiguredSession(){
   await hostEvent("session_configured");
   sessionCreatedAt=null;dataChannelOpenedAt=null;
   setUiState("connecting","Connected securely. Waiting for the ready acknowledgement.");
+  startRealtimeAcknowledgement();
 }
 
 async function handleServerEvent(event){
@@ -199,19 +250,54 @@ async function handleServerEvent(event){
   log(event.type,{status:event.response?.status});
   if(event.type==="session.created"){sessionCreatedAt=performance.now();await reportConfiguredSession();}
   if(event.type==="input_audio_buffer.speech_started"){setUiState("listening","I can hear you.");await hostEvent("speech_started");}
-  if(event.type==="input_audio_buffer.speech_stopped"){setUiState("thinking");await hostEvent("speech_stopped");}
-  if(event.type==="response.created"){setUiState("thinking");flushInputLevels();await hostEvent("response_created");}
-  if(event.type==="response.done"){
-    flushInputLevels();
-    await hostEvent("response_done",{reason:String(event.response?.status||"unknown")});
-    for(const item of event.response?.output||[])if(item.type==="function_call"&&await forwardToolCall(item))return;
+  if(event.type==="input_audio_buffer.speech_stopped"){turnResponsePending=true;setUiState("thinking");await hostEvent("speech_stopped");}
+  if(event.type==="response.created"){
+    responseActive=true;turnResponsePending=false;flushInputLevels();
+    if(event.response?.metadata?.purpose==="acknowledgement_experiment"){
+      acknowledgementResponseActive=true;setUiState("connecting","Playing the experimental acknowledgement.");
+      await hostEvent("realtime_ack_response_created");
+    }else if(event.response?.metadata?.purpose==="farewell"){
+      farewellResponseActive=true;setUiState("stopping","Saying goodbye before returning to wake listening.");
+      await hostEvent("farewell_response_created");
+    }else{
+      setUiState(farewellPending?"stopping":"thinking",farewellPending?"Saying goodbye before returning to wake listening.":undefined);
+      await hostEvent("response_created");
+      if(farewellPending&&dc?.readyState==="open")dc.send(JSON.stringify({type:"response.cancel"}));
+    }
   }
-  if(event.type==="output_audio_buffer.started"){setUiState("speaking");flushInputLevels();assistantSpeaking=true;await hostEvent("playback_started");}
-  if(event.type==="output_audio_buffer.stopped"){setUiState("listening");flushInputLevels();assistantSpeaking=false;await hostEvent("playback_stopped");}
+  if(event.type==="response.done"){
+    responseActive=false;turnResponsePending=false;flushInputLevels();
+    if(event.response?.metadata?.purpose==="acknowledgement_experiment"){
+      await finishIfStopping(await hostEvent("realtime_ack_response_done",{reason:String(event.response?.status||"unknown")}),"realtime_acknowledgement_failed");
+    }else if(event.response?.metadata?.purpose==="farewell"){
+      await finishIfStopping(await hostEvent("farewell_response_done",{reason:String(event.response?.status||"unknown")}),"farewell_complete");
+    }else{
+      await hostEvent("response_done",{reason:String(event.response?.status||"unknown")});
+      for(const item of event.response?.output||[])if(item.type==="function_call"&&await forwardToolCall(item))break;
+    }
+    if(farewellPending&&!farewellStarted)await startFarewell();
+  }
+  if(event.type==="output_audio_buffer.started"){
+    flushInputLevels();assistantSpeaking=true;
+    if(acknowledgementResponseActive){setUiState("connecting","Playing the experimental acknowledgement.");await hostEvent("realtime_ack_playback_started");}
+    else if(farewellResponseActive){setUiState("stopping","Saying goodbye before returning to wake listening.");await hostEvent("farewell_playback_started");}
+    else{setUiState("speaking");await hostEvent("playback_started");}
+  }
+  if(event.type==="output_audio_buffer.stopped"){
+    flushInputLevels();assistantSpeaking=false;
+    if(acknowledgementResponseActive){
+      acknowledgementResponseActive=false;
+      await finishIfStopping(await hostEvent("realtime_ack_playback_stopped"),"realtime_acknowledgement_failed");
+    }else if(farewellResponseActive){
+      farewellResponseActive=false;
+      await finishIfStopping(await hostEvent("farewell_playback_stopped"),"farewell_complete");
+    }else{setUiState(farewellPending?"stopping":"listening");await hostEvent("playback_stopped");}
+  }
   if(event.type==="response.function_call_arguments.done")await forwardToolCall(event);
   if(event.type==="conversation.item.input_audio_transcription.completed"){
     const transcript=typeof event.transcript==="string"&&event.transcript.length<=200?event.transcript:null;
     const result=await hostEvent("transcription",{item_id:event.item_id,transcript});
+    if(result.status==="farewell")await requestFarewell();
     if(result.status==="stopping")await stop("end_phrase");
   }
   if(event.type==="conversation.item.input_audio_transcription.failed")await hostEvent("transcription_failed",{item_id:event.item_id});
@@ -221,6 +307,8 @@ async function handleServerEvent(event){
 async function start(command){
   if(!armed||pc)throw new Error("host is not ready for start");
   handoffTiming={commandReceived:performance.now()};sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
+  responseActive=false;turnResponsePending=false;farewellPending=false;farewellStarted=false;farewellCallId=null;farewellResponseActive=false;
+  acknowledgementExperiment=command.acknowledgement_mode==="realtime_experiment";acknowledgementStarted=false;acknowledgementResponseActive=false;
   sessionId=command.session_id;setUiState("connecting");showEndControl(true);
   await hostEvent("microphone_requested");
   handoffTiming.tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived;
@@ -280,6 +368,8 @@ async function stop(reason="command",finalState="wake-ready"){
   if(KEEP_WARM_MICROPHONE&&warmStream?.getAudioTracks()[0]?.readyState==="live"){audio.srcObject=warmStream;audio.volume=0;const playAttempt=audio.play();if(playAttempt)playAttempt.catch(()=>{});}
   else{audio.pause();audio.srcObject=null;}
   handoffTiming=null;sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
+  responseActive=false;turnResponsePending=false;farewellPending=false;farewellStarted=false;farewellCallId=null;farewellResponseActive=false;assistantSpeaking=false;
+  acknowledgementExperiment=false;acknowledgementStarted=false;acknowledgementResponseActive=false;
   log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
   setUiState(finalState);

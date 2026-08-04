@@ -101,7 +101,7 @@ def build_realtime_session_config(settings: object) -> dict[str, object]:
             "- For mixed or ambiguous input, use the language of the main request; never default to English merely because developer or tool text is English.",
             "- If the user explicitly asks for translation, spelling, pronunciation, language practice, or a whole response in another language, include or use the requested target language. Unless the whole response is requested in that language, keep the surrounding explanation in the language of the current request.",
             "# Conversation Ending",
-            "- If the user clearly and unambiguously wants to end the current conversation, call end_conversation with {} and do not provide a spoken or substantive response.",
+            "- If the user clearly and unambiguously wants to end the current conversation, call end_conversation with {} and do not speak before the tool result. The client will request one brief farewell after muting input.",
             "- Do not call end_conversation when farewell words are merely mentioned, quoted, translated, or requested as content.",
         )
     )
@@ -387,6 +387,8 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             self._json(
                 HTTPStatus.OK,
                 {
+                    "model": settings.realtime_model,
+                    "voice": settings.realtime_voice,
                     "output_volume": settings.realtime_output_volume,
                     "input_noise_reduction": settings.realtime_input_noise_reduction,
                 },
@@ -432,6 +434,10 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/input-level-diagnostics":
                 self.server.coordinator.request_input_level_diagnostics()
+                self._json(HTTPStatus.OK, {"status": "armed_for_next_handoff"})
+                return
+            if path == "/api/acknowledgement-experiment":
+                self.server.coordinator.request_realtime_acknowledgement_experiment()
                 self._json(HTTPStatus.OK, {"status": "armed_for_next_handoff"})
                 return
             if path == "/api/stop":

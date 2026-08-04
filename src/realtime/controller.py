@@ -37,6 +37,7 @@ class RealtimeSessionController:
         poll_seconds: float = 0.05,
         connect_timeout_seconds: float = 20.0,
         close_timeout_seconds: float = 5.0,
+        farewell_timeout_seconds: float = 8.0,
         wake_confirmation_frames: int = 2,
     ) -> None:
         self.coordinator = coordinator
@@ -52,6 +53,9 @@ class RealtimeSessionController:
         self.poll_seconds = poll_seconds
         self.connect_timeout_seconds = connect_timeout_seconds
         self.close_timeout_seconds = close_timeout_seconds
+        if farewell_timeout_seconds <= 0:
+            raise ValueError("farewell_timeout_seconds must be greater than zero")
+        self.farewell_timeout_seconds = farewell_timeout_seconds
         self.wake_confirmation_frames = max(1, wake_confirmation_frames)
 
     def run_once(self) -> RealtimeSessionResult:
@@ -65,22 +69,32 @@ class RealtimeSessionController:
             if not self._wait_until_not(HandoffState.HOST_STARTING, self.connect_timeout_seconds):
                 self.coordinator.request_stop("connect_timeout")
             if self.coordinator.state == HandoffState.HOST_READY:
-                self.coordinator.record_local_timing_marker(
-                    "ack_started",
-                    ack_asset_duration_ms=self.acknowledgement_duration_ms,
-                )
-                self.play_acknowledgement()
-                self.coordinator.record_local_timing_marker("ack_completed")
-                self.coordinator.enable_host_input()
+                if self.coordinator.active_acknowledgement_mode == "local":
+                    self.coordinator.record_local_timing_marker(
+                        "ack_started",
+                        ack_asset_duration_ms=self.acknowledgement_duration_ms,
+                    )
+                    self.play_acknowledgement()
+                    self.coordinator.record_local_timing_marker("ack_completed")
+                elif not self._wait_for_realtime_acknowledgement(
+                    self.connect_timeout_seconds
+                ):
+                    self.coordinator.request_stop("realtime_acknowledgement_timeout")
+                if self.coordinator.state == HandoffState.HOST_READY:
+                    self.coordinator.enable_host_input()
                 if not self._wait_until_not(
                     HandoffState.HOST_READY,
                     self.connect_timeout_seconds,
                 ):
                     self.coordinator.request_stop("input_ready_timeout")
-            while self.coordinator.state == HandoffState.HOST_ACTIVE:
+            while self.coordinator.state in {
+                HandoffState.HOST_ACTIVE,
+                HandoffState.HOST_FAREWELL,
+            }:
                 reason = self.coordinator.timeout_reason(
                     idle_seconds=self.idle_timeout_seconds,
                     max_duration_seconds=self.max_duration_seconds,
+                    farewell_seconds=self.farewell_timeout_seconds,
                 )
                 if reason is not None:
                     self.coordinator.request_stop(reason)
@@ -131,6 +145,14 @@ class RealtimeSessionController:
         while self.coordinator.state == state and self.clock() < deadline:
             self.sleep(self.poll_seconds)
         return self.coordinator.state != state
+
+    def _wait_for_realtime_acknowledgement(self, timeout: float) -> bool:
+        deadline = self.clock() + timeout
+        while self.coordinator.state == HandoffState.HOST_READY and self.clock() < deadline:
+            if self.coordinator.realtime_acknowledgement_complete:
+                return True
+            self.sleep(self.poll_seconds)
+        return self.coordinator.realtime_acknowledgement_complete
 
     def _wait_for_wake_ownership(self) -> bool:
         if self.coordinator.state == HandoffState.WAKE_OWNED:

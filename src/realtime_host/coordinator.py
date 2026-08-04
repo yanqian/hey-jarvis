@@ -36,6 +36,7 @@ MAX_HANDOFF_TIMING_MS = 60_000
 FIXTURE_AUDIO_NAMES = frozenset({"turn-1", "turn-2"})
 INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 LOCAL_TIMING_MARKERS = frozenset({"wake_confirmed", "ack_started", "ack_completed"})
+ACKNOWLEDGEMENT_MODES = frozenset({"local", "realtime_experiment"})
 HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
         "command_to_token_ms",
@@ -110,6 +111,7 @@ class HandoffState(str, Enum):
     HOST_STARTING = "host_starting"
     HOST_READY = "host_ready"
     HOST_ACTIVE = "host_active"
+    HOST_FAREWELL = "host_farewell"
     HOST_STOPPING = "host_stopping"
 
 
@@ -185,9 +187,20 @@ class HandoffCoordinator:
         self._session_created = False
         self._session_configured = False
         self._input_enable_requested = False
+        self._next_acknowledgement_mode = "local"
+        self._active_acknowledgement_mode = "local"
+        self._realtime_ack_response_created = False
+        self._realtime_ack_response_done = False
+        self._realtime_ack_playback_started = False
+        self._realtime_ack_playback_stopped = False
         self._connected_at: float | None = None
         self._last_activity_at: float | None = None
         self._assistant_playback_active = False
+        self._farewell_started_at: float | None = None
+        self._farewell_response_created = False
+        self._farewell_response_done = False
+        self._farewell_playback_started = False
+        self._farewell_playback_stopped = False
         self._handoff_timing_received = False
         self._input_level_diagnostics_next = False
         self._next_command_id = 1
@@ -299,6 +312,34 @@ class HandoffCoordinator:
             self._input_level_diagnostics_next = True
             self._record("input_level_diagnostics_armed")
 
+    def request_realtime_acknowledgement_experiment(self) -> None:
+        """Use one Realtime-native acknowledgement on the next handoff only."""
+
+        with self._lock:
+            if not self._armed:
+                raise HandoffError("WebRTC host must be armed before acknowledgement evaluation")
+            if self._state != HandoffState.WAKE_OWNED or self._session_id is not None:
+                raise HandoffError(
+                    "Realtime acknowledgement evaluation can only be armed while wake owns the microphone"
+                )
+            self._next_acknowledgement_mode = "realtime_experiment"
+            self._record("realtime_acknowledgement_experiment_armed")
+
+    @property
+    def active_acknowledgement_mode(self) -> str:
+        with self._lock:
+            return self._active_acknowledgement_mode
+
+    @property
+    def realtime_acknowledgement_complete(self) -> bool:
+        with self._lock:
+            return (
+                self._active_acknowledgement_mode == "realtime_experiment"
+                and self._realtime_ack_response_done
+                and self._realtime_ack_playback_started
+                and self._realtime_ack_playback_stopped
+            )
+
     def begin_handoff(self) -> str:
         with self._lock:
             if not self._armed:
@@ -316,9 +357,13 @@ class HandoffCoordinator:
             self._session_created = False
             self._session_configured = False
             self._input_enable_requested = False
+            self._active_acknowledgement_mode = self._next_acknowledgement_mode
+            self._next_acknowledgement_mode = "local"
+            self._reset_realtime_acknowledgement()
             self._connected_at = None
             self._last_activity_at = self._clock()
             self._assistant_playback_active = False
+            self._reset_farewell()
             self._handoff_timing_received = False
             self._seen_transcription_items.clear()
             self._handled_tool_calls.clear()
@@ -326,10 +371,12 @@ class HandoffCoordinator:
             input_level_diagnostics = self._input_level_diagnostics_next
             self._input_level_diagnostics_next = False
             self._record("handoff_queued", session_id=session_id)
+            detail: dict[str, object] = {}
             if input_level_diagnostics:
-                self._enqueue("start", session_id, input_level_diagnostics=True)
-            else:
-                self._enqueue("start", session_id)
+                detail["input_level_diagnostics"] = True
+            if self._active_acknowledgement_mode == "realtime_experiment":
+                detail["acknowledgement_mode"] = "realtime_experiment"
+            self._enqueue("start", session_id, **detail)
             return session_id
 
     def enable_host_input(self) -> None:
@@ -351,13 +398,27 @@ class HandoffCoordinator:
                 self._state = HandoffState.HOST_STOPPING
                 self._enqueue("stop", self._session_id, reason=reason)
 
-    def timeout_reason(self, *, idle_seconds: float, max_duration_seconds: float) -> str | None:
+    def timeout_reason(
+        self,
+        *,
+        idle_seconds: float,
+        max_duration_seconds: float,
+        farewell_seconds: float = 8.0,
+    ) -> str | None:
         with self._lock:
-            if self._state != HandoffState.HOST_ACTIVE or self._connected_at is None:
+            if self._state not in {HandoffState.HOST_ACTIVE, HandoffState.HOST_FAREWELL}:
+                return None
+            if self._connected_at is None:
                 return None
             now = self._clock()
             if now - self._connected_at >= max_duration_seconds:
                 return "max_duration"
+            if self._state == HandoffState.HOST_FAREWELL:
+                if self._farewell_started_at is None:
+                    return "farewell_state_error"
+                if now - self._farewell_started_at >= farewell_seconds:
+                    return "farewell_timeout"
+                return None
             if self._assistant_playback_active:
                 return None
             if self._last_activity_at is not None and now - self._last_activity_at >= idle_seconds:
@@ -437,6 +498,17 @@ class HandoffCoordinator:
                 raise HandoffError("Host user-turn activity arrived before input readiness")
             if event_type == "transcription":
                 return self._handle_completed_transcription(session_id, detail)
+            if self._state == HandoffState.HOST_FAREWELL and event_type in {
+                "speech_started",
+                "speech_stopped",
+                "fixture_submitted",
+            }:
+                self._record(
+                    "host_farewell_input_ignored",
+                    session_id=session_id,
+                    reason=event_type,
+                )
+                return "farewell"
             if event_type == "transcription_failed":
                 self._record("host_transcription_failed", session_id=session_id, reason="provider_failure")
                 self._last_activity_at = self._clock()
@@ -500,6 +572,54 @@ class HandoffCoordinator:
                 self.request_stop(str(safe_detail.get("reason", "host_error")))
             elif event_type == "stopped":
                 self._finish_handoff(event_type)
+            elif event_type == "farewell_started":
+                if self._state != HandoffState.HOST_FAREWELL:
+                    raise HandoffError("Farewell started outside the farewell phase")
+            elif event_type == "farewell_response_created":
+                if self._state != HandoffState.HOST_FAREWELL or self._farewell_response_created:
+                    raise HandoffError("Farewell response creation was duplicated or out of order")
+                self._farewell_response_created = True
+            elif event_type == "farewell_response_done":
+                if self._state != HandoffState.HOST_FAREWELL or not self._farewell_response_created:
+                    raise HandoffError("Farewell response completion was out of order")
+                reason = str(safe_detail.get("reason", "unknown"))
+                if reason != "completed":
+                    self.request_stop("farewell_response_failed")
+                else:
+                    self._farewell_response_done = True
+                    self._finish_farewell_if_ready()
+            elif event_type == "farewell_playback_started":
+                if self._state != HandoffState.HOST_FAREWELL or not self._farewell_response_created:
+                    raise HandoffError("Farewell playback started out of order")
+                self._farewell_playback_started = True
+            elif event_type == "farewell_playback_stopped":
+                if self._state != HandoffState.HOST_FAREWELL or not self._farewell_playback_started:
+                    raise HandoffError("Farewell playback completion was out of order")
+                self._farewell_playback_stopped = True
+                self._finish_farewell_if_ready()
+            elif event_type == "realtime_ack_response_created":
+                if (
+                    self._state != HandoffState.HOST_READY
+                    or self._active_acknowledgement_mode != "realtime_experiment"
+                    or self._realtime_ack_response_created
+                ):
+                    raise HandoffError("Realtime acknowledgement response creation was unexpected")
+                self._realtime_ack_response_created = True
+            elif event_type == "realtime_ack_response_done":
+                if self._state != HandoffState.HOST_READY or not self._realtime_ack_response_created:
+                    raise HandoffError("Realtime acknowledgement response completion was out of order")
+                if str(safe_detail.get("reason", "unknown")) != "completed":
+                    self.request_stop("realtime_acknowledgement_failed")
+                else:
+                    self._realtime_ack_response_done = True
+            elif event_type == "realtime_ack_playback_started":
+                if self._state != HandoffState.HOST_READY or not self._realtime_ack_response_created:
+                    raise HandoffError("Realtime acknowledgement playback was out of order")
+                self._realtime_ack_playback_started = True
+            elif event_type == "realtime_ack_playback_stopped":
+                if self._state != HandoffState.HOST_READY or not self._realtime_ack_playback_started:
+                    raise HandoffError("Realtime acknowledgement playback completion was out of order")
+                self._realtime_ack_playback_stopped = True
             return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
 
     def _handle_completed_transcription(self, session_id: str, detail: dict[str, object]) -> str:
@@ -529,8 +649,8 @@ class HandoffCoordinator:
             return "accepted"
         if normalized and normalized in self._end_phrases:
             self._record("host_end_phrase_matched", session_id=session_id)
-            self.request_stop("end_phrase")
-            return "stopping"
+            self._begin_farewell(session_id, reason="exact_phrase")
+            return "farewell"
         return "accepted"
 
     def _handle_tool_call(
@@ -556,6 +676,8 @@ class HandoffCoordinator:
                 raise HandoffError("Realtime tool call identity was invalid")
             if call_id in self._handled_tool_calls:
                 self._record("host_tool_call_duplicate", session_id=session_id)
+                if self._state == HandoffState.HOST_FAREWELL:
+                    return "farewell"
                 return "stopping" if self._state == HandoffState.HOST_STOPPING else "accepted"
             self._handled_tool_calls.add(call_id)
             if name == "end_conversation":
@@ -584,8 +706,8 @@ class HandoffCoordinator:
                     return "accepted"
                 self._record("host_end_conversation_tool", session_id=session_id)
                 self._last_activity_at = self._clock()
-                self.request_stop("end_phrase")
-                return "stopping"
+                self._begin_farewell(session_id, reason="semantic")
+                return "farewell"
             if self._state != HandoffState.HOST_ACTIVE:
                 self._record(
                     "host_tool_call_ignored",
@@ -645,6 +767,7 @@ class HandoffCoordinator:
                 HandoffState.HOST_STARTING,
                 HandoffState.HOST_READY,
                 HandoffState.HOST_ACTIVE,
+                HandoffState.HOST_FAREWELL,
                 HandoffState.HOST_STOPPING,
             }:
                 return "busy"
@@ -663,9 +786,12 @@ class HandoffCoordinator:
         self._session_created = False
         self._session_configured = False
         self._input_enable_requested = False
+        self._active_acknowledgement_mode = "local"
+        self._reset_realtime_acknowledgement()
         self._connected_at = None
         self._last_activity_at = None
         self._assistant_playback_active = False
+        self._reset_farewell()
         self._handoff_timing_received = False
         self._seen_transcription_items.clear()
         self._handled_tool_calls.clear()
@@ -673,6 +799,42 @@ class HandoffCoordinator:
             self._wake_lease.open()
         self._state = HandoffState.WAKE_OWNED
         self._record("wake_microphone_reopened", session_id=session_id, result=result)
+
+    def _begin_farewell(self, session_id: str, *, reason: str) -> None:
+        if self._state == HandoffState.HOST_FAREWELL:
+            return
+        if self._state != HandoffState.HOST_ACTIVE or session_id != self._session_id:
+            raise HandoffError("Farewell requires the active session")
+        self._state = HandoffState.HOST_FAREWELL
+        self._farewell_started_at = self._clock()
+        self._farewell_response_created = False
+        self._farewell_response_done = False
+        self._farewell_playback_started = False
+        self._farewell_playback_stopped = False
+        self._record("host_farewell_requested", session_id=session_id, reason=reason)
+
+    def _finish_farewell_if_ready(self) -> None:
+        if (
+            self._state == HandoffState.HOST_FAREWELL
+            and self._farewell_response_done
+            and self._farewell_playback_started
+            and self._farewell_playback_stopped
+        ):
+            self._record("host_farewell_completed", session_id=self._session_id)
+            self.request_stop("farewell_complete")
+
+    def _reset_farewell(self) -> None:
+        self._farewell_started_at = None
+        self._farewell_response_created = False
+        self._farewell_response_done = False
+        self._farewell_playback_started = False
+        self._farewell_playback_stopped = False
+
+    def _reset_realtime_acknowledgement(self) -> None:
+        self._realtime_ack_response_created = False
+        self._realtime_ack_response_done = False
+        self._realtime_ack_playback_started = False
+        self._realtime_ack_playback_stopped = False
 
     def _enqueue(self, command_type: str, session_id: str, **detail: object) -> None:
         command = HostCommand(self._next_command_id, command_type, session_id, dict(detail) or None)

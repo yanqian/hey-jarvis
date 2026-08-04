@@ -305,6 +305,13 @@ def run_fake_smoke() -> FakeSmokeResult:
                 arguments="{}",
             )
             stage = 3
+        elif coordinator.state == HandoffState.HOST_FAREWELL and stage == 3:
+            coordinator.host_event("farewell_started", session_id)
+            coordinator.host_event("farewell_response_created", session_id)
+            coordinator.host_event("farewell_playback_started", session_id)
+            coordinator.host_event("farewell_response_done", session_id, reason="completed")
+            coordinator.host_event("farewell_playback_stopped", session_id)
+            stage = 4
         elif coordinator.state == HandoffState.HOST_STOPPING:
             coordinator.host_event("stopped", session_id, reason="fake_close")
 
@@ -331,7 +338,7 @@ def run_fake_smoke() -> FakeSmokeResult:
         fx_output=fx_output,
         stock_output=stock_output,
         end_phrase="host_end_conversation_tool" in event_types,
-        closed=stage == 3,
+        closed=stage == 4,
         recovered_to_wake=result.recovered_to_wake and lease.is_open,
     )
 

@@ -422,11 +422,23 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-No feature is currently in progress. F103 is evaluator-approved after giving
-only the 18-point menu-bar template more optical weight while leaving the
-accepted slim full-color App Icon unchanged. Its independent approval is
-recorded as `EVAL_PASS: F103` in
-`.agent-harness/runs/20260803T104134Z-F103-evaluation-pass.md`.
+F108 is evaluator-approved. The bounded A/B runner,
+one-shot same-session Realtime ACK path, privacy oracle, deterministic cleanup,
+saved-local-trial recovery, and offline verification are implemented while the
+480 ms local acknowledgement remains the production default. After an earlier
+authorized `incomplete` response exposed an invalid low audio-token cap, a
+second explicitly authorized target-Mac trial completed the fixed Mandarin
+short bridge with the active `gpt-realtime-2.1` / `alloy` / `0.5` profile. The
+owner heard the intended Chinese cue, judged its length natural, and preferred
+Realtime. Realtime first-observable playback was 3,159 ms after wake and input
+became ready at 6,628 ms, 3,436 ms slower than the saved local baseline; input
+readiness followed playback completion by 284 ms. The evidence therefore
+recommends considering Realtime for voice consistency without claiming faster
+negotiation, an acoustic-onset SLO, or an automatic production switch.
+
+No feature is currently in progress.
+
+F103 is evaluator-approved as the completed desktop icon-consistency baseline.
 
 F104 is evaluator-approved as the truthful availability foundation for the
 owner-approved Smart Speaker Mode; F105-F106 remain planned. The planning
@@ -457,13 +469,35 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Implement F106 next to add bounded post-wake recovery with
-a truthful Resume fallback. After F104-F106, Resume F093 by recording the
+Resume F106 to add bounded post-wake recovery with a truthful Resume fallback.
+After F106, Resume F093 by recording the
 bounded production-app demo and running two additional trusted Apple Silicon
 tester or distinct clean-profile trials. Public binary distribution remains
 on hold.
 
 ## Recently Completed
+
+F108 - Compare local and Realtime acknowledgement latency.
+
+F108 adds a one-shot, privacy-safe A/B runner while preserving the local
+production default. An explicitly authorized target-Mac retry completed the
+fixed Mandarin Realtime short bridge with `gpt-realtime-2.1`, `alloy`, and `0.5`
+gain. The owner judged its length natural and preferred Realtime; input-ready
+was 3,436 ms slower than the saved local baseline, so the recommendation is to
+consider Realtime for voice consistency rather than claim a latency win.
+Independent approval is recorded as `EVAL_PASS: F108` in
+`.agent-harness/runs/20260804T081419Z-F108-evaluation-pass.md`.
+
+F107 - Speak a Realtime-native farewell before closing.
+
+F107 mutes browser input on an unambiguous end intent, generates exactly one
+brief audio-only farewell on the active Realtime session with tools disabled,
+and waits for both response and playback completion before the existing bounded
+teardown restores wake ownership. Full recovery passed with 426 project tests,
+ten Mac frontend/sidecar tests, 25 Rust tests, and Realtime fake smoke. Coding
+evidence is in `.agent-harness/runs/F107-fast-coding.md`; independent approval
+is recorded as `EVAL_PASS: F107` in
+`.agent-harness/runs/20260804T071725Z-F107-evaluation-pass.md`.
 
 F105 - Add the native Smart Speaker idle-sleep policy.
 

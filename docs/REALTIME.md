@@ -122,6 +122,46 @@ another gain, repeat both a normal answer and a deliberate barge-in. Do not
 treat headphones alone as built-in-speaker proof. Server-managed interruption
 remains enabled.
 
+### A/B acknowledgement experiment
+
+Production continues to use the checked-in 480 ms local acknowledgement. The
+bounded experiment runner can arm exactly one next handoff to synthesize the
+short Mandarin bridge `嗯，我在，请说。` on that handoff's Realtime session; it
+does not expose a persistent production switch or alter later sessions. The
+bridge does not make negotiation faster: it replaces post-configuration dead
+air with an audible cue and keeps input gated until the cue finishes.
+
+The experimental response is audio-only, disables tools, and uses an explicit
+Mandarin instruction because no user audio exists yet from which to infer a
+language. It intentionally uses the Realtime API's default output-token limit:
+low numeric caps can truncate even a very short audio response before its
+completion event. The same rule applies to the native farewell; its exact-word
+instruction and existing bounded shutdown timeout remain the length and safety
+guards.
+
+After explicit microphone, speaker, network, and paid-API authorization, start
+and arm the ordinary Realtime host, ensure the private wake fixture exists, and
+run:
+
+```bash
+python -m src.evals.realtime_acknowledgement live
+```
+
+If same-Mac fixture playback does not trigger the current wake detector, use
+`live --manual-wake`; the runner pauses before each trial so the owner can say
+the wake phrase naturally. If the local trial completed but the Realtime trial
+failed, `--reuse-latest-local` validates and reuses only the latest sanitized
+complete local lifecycle so a retry does not create another paid local trial.
+
+The runner plays the local trial first and the Realtime trial second, restores
+wake ownership after each, then asks for the listener's perceptual verdict. Its
+untracked JSON evidence separates configured-session readiness, response
+creation, browser-observable playback start, playback completion, input ready,
+local asset duration, and cleanup. Browser playback start is not physical
+acoustic onset. Evidence retains only model/voice/volume identifiers, bounded
+lifecycle timing, outcomes, and the verdict—never audio, transcripts, response
+text, credentials, SDP/ICE, provider payloads, or tool data.
+
 Normal sessions do not create the optional Web Audio input-level analyser.
 That analyser is enabled for exactly the next wake-triggered session only by
 the F060 diagnosis workflow.
@@ -130,6 +170,12 @@ the F060 diagnosis workflow.
 
 `end_conversation` handles clear semantic requests to finish. Mentions,
 quotations, translations, or requests to say a farewell are not close commands.
+After a matched semantic or exact-phrase ending, browser input is muted and the
+same active Realtime session produces one brief farewell through the ordinary
+configured voice, WebRTC output stream, and browser volume. Media teardown and
+wake recovery wait for both farewell response completion and output-buffer
+playback completion; a bounded timeout or provider/playback failure falls back
+to immediate safe cleanup.
 
 `REALTIME_END_PHRASES` remains a conservative fallback over completed input
 transcription. Matching is exact after case, outer-punctuation, and whitespace

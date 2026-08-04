@@ -2424,6 +2424,52 @@
         "F104",
         "F105"
       ]
+    },
+    {
+      "id": "F107",
+      "title": "Speak a Realtime-native farewell before closing",
+      "description": "Mute input, play one brief same-session Realtime farewell through the ordinary voice and volume path, then close only after bounded response and playback completion.",
+      "acceptance": [
+        "An unambiguous semantic end_conversation call or exact configured end phrase enters one idempotent farewell phase, disables the active browser input track immediately, and prevents new user turns or duplicate farewells without changing ordinary response, tool, VAD, or barge-in behavior.",
+        "The active session creates exactly one audio-only farewell response with per-response tools disabled and a brief current-language instruction, so output uses the same configured Realtime voice, remote WebRTC audio element, and REALTIME_OUTPUT_VOLUME scalar as ordinary answers without a second connection or local TTS asset.",
+        "Normal farewell completion waits for both correlated response completion and output_audio_buffer playback completion before the existing media teardown and wake-microphone recovery; sanitized evidence records only bounded lifecycle and timing outcomes.",
+        "Generation error, cancellation, missing or reordered response/playback events, timeout, duplicate/stale/late events, explicit stop, Settings, sleep, transport failure, and Ctrl+C fall back to one bounded cleanup path and cannot strand browser media, microphone ownership, Smart Speaker retained media, or the native availability state.",
+        "Focused coordinator/browser/server/controller/privacy tests, JavaScript syntax, Realtime fake smoke, full project tests, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without live credentials, network, microphone, speaker, or paid API use; a later owner-authorized live check remains product evidence rather than an automated-test requirement."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F065",
+        "F073",
+        "F080",
+        "F085"
+      ]
+    },
+    {
+      "id": "F108",
+      "title": "Compare local and Realtime acknowledgement latency",
+      "description": "Measure local and Realtime-native acknowledgement paths on the same target Mac so voice consistency can be weighed against wake-to-input-ready latency before any production switch.",
+      "acceptance": [
+        "A bounded reproducible A/B runner compares the accepted 480 ms local alloy asset/player with one same-session Realtime-native acknowledgement on the same target Mac and shared Realtime model, voice, browser-gain configuration, and host, explicitly preserving the different local-versus-WebRTC playback paths and the local acknowledgement as the production default.",
+        "Evidence separates configured-session readiness, response creation, first observable playback, playback completion, input-ready, asset duration, and known-unobservable acoustic onset rather than collapsing them into an unsupported latency or SLO claim.",
+        "The comparison records only bounded timings, configuration identifiers, lifecycle outcomes, and an explicit user perceptual verdict; it retains no audio, transcript, response text, credentials, SDP, ICE, provider payloads, or private tool data.",
+        "Failure, timeout, cancellation, missing events, cleanup, and wake-recovery cases remain deterministic, and no experimental path automatically changes normal acknowledgement, answer playback, input gating, media processing, or session teardown.",
+        "Focused offline oracle/privacy tests, JavaScript syntax, full project tests, final ./init.sh, fast coding evidence, one explicitly authorized target-Mac A/B run, and separate cold-start evaluator approval produce a recommendation or bounded inconclusive result for a later user decision."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F076",
+        "F077",
+        "F080",
+        "F107"
+      ]
     }
   ]
 }

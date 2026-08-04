@@ -244,6 +244,46 @@ class RealtimeHostTests(unittest.TestCase):
             [(HTTPStatus.OK, {"availability": "ready"})],
         )
 
+    def test_realtime_acknowledgement_experiment_is_one_handoff_only(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        coordinator.request_realtime_acknowledgement_experiment()
+        session_id = coordinator.begin_handoff()
+        command = coordinator.command_after(0)
+        self.assertEqual(command["acknowledgement_mode"], "realtime_experiment")
+        self.assertEqual(coordinator.active_acknowledgement_mode, "realtime_experiment")
+        coordinator.host_event("transport_connected", session_id)
+        coordinator.host_event("session_created", session_id)
+        coordinator.host_event("session_configured", session_id)
+        coordinator.host_event("realtime_ack_response_created", session_id)
+        coordinator.host_event("realtime_ack_playback_started", session_id)
+        coordinator.host_event("realtime_ack_response_done", session_id, reason="completed")
+        self.assertFalse(coordinator.realtime_acknowledgement_complete)
+        coordinator.host_event("realtime_ack_playback_stopped", session_id)
+        self.assertTrue(coordinator.realtime_acknowledgement_complete)
+        coordinator.request_stop("test")
+        coordinator.host_event("stopped", session_id, reason="test")
+        next_session = coordinator.begin_handoff()
+        next_command = coordinator.command_after(command["command_id"] + 1)
+        self.assertEqual(next_command["session_id"], next_session)
+        self.assertNotIn("acknowledgement_mode", next_command)
+
+    def test_realtime_acknowledgement_endpoint_arms_only_the_next_handoff(self):
+        coordinator, _lease = self.build_coordinator()
+        coordinator.host_event("armed")
+        responses: list[tuple[HTTPStatus, dict[str, object]]] = []
+        handler = object.__new__(server.HostRequestHandler)
+        handler.path = "/api/acknowledgement-experiment"
+        handler.server = SimpleNamespace(coordinator=coordinator)
+        handler._json = lambda status, payload: responses.append((status, dict(payload)))
+        handler.do_POST()
+        self.assertEqual(responses, [(HTTPStatus.OK, {"status": "armed_for_next_handoff"})])
+        coordinator.begin_handoff()
+        self.assertEqual(
+            coordinator.command_after(0)["acknowledgement_mode"],
+            "realtime_experiment",
+        )
+
     def test_only_the_armed_browser_instance_can_consume_commands_or_emit_events(self):
         lease = FakeLease()
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
@@ -367,6 +407,16 @@ class RealtimeHostTests(unittest.TestCase):
                 result = coordinator.host_event(
                     "transcription", session_id, item_id="item-1", transcript=transcript
                 )
+                self.assertEqual(result, "farewell")
+                self.assertEqual(coordinator.state, HandoffState.HOST_FAREWELL)
+                coordinator.host_event("farewell_started", session_id)
+                coordinator.host_event("farewell_response_created", session_id)
+                coordinator.host_event("farewell_playback_started", session_id)
+                coordinator.host_event(
+                    "farewell_response_done", session_id, reason="completed"
+                )
+                self.assertEqual(coordinator.state, HandoffState.HOST_FAREWELL)
+                result = coordinator.host_event("farewell_playback_stopped", session_id)
                 self.assertEqual(result, "stopping")
                 self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
                 report_text = json.dumps(coordinator.report(), ensure_ascii=False)
@@ -897,7 +947,7 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertIn("host_tool_result_ignored", report_text)
         self.assertNotIn("weather-slow", report_text)
 
-    def test_end_conversation_tool_requests_one_existing_stop_without_output(self):
+    def test_end_conversation_tool_enters_one_farewell_before_stop(self):
         lease = FakeLease()
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")
         coordinator.host_event("armed")
@@ -912,12 +962,13 @@ class RealtimeHostTests(unittest.TestCase):
             arguments="{}",
         )
 
-        self.assertEqual(result, "stopping")
-        self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
-        command = coordinator.command_after(cursor)
-        self.assertEqual(command["type"], "stop")
-        self.assertEqual(command["reason"], "end_phrase")
-        self.assertNotIn("output", command)
+        self.assertEqual(result, "farewell")
+        self.assertEqual(coordinator.state, HandoffState.HOST_FAREWELL)
+        self.assertIsNone(coordinator.command_after(cursor))
+        self.assertEqual(
+            coordinator.host_event("speech_started", session_id),
+            "farewell",
+        )
         self.assertEqual(
             coordinator.host_event(
                 "tool_call",
@@ -926,13 +977,79 @@ class RealtimeHostTests(unittest.TestCase):
                 name="end_conversation",
                 arguments="{}",
             ),
-            "stopping",
+            "farewell",
         )
-        self.assertIsNone(coordinator.command_after(command["command_id"]))
+        coordinator.host_event("farewell_started", session_id)
+        coordinator.host_event("farewell_response_created", session_id)
+        coordinator.host_event("farewell_playback_started", session_id)
+        coordinator.host_event("farewell_playback_stopped", session_id)
+        self.assertEqual(coordinator.state, HandoffState.HOST_FAREWELL)
+        result = coordinator.host_event(
+            "farewell_response_done", session_id, reason="completed"
+        )
+        self.assertEqual(result, "stopping")
+        command = coordinator.command_after(cursor)
+        self.assertEqual(command["type"], "stop")
+        self.assertEqual(command["reason"], "farewell_complete")
+        self.assertNotIn("output", command)
         report_text = json.dumps(coordinator.report())
         self.assertIn("host_end_conversation_tool", report_text)
+        self.assertIn("host_farewell_completed", report_text)
         for private in ("end-call", "arguments"):
             self.assertNotIn(private, report_text)
+
+    def test_farewell_failure_and_timeout_fall_back_to_bounded_stop(self):
+        now = [0.0]
+        clock = lambda: now[0]
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(
+            lease, clock=clock, session_ids=lambda: "session-1"
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        self.activate_session(coordinator, session_id)
+        self.assertEqual(
+            coordinator.host_event(
+                "tool_call",
+                session_id,
+                call_id="end-call",
+                name="end_conversation",
+                arguments="{}",
+            ),
+            "farewell",
+        )
+        coordinator.host_event("farewell_started", session_id)
+        coordinator.host_event("farewell_response_created", session_id)
+        self.assertEqual(
+            coordinator.host_event(
+                "farewell_response_done", session_id, reason="cancelled"
+            ),
+            "stopping",
+        )
+        self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
+
+        timeout_coordinator = HandoffCoordinator(
+            FakeLease(), clock=clock, session_ids=lambda: "session-2"
+        )
+        timeout_coordinator.host_event("armed")
+        timeout_session = timeout_coordinator.begin_handoff()
+        self.activate_session(timeout_coordinator, timeout_session)
+        timeout_coordinator.host_event(
+            "tool_call",
+            timeout_session,
+            call_id="end-call-2",
+            name="end_conversation",
+            arguments="{}",
+        )
+        now[0] += 8.0
+        self.assertEqual(
+            timeout_coordinator.timeout_reason(
+                idle_seconds=60.0,
+                max_duration_seconds=600.0,
+                farewell_seconds=8.0,
+            ),
+            "farewell_timeout",
+        )
 
     def test_end_conversation_tool_rejects_nonempty_or_malformed_arguments(self):
         for index, arguments in enumerate(
@@ -1096,6 +1213,26 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertNotIn("JSON.stringify(payload)", javascript.split("async function negotiationFailure", 1)[1].split("function flushInputLevels", 1)[0])
         for text in (
             "async function forwardToolCall",
+            "async function requestFarewell",
+            "async function startFarewell",
+            "function startRealtimeAcknowledgement",
+            'metadata:{purpose:"acknowledgement_experiment"}',
+            'hostEvent("realtime_ack_response_created")',
+            'hostEvent("realtime_ack_response_done"',
+            'hostEvent("realtime_ack_playback_started")',
+            'hostEvent("realtime_ack_playback_stopped")',
+            'acknowledgement_mode==="realtime_experiment"',
+            'result.status==="farewell"',
+            'inputTrack.enabled=false',
+            'hostEvent("farewell_started")',
+            'hostEvent("farewell_response_created")',
+            'hostEvent("farewell_response_done"',
+            'hostEvent("farewell_playback_started")',
+            'hostEvent("farewell_playback_stopped")',
+            'metadata:{purpose:"farewell"}',
+            'tool_choice:"none"',
+            'tools:[]',
+            'farewellPending&&dc?.readyState==="open"',
             'result.status==="stopping"',
             'await stop("end_phrase")',
             'response.function_call_arguments.done',
@@ -1103,11 +1240,22 @@ class RealtimeHostTests(unittest.TestCase):
             'type:"function_call_output"',
         ):
             self.assertIn(text, javascript)
+        acknowledgement = javascript.split("function startRealtimeAcknowledgement", 1)[1].split(
+            "async function reportConfiguredSession", 1
+        )[0]
+        self.assertIn("嗯，我在，请说。", acknowledgement)
+        self.assertNotIn("max_output_tokens", acknowledgement)
+        farewell = javascript.split("async function startFarewell", 1)[1].split(
+            "async function finishIfStopping", 1
+        )[0]
+        self.assertNotIn("max_output_tokens", farewell)
         for forbidden_tool in ('name:"weather"', 'name:"stock"', 'name:"fx"'):
             self.assertNotIn(forbidden_tool, javascript)
         self.assertNotIn("transcript decides", javascript)
-        for forbidden in ("response.cancel", "conversation.item.truncate", "output_audio_buffer.clear"):
+        for forbidden in ("conversation.item.truncate",):
             self.assertNotIn(forbidden, javascript)
+        self.assertIn('type:"response.cancel"', javascript)
+        self.assertIn('type:"output_audio_buffer.clear"', javascript)
         for forbidden in (
             "OPENAI_API_KEY",
             "/token",
@@ -1255,7 +1403,12 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertEqual(responses[0][0], HTTPStatus.OK)
         self.assertEqual(
             responses[0][1],
-            {"input_noise_reduction": "far_field", "output_volume": 0.3},
+            {
+                "model": "model-test",
+                "voice": "marin",
+                "input_noise_reduction": "far_field",
+                "output_volume": 0.3,
+            },
         )
         self.assertNotIn("sk-private", json.dumps(responses))
 
