@@ -16,6 +16,7 @@ const UI_STATES={
   thinking:{label:"Thinking",title:"Working on it",detail:"Jarvis is preparing a response."},
   speaking:{label:"Speaking",title:"Responding",detail:"You can interrupt at any time."},
   stopping:{label:"Ending",title:"Closing the conversation",detail:"Releasing the microphone and restoring local wake listening."},
+  "resume-required":{label:"Resume required",title:"Voice assistant paused",detail:"Open Settings or restart Hey Jarvis to restore voice listening."},
   error:{label:"Needs attention",title:"Jarvis couldn’t continue",detail:"Wake listening is safe. Try again or open Settings for recovery."},
 };
 
@@ -277,6 +278,27 @@ async function openAppSettings(){
   window.location.assign("hey-jarvis://settings/open");
 }
 
+function failClosedAvailability(){
+  armed=false;
+  stopInputLevels();
+  releasePageMedia();
+  showEndControl(false);
+  $("arm").disabled=true;
+  $("arm").hidden=true;
+  setUiState("resume-required");
+}
+
+async function refreshAvailability(){
+  try{
+    const response=await fetch("/api/availability",{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||"availability_unavailable");
+    if(data.availability==="resume_required"){failClosedAvailability();return;}
+    if(data.availability==="ready"&&!armed&&!sessionId)setUiState("ready");
+    if(data.availability==="wake_listening"&&armed&&!sessionId)setUiState("wake-ready");
+  }catch{failClosedAvailability();}
+}
+
 async function sendFixtureAudio(command){
   if(command.session_id!==sessionId||dc?.readyState!=="open")throw new Error("fixture audio requires an open session");
   const audio=command.audio;if(typeof audio!=="string"||!audio.length)throw new Error("fixture audio payload is missing");
@@ -300,3 +322,5 @@ function releasePageMedia(){
 window.addEventListener("beforeunload",releasePageMedia);
 window.addEventListener("pagehide",releasePageMedia);
 document.addEventListener("freeze",releasePageMedia);
+refreshAvailability();
+setInterval(refreshAvailability,1000);

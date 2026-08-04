@@ -50,6 +50,9 @@ class FakeRuntime:
     def close(self):
         self.closed = True
 
+    def availability(self):
+        return "wake_listening"
+
 
 class ProductSidecarTests(unittest.TestCase):
     def test_lifecycle_diagnostics_are_bounded_and_redacted(self):
@@ -138,7 +141,8 @@ class ProductSidecarTests(unittest.TestCase):
         ]
         self.assertEqual(payloads[0]["kind"], "ready")
         self.assertEqual(payloads[0]["control_url"], runtime.control_url)
-        self.assertEqual(payloads[1]["event"], "healthy")
+        self.assertEqual(payloads[1]["event"], "voice_availability")
+        self.assertEqual(payloads[1]["detail"], "wake_listening")
         self.assertEqual(payloads[2]["event"], "stopping")
         self.assertTrue(runtime.closed)
         self.assertEqual(calls[0]["resource_dir"], Path("/tmp/hey-jarvis-resources"))

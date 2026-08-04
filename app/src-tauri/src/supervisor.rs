@@ -20,6 +20,7 @@ const RESTART_BACKOFF: Duration = Duration::from_millis(250);
 #[derive(Clone, Debug, Serialize)]
 pub struct RuntimeSnapshot {
     pub state: String,
+    pub availability: String,
     pub detail: String,
     pub protocol_version: u16,
     pub session_id: String,
@@ -31,6 +32,7 @@ impl RuntimeSnapshot {
     fn stopped(app_support_dir: &Path) -> Self {
         Self {
             state: "stopped".into(),
+            availability: "resume_required".into(),
             detail: "Sidecar is not running.".into(),
             protocol_version: PROTOCOL_VERSION,
             session_id: String::new(),
@@ -143,6 +145,7 @@ impl SidecarSupervisor {
         self.next_sequence = 1;
         if let Ok(mut snapshot) = self.snapshot.lock() {
             snapshot.state = "starting".into();
+            snapshot.availability = "resume_required".into();
             snapshot.detail = "Starting the sidecar.".into();
             snapshot.session_id = self.session_id.clone();
             snapshot.app_support_dir = self.app_support_dir.display().to_string();
@@ -215,6 +218,7 @@ impl SidecarSupervisor {
                     }
                     Err(error) => {
                         set_snapshot(&snapshot, "error", error);
+                        set_availability(&snapshot, "resume_required");
                         break;
                     }
                 }
@@ -263,6 +267,7 @@ impl SidecarSupervisor {
         }
 
         set_snapshot(&self.snapshot, "ready", "Sidecar is healthy.");
+        set_availability(&self.snapshot, "ready");
         self.diagnostics.record(
             "native",
             "sidecar_ready",
@@ -307,6 +312,7 @@ impl SidecarSupervisor {
             Some(&self.session_id),
             Some("non_listening"),
         );
+        set_availability(&self.snapshot, "resume_required");
         if self.restart_attempts >= MAX_RESTARTS {
             self.desired_running = false;
             set_snapshot(
@@ -314,6 +320,7 @@ impl SidecarSupervisor {
                 "crash_loop",
                 "Sidecar crash loop; listening remains off.",
             );
+            set_availability(&self.snapshot, "resume_required");
             self.diagnostics.record(
                 "native",
                 "sidecar_crash_loop",
@@ -333,6 +340,7 @@ impl SidecarSupervisor {
                 "degraded",
                 format!("Sidecar recovery attempt {attempt} failed; listening remains off."),
             );
+            set_availability(&self.snapshot, "resume_required");
             self.diagnostics.record(
                 "native",
                 "sidecar_restart_failed",
@@ -344,22 +352,20 @@ impl SidecarSupervisor {
                 "native",
                 "sidecar_restarted",
                 Some(&self.session_id),
-                Some("wake_listening"),
+                Some("ready"),
             );
         }
         result
     }
 
     pub fn health(&mut self) -> Result<RuntimeSnapshot, String> {
-        self.send(Payload::Lifecycle {
+        if let Err(error) = self.send(Payload::Lifecycle {
             event: "health_check".into(),
             detail: None,
-        })?;
-        set_snapshot(
-            &self.snapshot,
-            "ready",
-            "Health check requested from the sidecar.",
-        );
+        }) {
+            set_availability(&self.snapshot, "resume_required");
+            return Err(error);
+        }
         Ok(self.snapshot())
     }
 
@@ -403,6 +409,7 @@ impl SidecarSupervisor {
             let _ = reader.join();
         }
         set_snapshot(&self.snapshot, "stopped", "Sidecar stopped.");
+        set_availability(&self.snapshot, "resume_required");
         self.diagnostics.record(
             "native",
             "sidecar_stopped",
@@ -418,6 +425,7 @@ impl SidecarSupervisor {
             .map(|snapshot| snapshot.clone())
             .unwrap_or_else(|_| RuntimeSnapshot {
                 state: "error".into(),
+                availability: "resume_required".into(),
                 detail: "Sidecar status lock is unavailable.".into(),
                 protocol_version: PROTOCOL_VERSION,
                 session_id: self.session_id.clone(),
@@ -448,6 +456,7 @@ impl SidecarSupervisor {
 
     fn fail<T>(&self, detail: String) -> Result<T, String> {
         set_snapshot(&self.snapshot, "error", &detail);
+        set_availability(&self.snapshot, "resume_required");
         self.diagnostics.record(
             "native",
             "sidecar_failed",
@@ -511,9 +520,37 @@ fn set_snapshot(snapshot: &Arc<Mutex<RuntimeSnapshot>>, state: &str, detail: imp
     }
 }
 
+fn set_availability(snapshot: &Arc<Mutex<RuntimeSnapshot>>, availability: &str) {
+    if let Ok(mut current) = snapshot.lock() {
+        current.availability = availability.into();
+    }
+}
+
 fn update_from_payload(snapshot: &Arc<Mutex<RuntimeSnapshot>>, payload: Payload) {
     match payload {
         Payload::Lifecycle { event, detail } => {
+            if event == "voice_availability" {
+                let availability = detail.unwrap_or_default();
+                if matches!(
+                    availability.as_str(),
+                    "ready" | "wake_listening" | "busy" | "resume_required"
+                ) {
+                    set_snapshot(
+                        snapshot,
+                        "ready",
+                        format!("Voice availability: {availability}"),
+                    );
+                    set_availability(snapshot, &availability);
+                } else {
+                    set_snapshot(
+                        snapshot,
+                        "error",
+                        "Sidecar sent invalid voice availability.",
+                    );
+                    set_availability(snapshot, "resume_required");
+                }
+                return;
+            }
             let message = detail
                 .map(|value| format!("{event}: {value}"))
                 .unwrap_or(event);
@@ -525,12 +562,16 @@ fn update_from_payload(snapshot: &Arc<Mutex<RuntimeSnapshot>>, payload: Payload)
                 if recoverable { "degraded" } else { "error" },
                 format!("Sidecar error: {code}"),
             );
+            set_availability(snapshot, "resume_required");
         }
-        _ => set_snapshot(
-            snapshot,
-            "error",
-            "Sidecar sent a message that is invalid in this lifecycle state.",
-        ),
+        _ => {
+            set_snapshot(
+                snapshot,
+                "error",
+                "Sidecar sent a message that is invalid in this lifecycle state.",
+            );
+            set_availability(snapshot, "resume_required");
+        }
     }
 }
 
@@ -556,12 +597,21 @@ mod tests {
         let mut supervisor = SidecarSupervisor::with_python(support, resources, script, python);
         let started = supervisor.start().expect("sidecar starts");
         assert_eq!(started.state, "ready");
+        assert_eq!(started.availability, "ready");
         assert!(started.session_id.starts_with("session-"));
 
         let health = supervisor.health().expect("health request");
         assert_eq!(health.state, "ready");
+        for _ in 0..20 {
+            if supervisor.snapshot().detail == "Voice availability: ready" {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(supervisor.snapshot().availability, "ready");
         supervisor.stop("test").expect("sidecar stops");
         assert_eq!(supervisor.snapshot().state, "stopped");
+        assert_eq!(supervisor.snapshot().availability, "resume_required");
     }
 
     #[test]
@@ -575,6 +625,23 @@ mod tests {
         );
         assert!(supervisor.start().is_err());
         assert_eq!(supervisor.snapshot().state, "error");
+        assert_eq!(supervisor.snapshot().availability, "resume_required");
+    }
+
+    #[test]
+    fn invalid_voice_availability_fails_closed() {
+        let (support, _, _, _) = fixture();
+        let snapshot = Arc::new(Mutex::new(RuntimeSnapshot::stopped(&support)));
+        update_from_payload(
+            &snapshot,
+            Payload::Lifecycle {
+                event: "voice_availability".into(),
+                detail: Some("invented_state".into()),
+            },
+        );
+        let current = snapshot.lock().expect("snapshot").clone();
+        assert_eq!(current.state, "error");
+        assert_eq!(current.availability, "resume_required");
     }
 
     #[test]

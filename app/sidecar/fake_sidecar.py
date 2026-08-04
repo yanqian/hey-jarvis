@@ -146,7 +146,7 @@ def run(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) ->
                 output_stream,
                 session_id,
                 outbound_sequence,
-                {"kind": "lifecycle", "event": "healthy", "detail": "fake sidecar"},
+                {"kind": "lifecycle", "event": "voice_availability", "detail": "ready"},
             )
             outbound_sequence += 1
         elif kind == "settings":

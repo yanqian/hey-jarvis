@@ -2362,6 +2362,68 @@
       "depends_on": [
         "F102"
       ]
+    },
+    {
+      "id": "F104",
+      "title": "Publish truthful voice availability across the Mac app",
+      "description": "Distinguish sidecar readiness, browser arming, and actual wake-microphone ownership so native and WebView surfaces never claim listening after media or the sidecar has stopped.",
+      "acceptance": [
+        "A bounded privacy-safe lifecycle contract distinguishes sidecar process ready, browser armed, local wake microphone active, conversation handoff, stopping, and non-listening states across Python, the native supervisor, and the loopback WebView without granting general native IPC to remote-loopback content.",
+        "Native runtime snapshots and diagnostics treat actual local wake-microphone ownership as the wake-listening boundary; startup before Enable, sidecar exit, Settings, microphone loss, system sleep, stale session, and failed recovery cannot report WAKE LISTENING.",
+        "Home and menu-bar state consume the truthful native availability contract and present concise Ready, Wake listening, Busy, and Resume required outcomes without exposing protocol IDs, audio, transcripts, answers, credentials, or provider data.",
+        "State transitions are session-scoped, monotonic where required, fail closed on unknown, duplicate, stale, or out-of-order events, and preserve F091 bounded crash recovery plus F094-F100 interaction and Settings behavior.",
+        "Focused protocol/native/frontend tests, sidecar fault injection, a real Debug app Enable/stop/sleep-state inspection, full project tests, final ./init.sh, fast coding evidence, and separate evaluator approval pass without requiring a paid conversation."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F091",
+        "F100"
+      ]
+    },
+    {
+      "id": "F105",
+      "title": "Add the native Smart Speaker idle-sleep policy",
+      "description": "Provide an opt-in General setting that uses a scoped native macOS assertion to keep a genuinely listening Hey Jarvis awake while allowing display sleep and lock.",
+      "acceptance": [
+        "General settings expose a keyboard-accessible Smart Speaker Mode toggle that defaults off, persists as non-secret app state, explains battery impact, and states that explicit Sleep, shutdown, and lid close remain unavailable boundaries.",
+        "When the mode is enabled and F104 confirms genuine voice listening, native code acquires one process-owned macOS idle-system-sleep assertion without spawning caffeinate, preventing display sleep, or depending on Core Audio's incidental assertions.",
+        "The assertion is acquired and released idempotently and is released immediately when Settings opens, the mode is disabled, listening becomes unavailable, microphone permission is lost, the sidecar stops or crashes, system sleep begins, or the app quits.",
+        "Mode-off behavior is unchanged; enabling the mode before the Enable gesture or while recovery is required cannot hold an assertion or claim appliance readiness, and sanitized diagnostics expose only assertion lifecycle reason and state.",
+        "Injectable power-backend tests, Settings persistence/accessibility tests, source checks for no shell caffeinate and no display-sleep assertion, pmset/process inspection, a display-off and lock trial beyond the configured idle-sleep deadline with a complete voice loop, full project tests, final ./init.sh, fast coding evidence, and separate evaluator approval pass."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F104"
+      ]
+    },
+    {
+      "id": "F106",
+      "title": "Recover Smart Speaker Mode safely after system sleep",
+      "description": "Make unavoidable system sleep tear down truthfully and restore the prior smart-speaker posture after wake when possible, with an explicit Resume fallback when microphone re-arming requires the user.",
+      "acceptance": [
+        "Before system sleep, native code records only whether Smart Speaker Mode was enabled and genuinely active, publishes non-listening, releases the power assertion, and deterministically stops sidecar and browser media without retaining private conversation data.",
+        "After wake, only a previously active Smart Speaker session receives one bounded off-callback-thread recovery attempt; mode-off, never-enabled, onboarding-incomplete, denied-permission, Settings, and intentional-stop states do not auto-restart.",
+        "Automatic recovery reports success only after sidecar readiness, browser arming, and local wake-microphone ownership are re-established; it never starts a paid Realtime conversation, bypasses a permission prompt, or enters an unbounded restart loop.",
+        "If WKWebView or microphone policy prevents automatic re-arming, Home and menu-bar state remain truthfully non-listening and present one focused Resume voice assistant action whose success reacquires the F105 assertion and restores Wake listening.",
+        "Sleep/wake ordering and timeout tests, restart and stale-event fault injection, automatic-success and Resume-required UI tests, one real explicit-sleep/wake trial, one post-recovery voice loop, full project tests, final ./init.sh, fast coding evidence, and separate evaluator approval pass."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F104",
+        "F105"
+      ]
     }
   ]
 }

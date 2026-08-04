@@ -372,6 +372,12 @@ class HostRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/report":
             self._json(HTTPStatus.OK, self.server.coordinator.report())
             return
+        if parsed.path == "/api/availability":
+            self._json(
+                HTTPStatus.OK,
+                {"availability": self.server.coordinator.availability()},
+            )
+            return
         if parsed.path == "/api/realtime-settings":
             try:
                 settings = self._settings(require_openai_api_key=False)

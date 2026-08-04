@@ -36,6 +36,15 @@ struct AppRuntime {
 
 static SETTINGS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
+fn availability_menu_text(availability: &str) -> &'static str {
+    match availability {
+        "ready" => "Status: Ready",
+        "wake_listening" => "Status: Wake listening",
+        "busy" => "Status: Busy",
+        _ => "Status: Resume required",
+    }
+}
+
 #[tauri::command]
 fn record_webview_lifecycle(
     event: String,
@@ -328,6 +337,20 @@ pub fn run() {
                 diagnostics,
             });
             power::install(app.handle().clone());
+            let initial_availability = app
+                .state::<AppRuntime>()
+                .supervisor
+                .lock()
+                .map(|supervisor| supervisor.snapshot().availability)
+                .unwrap_or_else(|_| "resume_required".into());
+            let voice_status = MenuItem::with_id(
+                app,
+                "voice-status",
+                availability_menu_text(&initial_availability),
+                false,
+                None::<&str>,
+            )?;
+            let monitor_voice_status = voice_status.clone();
             let monitor_app = app.handle().clone();
             thread::spawn(move || loop {
                 thread::sleep(Duration::from_secs(1));
@@ -340,6 +363,18 @@ pub fn run() {
                     .map(|mut supervisor| supervisor.needs_recovery())
                     .unwrap_or(false);
                 if !needs_recovery {
+                    let availability = runtime
+                        .supervisor
+                        .lock()
+                        .map(|mut supervisor| {
+                            let snapshot = supervisor.snapshot();
+                            if snapshot.state == "ready" {
+                                let _ = supervisor.health();
+                            }
+                            supervisor.snapshot().availability
+                        })
+                        .unwrap_or_else(|_| "resume_required".into());
+                    let _ = monitor_voice_status.set_text(availability_menu_text(&availability));
                     continue;
                 }
                 let Ok(credentials) = RuntimeCredentials::load(runtime.credentials.as_ref()) else {
@@ -353,6 +388,8 @@ pub fn run() {
                 };
                 if let Ok(mut supervisor) = runtime.supervisor.lock() {
                     let _ = supervisor.recover_if_needed(&credentials);
+                    let availability = supervisor.snapshot().availability;
+                    let _ = monitor_voice_status.set_text(availability_menu_text(&availability));
                 };
             });
             if let Some(window) = app.get_webview_window("main") {
@@ -379,7 +416,7 @@ pub fn run() {
             let show = MenuItem::with_id(app, "show", "Show Hey Jarvis", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Hey Jarvis", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &settings, &quit])?;
+            let menu = Menu::with_items(app, &[&voice_status, &show, &settings, &quit])?;
             let tray = TrayIconBuilder::with_id("hey-jarvis")
                 .menu(&menu)
                 .icon(tauri::include_image!("icons/trayTemplate@2x.png"))

@@ -407,6 +407,17 @@ accepted slim full-color App Icon unchanged. Its independent approval is
 recorded as `EVAL_PASS: F103` in
 `.agent-harness/runs/20260803T104134Z-F103-evaluation-pass.md`.
 
+F104 is evaluator-approved as the truthful availability foundation for the
+owner-approved Smart Speaker Mode; F105-F106 remain planned. The planning
+is grounded in the 2026-08-03 target-Mac experiment: after the old external
+`caffeinate` assertion disappeared and the display remained off beyond the
+configured one-minute system-sleep deadline, macOS emitted
+`system_will_sleep`, the current power callback intentionally stopped the
+sidecar, wake only recorded `system_did_wake`, and the still-running native app
+could no longer answer `Hey Jarvis`. The plan therefore requires a truthful
+voice-availability contract before adding a native idle-sleep assertion and a
+separate bounded sleep/wake recovery path.
+
 F093 is pending (`status=todo`) and intentionally deferred behind the
 owner-prioritized interaction/settings work. It owns the public engineering narrative
 and bounded demo plus privacy-safe feedback from at least three explicitly
@@ -425,11 +436,26 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Resume F093 by recording the bounded production-app demo and running two
-additional trusted Apple Silicon tester or distinct clean-profile trials.
-Public binary distribution remains on hold.
+Implement F105 next to add the opt-in native idle-sleep policy. F106 then adds
+bounded post-wake recovery with
+a truthful Resume fallback. After F104-F106, Resume F093 by recording the
+bounded production-app demo and running two additional trusted Apple Silicon
+tester or distinct clean-profile trials. Public binary distribution remains
+on hold.
 
 ## Recently Completed
+
+F104 - Publish truthful voice availability across the Mac app.
+
+F104 introduces a single fail-closed voice-availability contract across the
+Python coordinator, native supervisor, loopback Home page, and menu bar. A real
+Debug run verified Ready before Enable, Wake listening only after the local
+microphone lease opened, Resume required after sidecar loss, Not listening in
+Settings, and Ready after Done starts a fresh runtime. Full recovery passes
+with 423 project tests, ten Mac sidecar tests, and eighteen Rust tests. Coding
+evidence is in `.agent-harness/runs/F104-fast-coding.md`; independent approval
+is recorded as `EVAL_PASS: F104` in
+`.agent-harness/runs/20260803T153701Z-F104-evaluation-pass.md`.
 
 F103 - Strengthen the menu-bar icon at native size.
 

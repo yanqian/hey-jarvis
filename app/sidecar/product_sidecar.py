@@ -287,7 +287,7 @@ class ProductRuntime:
             daemon=True,
         )
         controller_thread.start()
-        diagnostics.record("runtime_ready", "wake_listening")
+        diagnostics.record("runtime_ready", "ready")
         control_url = (
             f"http://127.0.0.1:{server.server_port}/"
             f"?lease={quote(session_id, safe='')}"
@@ -299,6 +299,9 @@ class ProductRuntime:
             stop_event=stop_event,
             control_url=control_url,
         )
+
+    def availability(self) -> str:
+        return self.server.coordinator.availability()
 
     def close(self) -> None:
         self.stop_event.set()
@@ -403,21 +406,21 @@ def run(
                     },
                 )
                 outbound_sequence += 1
-                diagnostics.record("ready_sent", "wake_listening")
+                diagnostics.record("ready_sent", "ready")
                 continue
 
             kind = payload["kind"]
             if kind == "lifecycle" and payload["event"] == "health_check":
                 if diagnostics is not None:
-                    diagnostics.record("health_check", "ready")
+                    diagnostics.record("health_check", runtime.availability())
                 _write(
                     output_stream,
                     session_id,
                     outbound_sequence,
                     {
                         "kind": "lifecycle",
-                        "event": "healthy",
-                        "detail": "product runtime",
+                        "event": "voice_availability",
+                        "detail": runtime.availability(),
                     },
                 )
                 outbound_sequence += 1

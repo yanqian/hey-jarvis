@@ -208,6 +208,42 @@ class RealtimeHostTests(unittest.TestCase):
         types = [event["type"] for event in coordinator.report()["events"]]
         self.assertLess(types.index("wake_microphone_closed"), types.index("host_microphone_requested"))
 
+    def test_voice_availability_tracks_actual_microphone_ownership(self):
+        coordinator, lease = self.build_coordinator()
+        self.assertEqual(coordinator.availability(), "ready")
+
+        coordinator.host_event("armed")
+        self.assertTrue(lease.is_open)
+        self.assertEqual(coordinator.availability(), "wake_listening")
+
+        session_id = coordinator.begin_handoff()
+        self.assertFalse(lease.is_open)
+        self.assertEqual(coordinator.availability(), "busy")
+
+        coordinator.host_event("error", session_id, reason="test")
+        self.assertEqual(coordinator.availability(), "busy")
+        coordinator.host_event("stopped", session_id, reason="test")
+        self.assertTrue(lease.is_open)
+        self.assertEqual(coordinator.availability(), "wake_listening")
+
+        lease.close()
+        self.assertEqual(coordinator.availability(), "resume_required")
+
+    def test_availability_endpoint_exposes_only_the_bounded_state(self):
+        coordinator, _lease = self.build_coordinator()
+        responses: list[tuple[HTTPStatus, dict[str, object]]] = []
+        handler = object.__new__(server.HostRequestHandler)
+        handler.path = "/api/availability"
+        handler.server = SimpleNamespace(coordinator=coordinator)
+        handler._json = lambda status, payload: responses.append((status, dict(payload)))
+
+        handler.do_GET()
+
+        self.assertEqual(
+            responses,
+            [(HTTPStatus.OK, {"availability": "ready"})],
+        )
+
     def test_only_the_armed_browser_instance_can_consume_commands_or_emit_events(self):
         lease = FakeLease()
         coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-1")

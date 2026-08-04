@@ -289,6 +289,30 @@ class MacAppShellTests(unittest.TestCase):
             self.assertIn(marker, script)
         self.assertNotIn("OPENAI_API_KEY", script)
 
+    def test_voice_availability_is_truthful_bounded_and_visible(self):
+        host = (ROOT / "src" / "realtime_host" / "static" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        sidecar = (APP / "sidecar" / "product_sidecar.py").read_text(
+            encoding="utf-8"
+        )
+        supervisor = (APP / "src-tauri" / "src" / "supervisor.rs").read_text(
+            encoding="utf-8"
+        )
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('fetch("/api/availability"', host)
+        self.assertIn('"resume-required"', host)
+        self.assertIn('event": "voice_availability"', sidecar)
+        self.assertIn('diagnostics.record("runtime_ready", "ready")', sidecar)
+        self.assertNotIn('diagnostics.record("runtime_ready", "wake_listening")', sidecar)
+        for availability in ("ready", "wake_listening", "busy", "resume_required"):
+            self.assertIn(f'"{availability}"', supervisor)
+        self.assertIn('"voice-status"', native)
+        self.assertIn('"Status: Wake listening"', native)
+
     def test_product_sidecar_reuses_runtime_without_chrome_or_root_env(self):
         sidecar = (APP / "sidecar" / "product_sidecar.py").read_text(
             encoding="utf-8"

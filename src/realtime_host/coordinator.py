@@ -634,6 +634,22 @@ class HandoffCoordinator:
                 "events": list(self._evidence),
             }
 
+    def availability(self) -> str:
+        """Return the bounded, user-facing availability of local voice input."""
+        with self._lock:
+            if not self._armed:
+                return "ready"
+            if self._state == HandoffState.WAKE_OWNED:
+                return "wake_listening" if self._wake_lease.is_open else "resume_required"
+            if self._state in {
+                HandoffState.HOST_STARTING,
+                HandoffState.HOST_READY,
+                HandoffState.HOST_ACTIVE,
+                HandoffState.HOST_STOPPING,
+            }:
+                return "busy"
+            return "resume_required"
+
     def close(self) -> None:
         with self._lock:
             self.request_stop()

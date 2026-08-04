@@ -46,7 +46,8 @@ class FakeSidecarTests(unittest.TestCase):
         self.assertEqual(run(io.StringIO(incoming), output), 0)
         payloads = [json.loads(line)["payload"] for line in output.getvalue().splitlines()]
         self.assertEqual([item["kind"] for item in payloads], ["ready", "lifecycle", "lifecycle"])
-        self.assertEqual(payloads[1]["event"], "healthy")
+        self.assertEqual(payloads[1]["event"], "voice_availability")
+        self.assertEqual(payloads[1]["detail"], "ready")
         self.assertEqual(payloads[2]["event"], "stopping")
 
     def test_rejects_unknown_version_order_session_and_fields(self):
