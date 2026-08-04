@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import os
 import subprocess
@@ -20,6 +22,7 @@ from typing import Callable, Mapping
 from src.audio_input import open_microphone_stream
 from src.config import ConfigError, DEFAULT_REALTIME_END_PHRASES, load_settings
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffError, SoundDeviceWakeLease
+from src.realtime_ack_asset import RealtimeAckAssetError, store_candidate
 from src.tools.router import FX_SUPPORTED_CURRENCIES
 
 
@@ -302,6 +305,7 @@ class HostHTTPServer(ThreadingHTTPServer):
     coordinator: HandoffCoordinator
     settings: object | None
     capability_lease: str | None
+    acknowledgement_candidate_root: Path
 
 
 def build_server(
@@ -316,6 +320,7 @@ def build_server(
     tool_http_client: object | None = None,
     settings: object | None = None,
     capability_lease: str | None = None,
+    acknowledgement_candidate_root: str | Path = "tmp/realtime-ack-candidates",
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
@@ -331,6 +336,7 @@ def build_server(
     )
     server.settings = settings
     server.capability_lease = capability_lease
+    server.acknowledgement_candidate_root = Path(acknowledgement_candidate_root)
     return server
 
 
@@ -442,6 +448,47 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 self.server.coordinator.request_realtime_acknowledgement_experiment()
                 self._json(HTTPStatus.OK, {"status": "armed_for_next_handoff"})
                 return
+            if path == "/api/acknowledgement-capture/arm":
+                payload = self._read_json(max_length=256)
+                label = payload.get("label")
+                if not isinstance(label, str):
+                    raise HandoffError("Acknowledgement capture label was invalid")
+                self.server.coordinator.request_realtime_acknowledgement_capture(label)
+                self._json(HTTPStatus.OK, {"status": "armed_for_next_handoff", "candidate": label})
+                return
+            if path == "/api/acknowledgement-capture/candidate":
+                payload = self._read_json(max_length=2_100_000)
+                label = payload.get("label")
+                transcript = payload.get("transcript")
+                audio = payload.get("audio")
+                if not isinstance(label, str) or not isinstance(audio, str):
+                    raise HandoffError("Acknowledgement candidate payload was invalid")
+                self.server.coordinator.validate_realtime_acknowledgement_capture(label)
+                try:
+                    wav_data = base64.b64decode(audio, validate=True)
+                except (binascii.Error, ValueError) as exc:
+                    raise HandoffError("Acknowledgement candidate audio was invalid") from exc
+                settings = self._settings(require_openai_api_key=False)
+                candidate = store_candidate(
+                    self.server.acknowledgement_candidate_root,
+                    label=label,
+                    wav_data=wav_data,
+                    transcript=transcript,
+                    model=settings.realtime_model,
+                    voice=settings.realtime_voice,
+                    output_gain=settings.realtime_output_volume,
+                )
+                self.server.coordinator.accept_realtime_acknowledgement_capture(label)
+                self._json(
+                    HTTPStatus.CREATED,
+                    {
+                        "status": "candidate_saved",
+                        "candidate": label,
+                        "duration_ms": candidate["duration_ms"],
+                        "sha256": candidate["sha256"],
+                    },
+                )
+                return
             if path == "/api/stop":
                 self.server.coordinator.request_stop()
                 self._json(HTTPStatus.OK, {"status": "stopping"})
@@ -478,7 +525,7 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 )
                 self._json(HTTPStatus.OK, {"status": result})
                 return
-        except (ConfigError, HandoffError, HostServerError) as exc:
+        except (ConfigError, HandoffError, HostServerError, RealtimeAckAssetError) as exc:
             self._json(HTTPStatus.CONFLICT, {"error": "host_control_failed", "message": str(exc)})
             return
         self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})

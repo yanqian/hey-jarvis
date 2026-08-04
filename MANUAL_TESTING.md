@@ -397,6 +397,17 @@ observes quiet audio. Residual wake-positive chunks should appear in the
 `max_suppressed_score` summary and must not trigger another acknowledgement
 cycle. A fresh `Hey Jarvis` after the quiet gate should still wake normally.
 
+## Realtime ACK candidate selection
+
+Each capture uses one real Realtime request and deliberately retains only the
+fixed ACK candidate under `tmp/realtime-ack-candidates/`. Obtain explicit live
+authorization, run candidates one at a time with distinct labels, and confirm
+normal wake recovery after each run. Audition the WAV files without renaming
+them, record the preferred label, and run `promote --owner-confirmed` only for
+that exact label. Verify the promoted manifest contains no session identifier,
+user transcript, SDP, ICE, credential, or provider payload. Do not delete
+rejected candidates until the owner has completed selection.
+
 ## Running One Test At A Time
 
 For each manual test, record:

@@ -212,6 +212,36 @@ Live commands open real devices, connect to OpenAI, may incur cost, and require
 explicit authorization for every run. Offline commands evaluate an existing
 sanitized observation.
 
+### Curated Realtime acknowledgement capture
+
+The candidate workflow is deliberately separate from normal conversations. It
+must be explicitly armed for one wake, digitally records only the remote
+WebRTC stream correlated to `purpose=acknowledgement`, validates the fixed
+Mandarin phrase, and writes a bounded WAV plus manifest under the Git-ignored
+`tmp/realtime-ack-candidates/` directory. It never records the microphone or
+automatically retains answers and farewells.
+
+After starting and arming the ordinary Realtime host, one explicitly authorized
+paid capture is:
+
+```bash
+python -m src.evals.realtime_ack_capture capture candidate-01
+```
+
+Audition candidates locally. Promote only the exact candidate the owner selects:
+
+```bash
+python -m src.evals.realtime_ack_capture promote \
+  tmp/realtime-ack-candidates/candidate-01.wav \
+  --owner-confirmed
+python -m src.evals.realtime_ack_capture prepare
+```
+
+Promotion creates the canonical WAV and privacy-safe manifest under `assets/`;
+preparation verifies the digest and installs `var/realtime-ack.wav` without a
+network request. The candidate directory may contain deliberately retained
+audio and must not be attached to support bundles or committed.
+
 RT001 verifies saved-wake handoff, exclusive microphone ordering, connection,
 configured-session readiness, acknowledgement-gated input, cleanup, timing
 attribution, and wake recovery. It needs no fresh human speech:

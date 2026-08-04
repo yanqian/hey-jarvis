@@ -37,6 +37,7 @@ FIXTURE_AUDIO_NAMES = frozenset({"turn-1", "turn-2"})
 INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 LOCAL_TIMING_MARKERS = frozenset({"wake_confirmed", "ack_started", "ack_completed"})
 ACKNOWLEDGEMENT_MODES = frozenset({"local", "realtime"})
+ACKNOWLEDGEMENT_CAPTURE_LABEL = re.compile(r"^candidate-[0-9]{2}$")
 HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
         "command_to_token_ms",
@@ -193,6 +194,9 @@ class HandoffCoordinator:
         self._acknowledgement_mode = acknowledgement_mode
         self._next_acknowledgement_mode: str | None = None
         self._active_acknowledgement_mode = "local"
+        self._next_acknowledgement_capture_label: str | None = None
+        self._active_acknowledgement_capture_label: str | None = None
+        self._acknowledgement_capture_saved = False
         self._realtime_ack_response_created = False
         self._realtime_ack_response_done = False
         self._realtime_ack_playback_started = False
@@ -326,8 +330,50 @@ class HandoffCoordinator:
                 raise HandoffError(
                     "Realtime acknowledgement evaluation can only be armed while wake owns the microphone"
                 )
+            if self._next_acknowledgement_capture_label is not None:
+                raise HandoffError("Acknowledgement capture is already armed")
             self._next_acknowledgement_mode = "realtime"
             self._record("realtime_acknowledgement_experiment_armed")
+
+    def request_realtime_acknowledgement_capture(self, label: str) -> None:
+        """Digitally capture exactly one correlated Realtime ACK on the next handoff."""
+
+        with self._lock:
+            if not self._armed:
+                raise HandoffError("WebRTC host must be armed before acknowledgement capture")
+            if self._state != HandoffState.WAKE_OWNED or self._session_id is not None:
+                raise HandoffError(
+                    "Realtime acknowledgement capture can only be armed while wake owns the microphone"
+                )
+            if not isinstance(label, str) or not ACKNOWLEDGEMENT_CAPTURE_LABEL.fullmatch(label):
+                raise HandoffError("Acknowledgement capture label was invalid")
+            if self._next_acknowledgement_capture_label is not None:
+                raise HandoffError("Acknowledgement capture is already armed")
+            self._next_acknowledgement_mode = "realtime"
+            self._next_acknowledgement_capture_label = label
+            self._record("realtime_acknowledgement_capture_armed", candidate=label)
+
+    def validate_realtime_acknowledgement_capture(self, label: str) -> None:
+        with self._lock:
+            self._validate_realtime_acknowledgement_capture(label)
+
+    def accept_realtime_acknowledgement_capture(self, label: str) -> None:
+        """Correlate one saved candidate without retaining its bytes or transcript in evidence."""
+
+        with self._lock:
+            self._validate_realtime_acknowledgement_capture(label)
+            self._acknowledgement_capture_saved = True
+            self._record("host_acknowledgement_candidate_saved", candidate=label)
+
+    def _validate_realtime_acknowledgement_capture(self, label: str) -> None:
+        if (
+            self._state != HandoffState.HOST_READY
+            or label != self._active_acknowledgement_capture_label
+            or self._acknowledgement_capture_saved
+            or not self._realtime_ack_response_created
+            or not self._realtime_ack_playback_started
+        ):
+            raise HandoffError("Acknowledgement candidate upload was stale or uncorrelated")
 
     @property
     def active_acknowledgement_mode(self) -> str:
@@ -342,6 +388,10 @@ class HandoffCoordinator:
                 and self._realtime_ack_response_done
                 and self._realtime_ack_playback_started
                 and self._realtime_ack_playback_stopped
+                and (
+                    self._active_acknowledgement_capture_label is None
+                    or self._acknowledgement_capture_saved
+                )
             )
 
     def begin_handoff(self) -> str:
@@ -365,6 +415,9 @@ class HandoffCoordinator:
                 self._next_acknowledgement_mode or self._acknowledgement_mode
             )
             self._next_acknowledgement_mode = None
+            self._active_acknowledgement_capture_label = self._next_acknowledgement_capture_label
+            self._next_acknowledgement_capture_label = None
+            self._acknowledgement_capture_saved = False
             self._reset_realtime_acknowledgement()
             self._connected_at = None
             self._last_activity_at = self._clock()
@@ -382,6 +435,8 @@ class HandoffCoordinator:
                 detail["input_level_diagnostics"] = True
             if self._active_acknowledgement_mode == "realtime":
                 detail["acknowledgement_mode"] = "realtime"
+            if self._active_acknowledgement_capture_label is not None:
+                detail["acknowledgement_capture_label"] = self._active_acknowledgement_capture_label
             self._enqueue("start", session_id, **detail)
             return session_id
 
@@ -793,6 +848,8 @@ class HandoffCoordinator:
         self._session_configured = False
         self._input_enable_requested = False
         self._active_acknowledgement_mode = "local"
+        self._active_acknowledgement_capture_label = None
+        self._acknowledgement_capture_saved = False
         self._reset_realtime_acknowledgement()
         self._connected_at = None
         self._last_activity_at = None

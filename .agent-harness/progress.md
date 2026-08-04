@@ -4,6 +4,14 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F110 coding and owner-authorized target-Mac evidence are complete. Three
+digitally captured `gpt-realtime-2.1` / `alloy` candidates passed bounded
+validation and wake recovery; the owner selected the 2,429 ms `candidate-02`.
+The canonical asset and manifest are under `assets/`, its prepared runtime copy
+has the same SHA-256, and unselected candidates remain Git-ignored. Fast coding
+evidence is recorded in `.agent-harness/runs/F110-fast-coding.md`; separate
+cold-start evaluator approval is the next gate before F111 parallel playback.
+
 F105 is evaluator-approved after its owner-led target-Mac lock acceptance. The first two trials
 isolated two independent boundaries: the native assertion was initially
 released on `wake_listening -> busy`, and a corrected run then showed locked
@@ -422,6 +430,20 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
+F110 is planned and is the owner-prioritized active direction. It will add an
+explicit, bounded Realtime ACK candidate-capture path, validate and prepare the
+digitally captured remote audio, and promote only an owner-selected version as
+a canonical local asset. The previously accepted live ACK cannot be reused
+because F108-F109 intentionally retained no audio. Live candidate generation
+therefore remains pending a fresh explicit authorization after offline tooling
+and tests are ready.
+
+F111 and F112 are planned behind F110. F111 will play the selected cached ACK
+immediately while the unified Realtime call connects in parallel, gating input
+on both playback and configuration completion. F112 will separately A/B
+shorter natural variants so an experimental preference cannot destabilize the
+accepted parallel production path.
+
 F108 is evaluator-approved. The bounded A/B runner,
 one-shot same-session Realtime ACK path, privacy oracle, deterministic cleanup,
 saved-local-trial recovery, and offline verification are implemented while the
@@ -482,8 +504,9 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Resume F106 to add bounded post-wake recovery with a truthful Resume fallback.
-After F106, Resume F093 by recording the
+Implement and evaluate F110, then F111 and F112 in that order. After the cached
+ACK work, resume F106 to add bounded post-wake recovery with a truthful Resume
+fallback. After F106, Resume F093 by recording the
 bounded production-app demo and running two additional trusted Apple Silicon
 tester or distinct clean-profile trials. Public binary distribution remains
 on hold.

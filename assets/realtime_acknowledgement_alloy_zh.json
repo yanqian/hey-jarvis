@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "phrase": "嗯，我在，请说。",
+  "prompt_version": "mandarin-ready-v1",
+  "model": "gpt-realtime-2.1",
+  "voice": "alloy",
+  "format": "wav_pcm_s16le_mono",
+  "sample_rate": 48000,
+  "duration_ms": 2429,
+  "playback_gain": 0.5,
+  "candidate": "candidate-02",
+  "sha256": "c4bc743a401f95bcbaef7206493bf89f304ed4610690481d277c489d6342ac88",
+  "selected_by_owner": true
+}

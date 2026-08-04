@@ -271,8 +271,15 @@ def sanitize_report(report: dict[str, object]) -> dict[str, object]:
     }
 
 
-def json_request(url: str, *, method: str = "GET") -> dict[str, object]:
-    request = urllib.request.Request(url, method=method)
+def json_request(
+    url: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, object] | None = None,
+) -> dict[str, object]:
+    data = None if payload is None else json.dumps(payload, separators=(",", ":")).encode()
+    headers = {} if data is None else {"Content-Type": "application/json"}
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
     with urllib.request.urlopen(request, timeout=3.0) as response:
         return json.loads(response.read())
 

@@ -8,6 +8,7 @@ let armed=false,lastCommand=0,pc=null,dc=null,stream=null,warmStream=null,inputT
 let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
 let responseActive=false,turnResponsePending=false,farewellPending=false,farewellStarted=false,farewellCallId=null,farewellResponseActive=false;
 let realtimeAcknowledgement=false,acknowledgementStarted=false,acknowledgementResponseActive=false;
+let acknowledgementCaptureLabel=null,acknowledgementCapture=null,acknowledgementTranscript=null,remoteStream=null;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
@@ -31,6 +32,35 @@ function setUiState(state,detail=null){
   $("status-detail").textContent=detail||presentation.detail;
 }
 function configuredOutputVolume(){return Number.isFinite(sessionConfig?.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;}
+
+function encodeMonoWav(chunks,sampleRate){
+  const sampleCount=chunks.reduce((total,chunk)=>total+chunk.length,0),buffer=new ArrayBuffer(44+sampleCount*2),view=new DataView(buffer);
+  const text=(offset,value)=>{for(let index=0;index<value.length;index++)view.setUint8(offset+index,value.charCodeAt(index));};
+  text(0,"RIFF");view.setUint32(4,36+sampleCount*2,true);text(8,"WAVE");text(12,"fmt ");view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,sampleRate,true);view.setUint32(28,sampleRate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);text(36,"data");view.setUint32(40,sampleCount*2,true);
+  let offset=44;for(const chunk of chunks)for(const value of chunk){const bounded=Math.max(-1,Math.min(1,value));view.setInt16(offset,bounded<0?bounded*0x8000:bounded*0x7fff,true);offset+=2;}
+  return buffer;
+}
+function base64FromBuffer(buffer){
+  const bytes=new Uint8Array(buffer);let binary="";for(let offset=0;offset<bytes.length;offset+=0x8000)binary+=String.fromCharCode(...bytes.subarray(offset,offset+0x8000));return btoa(binary);
+}
+function createAcknowledgementCapture(mediaStream){
+  const AudioContextClass=window.AudioContext||window.webkitAudioContext;if(!AudioContextClass)throw new Error("Web Audio capture is unavailable");
+  const context=Reflect.construct(AudioContextClass,[]),source=context.createMediaStreamSource(mediaStream),processor=context.createScriptProcessor(4096,1,1),sink=context.createGain(),chunks=[];
+  sink.gain.value=0;processor.onaudioprocess=event=>chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));source.connect(processor);processor.connect(sink);sink.connect(context.destination);context.resume().catch(()=>{});
+  let closed=false;return {
+    async finish(){if(closed)throw new Error("ACK capture already closed");closed=true;processor.onaudioprocess=null;try{source.disconnect();processor.disconnect();sink.disconnect();}catch{}await context.close();if(!chunks.length)throw new Error("ACK capture contains no samples");return encodeMonoWav(chunks,context.sampleRate);},
+    abort(){if(closed)return;closed=true;processor.onaudioprocess=null;try{source.disconnect();processor.disconnect();sink.disconnect();}catch{}context.close().catch(()=>{});},
+  };
+}
+function responseTranscript(response){
+  for(const item of response?.output||[])for(const content of item?.content||[])if(typeof content?.transcript==="string")return content.transcript;return null;
+}
+async function uploadAcknowledgementCapture(){
+  if(!acknowledgementCaptureLabel||!acknowledgementCapture)throw new Error("ACK capture was not initialized");
+  const label=acknowledgementCaptureLabel,capture=acknowledgementCapture;acknowledgementCapture=null;
+  const wav=await capture.finish();
+  await post("/api/acknowledgement-capture/candidate",{label,transcript:acknowledgementTranscript,audio:base64FromBuffer(wav)});
+}
 
 function showEndControl(show){
   $("stop").hidden=!show;
@@ -219,6 +249,7 @@ async function finishIfStopping(result,reason){if(result?.status==="stopping")aw
 
 function startRealtimeAcknowledgement(){
   if(!realtimeAcknowledgement||acknowledgementStarted||dc?.readyState!=="open")return;
+  if(acknowledgementCaptureLabel&&!acknowledgementCapture)return;
   acknowledgementStarted=true;
   dc.send(JSON.stringify({
     type:"response.create",
@@ -245,7 +276,7 @@ async function reportConfiguredSession(){
 }
 
 async function handleServerEvent(event){
-  const tracked=["session.created","input_audio_buffer.speech_started","input_audio_buffer.speech_stopped","response.created","response.done","output_audio_buffer.started","output_audio_buffer.stopped","response.function_call_arguments.done","conversation.item.input_audio_transcription.completed","conversation.item.input_audio_transcription.failed","error"];
+  const tracked=["session.created","input_audio_buffer.speech_started","input_audio_buffer.speech_stopped","response.created","response.done","response.output_audio_transcript.done","output_audio_buffer.started","output_audio_buffer.stopped","response.function_call_arguments.done","conversation.item.input_audio_transcription.completed","conversation.item.input_audio_transcription.failed","error"];
   if(!tracked.includes(event.type))return;
   log(event.type,{status:event.response?.status});
   if(event.type==="session.created"){sessionCreatedAt=performance.now();await reportConfiguredSession();}
@@ -268,6 +299,7 @@ async function handleServerEvent(event){
   if(event.type==="response.done"){
     responseActive=false;turnResponsePending=false;flushInputLevels();
     if(event.response?.metadata?.purpose==="acknowledgement"){
+      acknowledgementTranscript=acknowledgementTranscript||responseTranscript(event.response);
       await finishIfStopping(await hostEvent("realtime_ack_response_done",{reason:String(event.response?.status||"unknown")}),"realtime_acknowledgement_failed");
     }else if(event.response?.metadata?.purpose==="farewell"){
       await finishIfStopping(await hostEvent("farewell_response_done",{reason:String(event.response?.status||"unknown")}),"farewell_complete");
@@ -277,6 +309,7 @@ async function handleServerEvent(event){
     }
     if(farewellPending&&!farewellStarted)await startFarewell();
   }
+  if(event.type==="response.output_audio_transcript.done"&&acknowledgementResponseActive&&typeof event.transcript==="string")acknowledgementTranscript=event.transcript;
   if(event.type==="output_audio_buffer.started"){
     flushInputLevels();assistantSpeaking=true;
     if(acknowledgementResponseActive){setUiState("connecting","Playing the acknowledgement.");await hostEvent("realtime_ack_playback_started");}
@@ -287,6 +320,10 @@ async function handleServerEvent(event){
     flushInputLevels();assistantSpeaking=false;
     if(acknowledgementResponseActive){
       acknowledgementResponseActive=false;
+      if(acknowledgementCaptureLabel){
+        try{await uploadAcknowledgementCapture();}
+        catch{await hostEvent("error",{reason:"acknowledgement_capture_failed"}).catch(()=>{});await stop("acknowledgement_capture_failed","error");return;}
+      }
       await finishIfStopping(await hostEvent("realtime_ack_playback_stopped"),"realtime_acknowledgement_failed");
     }else if(farewellResponseActive){
       farewellResponseActive=false;
@@ -309,6 +346,7 @@ async function start(command){
   handoffTiming={commandReceived:performance.now()};sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   responseActive=false;turnResponsePending=false;farewellPending=false;farewellStarted=false;farewellCallId=null;farewellResponseActive=false;
   realtimeAcknowledgement=command.acknowledgement_mode==="realtime";acknowledgementStarted=false;acknowledgementResponseActive=false;
+  acknowledgementCaptureLabel=typeof command.acknowledgement_capture_label==="string"?command.acknowledgement_capture_label:null;acknowledgementCapture=null;acknowledgementTranscript=null;remoteStream=null;
   sessionId=command.session_id;setUiState("connecting");showEndControl(true);
   await hostEvent("microphone_requested");
   handoffTiming.tokenStarted=handoffTiming.tokenAcquired=handoffTiming.commandReceived;
@@ -328,7 +366,7 @@ async function start(command){
   if(command.input_level_diagnostics===true)startInputLevels(stream,handoffTiming);
   else skipInputLevels(handoffTiming);
   pc=new RTCPeerConnection();
-  pc.ontrack=event=>{const audio=$("remoteAudio");audio.srcObject=event.streams[0];audio.volume=configuredOutputVolume();const playAttempt=audio.play();if(playAttempt)playAttempt.catch(error=>log("remote_audio_play_failed",{message:String(error.message).slice(0,120)}));log("remote_audio_track")};
+  pc.ontrack=event=>{const audio=$("remoteAudio");remoteStream=event.streams[0];audio.srcObject=event.streams[0];audio.volume=configuredOutputVolume();if(acknowledgementCaptureLabel&&!acknowledgementCapture){try{acknowledgementCapture=createAcknowledgementCapture(remoteStream);}catch{hostEvent("error",{reason:"acknowledgement_capture_failed"}).catch(()=>{});stop("acknowledgement_capture_failed","error").catch(()=>{});return;}}const playAttempt=audio.play();if(playAttempt)playAttempt.catch(error=>log("remote_audio_play_failed",{message:String(error.message).slice(0,120)}));log("remote_audio_track")};
   pc.onconnectionstatechange=()=>{if(pc&&["failed","closed"].includes(pc.connectionState)&&sessionId)stop(`peer_${pc.connectionState}`).catch(()=>{});};
   pc.addTrack(track,stream);
   dc=pc.createDataChannel("oai-events");
@@ -341,6 +379,11 @@ async function start(command){
   const answer=await fetch("/session",{method:"POST",body:offer.sdp,headers:{"Content-Type":"application/sdp"}});
   if(!answer.ok)throw await negotiationFailure(answer);
   await pc.setRemoteDescription({type:"answer",sdp:await answer.text()});
+  if(acknowledgementCaptureLabel&&!acknowledgementCapture){
+    const remoteTrack=pc.getReceivers().map(receiver=>receiver.track).find(track=>track?.kind==="audio");
+    if(!remoteTrack)throw new Error("Remote ACK capture track is unavailable");
+    remoteStream=remoteStream||new MediaStream([remoteTrack]);acknowledgementCapture=createAcknowledgementCapture(remoteStream);
+  }
   handoffTiming.negotiationCompleted=performance.now();
   await hostEvent("transport_connected");
   transportReported=true;await reportConfiguredSession();
@@ -356,6 +399,7 @@ async function enableInput(command){
 
 async function stop(reason="command",finalState="wake-ready"){
   const endingSession=sessionId;if(!endingSession)return;stopInputLevels();sessionId=null;
+  if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
   setUiState("stopping");showEndControl(false);
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
@@ -369,7 +413,7 @@ async function stop(reason="command",finalState="wake-ready"){
   else{audio.pause();audio.srcObject=null;}
   handoffTiming=null;sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   responseActive=false;turnResponsePending=false;farewellPending=false;farewellStarted=false;farewellCallId=null;farewellResponseActive=false;assistantSpeaking=false;
-  realtimeAcknowledgement=false;acknowledgementStarted=false;acknowledgementResponseActive=false;
+  realtimeAcknowledgement=false;acknowledgementStarted=false;acknowledgementResponseActive=false;acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;
   log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
   setUiState(finalState);
@@ -418,6 +462,8 @@ function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringi
 
 $("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop").addEventListener("click",()=>{setUiState("stopping");$("stop").disabled=true;post("/api/stop").catch(error=>setUiState("error",`Could not end the conversation: ${error.message}`));});$("app-settings").addEventListener("click",openAppSettings);
 function releasePageMedia(){
+  if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
+  acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;
   const activeStream=stream;stream=null;
   if(activeStream)activeStream.getTracks().forEach(track=>track.stop());
   if(warmStream&&warmStream!==activeStream)warmStream.getTracks().forEach(track=>track.stop());

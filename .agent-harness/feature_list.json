@@ -2419,7 +2419,7 @@
       "status": "todo",
       "attempts": 0,
       "last_error": "",
-      "priority": "P0",
+      "priority": "P1",
       "depends_on": [
         "F104",
         "F105"
@@ -2490,6 +2490,66 @@
       "depends_on": [
         "F107",
         "F108"
+      ]
+    },
+    {
+      "id": "F110",
+      "title": "Capture and promote a selected Realtime acknowledgement asset",
+      "description": "Generate bounded Realtime ACK candidates, digitally capture only the correlated remote output, and promote one owner-selected version into a validated canonical local asset.",
+      "acceptance": [
+        "An explicit one-shot capture workflow creates only audio-only, no-tool purpose=acknowledgement responses with the production Realtime model, voice, prompt, and output profile; it cannot arm during an active handoff or capture ordinary answers, farewells, user input, or an uncorrelated response.",
+        "The browser records the remote WebRTC MediaStream digitally for the correlated ACK lifecycle, never records microphone or acoustic speaker loopback, bounds candidate count, duration, and bytes, and deterministically cleans up media and restores wake ownership on success, failure, cancellation, timeout, or stale events.",
+        "Candidate preparation verifies the exact Mandarin phrase through correlated output transcript or a bounded validation step, converts to a reproducible low-latency canonical WAV, trims only bounded leading/trailing silence, and records a privacy-safe manifest containing configuration identifiers, duration, gain, selected label, and SHA-256 without session IDs or provider payloads.",
+        "Rejected candidates remain untracked; only an explicitly owner-selected candidate is promoted under assets/, and the existing preparation command installs and verifies its runtime copy without a network request while preserving rollback to the prior local asset and live Realtime mode.",
+        "Focused offline capture/correlation/size/format/manifest/privacy/preparation tests, JavaScript syntax, Realtime fake smoke, final ./init.sh, fast coding evidence, one explicitly authorized target-Mac candidate session with owner selection, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F109"
+      ]
+    },
+    {
+      "id": "F111",
+      "title": "Play the selected cached ACK while Realtime connects",
+      "description": "Start the selected cached Realtime-quality acknowledgement immediately after wake and establish the Realtime session concurrently, opening input only after both barriers complete.",
+      "acceptance": [
+        "Normal Realtime wake starts validated cached ACK playback and the existing unified WebRTC handoff concurrently after exclusive local wake-microphone release, without a paid ACK response or a pre-wake session.",
+        "Cached ACK and ordinary Realtime output use the same browser audio element or equivalent shared gain path, and the selected asset begins independently of session configuration while preserving the configured voice-volume relationship.",
+        "Browser input remains disabled until both ACK playback completion and configured-session readiness are recorded for the active session; either completion order works, duplicates and stale events fail closed, and no early user speech is submitted.",
+        "Playback, asset validation, negotiation, configuration, timeout, cancellation, Settings, sleep, and transport failures converge on bounded cleanup without double ACK, stranded media, or lost wake ownership; explicit live-Realtime and prior-local rollback modes remain available.",
+        "Focused concurrency/order/failure/privacy tests, JavaScript syntax, Realtime fake smoke, final ./init.sh, fast coding evidence, one target-Mac overall-flow run measuring wake-to-ACK and wake-to-input-ready with normal answer, farewell, and recovery, and separate cold-start evaluator approval pass."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F110"
+      ]
+    },
+    {
+      "id": "F112",
+      "title": "Compare shorter cached Realtime ACK variants",
+      "description": "Run a bounded owner-led A/B between the accepted full cached ACK and shorter natural Realtime-derived variants before changing the production asset.",
+      "acceptance": [
+        "A bounded experiment generates and validates one or more shorter Mandarin candidates without replacing the F110 selected production asset, using the same model, voice, digital capture, output path, and gain controls.",
+        "The A/B separates local playback onset, asset duration, configured-session readiness, both-barriers completion, input-ready, cleanup, and wake recovery while acknowledging that acoustic onset and network percentile guarantees remain unproven without broader measurement.",
+        "The owner evaluates naturalness, clarity, perceived voice/volume continuity, and preferred interaction timing in randomized or counterbalanced trials; the decision may retain the full asset without treating that result as a failure.",
+        "Only an explicit owner decision can promote a shorter asset; rollback is atomic and verified by manifest digest, and no audio, transcript, response text, credential, SDP, ICE, or provider payload beyond the deliberately retained candidate assets enters durable evidence.",
+        "Focused experiment/oracle/privacy tests, JavaScript syntax, Realtime fake smoke, final ./init.sh, fast coding evidence, one explicitly authorized target-Mac A/B, a bounded recommendation, and separate cold-start evaluator approval pass."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F111"
       ]
     }
   ]
