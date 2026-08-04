@@ -2,6 +2,7 @@ mod credentials;
 mod diagnostics;
 mod onboarding;
 mod power;
+mod preferences;
 mod protocol;
 mod supervisor;
 
@@ -11,6 +12,7 @@ use credentials::{
 };
 use diagnostics::{Diagnostics, SupportExport};
 use onboarding::{load as load_onboarding, save as save_onboarding, OnboardingRecord};
+use preferences::{load as load_preferences, save as save_preferences};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{
@@ -30,6 +32,8 @@ struct AppRuntime {
     supervisor: Mutex<SidecarSupervisor>,
     credentials: Arc<dyn CredentialStore>,
     onboarding_path: PathBuf,
+    preferences_path: PathBuf,
+    power_policy: Mutex<power::PowerPolicy>,
     app_support_dir: PathBuf,
     diagnostics: Diagnostics,
 }
@@ -90,6 +94,8 @@ struct OnboardingSnapshot {
     microphone_permission: String,
     openai_configured: bool,
     finnhub_configured: bool,
+    smart_speaker_mode: bool,
+    smart_speaker_active: bool,
 }
 
 #[tauri::command]
@@ -134,8 +140,21 @@ async fn restart_sidecar(app: tauri::AppHandle) -> Result<RuntimeSnapshot, Strin
 }
 
 fn stop_sidecar(runtime: &AppRuntime, reason: &str) {
+    release_power_assertion(runtime, reason);
     if let Ok(mut supervisor) = runtime.supervisor.lock() {
         let _ = supervisor.stop(reason);
+    }
+}
+
+fn release_power_assertion(runtime: &AppRuntime, reason: &str) {
+    if let Ok(mut policy) = runtime.power_policy.lock() {
+        policy.release(reason, &runtime.diagnostics);
+    }
+}
+
+fn update_power_availability(runtime: &AppRuntime, availability: &str) {
+    if let Ok(mut policy) = runtime.power_policy.lock() {
+        policy.update_availability(availability, &runtime.diagnostics);
     }
 }
 
@@ -144,7 +163,29 @@ fn onboarding_status(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapsho
     let first_run = !runtime.onboarding_path.exists();
     let record = load_onboarding(&runtime.onboarding_path)?;
     let credentials = credential_status_value(runtime.credentials.as_ref())?;
-    Ok(onboarding_snapshot(first_run, record, credentials))
+    onboarding_snapshot(&runtime, first_run, record, credentials)
+}
+
+#[tauri::command]
+fn set_smart_speaker_mode(
+    enabled: bool,
+    runtime: State<'_, AppRuntime>,
+) -> Result<OnboardingSnapshot, String> {
+    let mut preferences = load_preferences(&runtime.preferences_path)?;
+    preferences.smart_speaker_mode = enabled;
+    save_preferences(&runtime.preferences_path, &preferences)?;
+    let availability = runtime
+        .supervisor
+        .lock()
+        .map_err(|_| "sidecar supervisor is unavailable".to_string())?
+        .snapshot()
+        .availability;
+    runtime
+        .power_policy
+        .lock()
+        .map_err(|_| "power policy is unavailable".to_string())?
+        .set_enabled(enabled, &availability, &runtime.diagnostics);
+    onboarding_status(runtime)
 }
 
 #[tauri::command]
@@ -186,7 +227,7 @@ fn record_microphone_denied(runtime: State<'_, AppRuntime>) -> Result<Onboarding
     record.microphone_permission = "denied".into();
     save_onboarding(&runtime.onboarding_path, &record)?;
     let credentials = credential_status_value(runtime.credentials.as_ref())?;
-    Ok(onboarding_snapshot(false, record, credentials))
+    onboarding_snapshot(&runtime, false, record, credentials)
 }
 
 #[tauri::command]
@@ -197,7 +238,7 @@ fn record_microphone_granted(runtime: State<'_, AppRuntime>) -> Result<Onboardin
     record.microphone_permission = "granted".into();
     save_onboarding(&runtime.onboarding_path, &record)?;
     let credentials = credential_status_value(runtime.credentials.as_ref())?;
-    Ok(onboarding_snapshot(first_run, record, credentials))
+    onboarding_snapshot(&runtime, first_run, record, credentials)
 }
 
 #[tauri::command]
@@ -228,17 +269,26 @@ fn open_microphone_settings() -> Result<(), String> {
 }
 
 fn onboarding_snapshot(
+    runtime: &AppRuntime,
     first_run: bool,
     record: OnboardingRecord,
     credentials: CredentialStatus,
-) -> OnboardingSnapshot {
-    OnboardingSnapshot {
+) -> Result<OnboardingSnapshot, String> {
+    let preferences = load_preferences(&runtime.preferences_path)?;
+    let power = runtime
+        .power_policy
+        .lock()
+        .map_err(|_| "power policy is unavailable".to_string())?
+        .snapshot();
+    Ok(OnboardingSnapshot {
         first_run,
         completed: record.completed,
         microphone_permission: record.microphone_permission,
         openai_configured: credentials.openai_configured,
         finnhub_configured: credentials.finnhub_configured,
-    }
+        smart_speaker_mode: preferences.smart_speaker_mode,
+        smart_speaker_active: power.active,
+    })
 }
 
 #[cfg(debug_assertions)]
@@ -273,6 +323,9 @@ fn settings_url(app: &tauri::AppHandle) -> Result<tauri::Url, String> {
 }
 
 fn open_settings_window(app: &tauri::AppHandle) {
+    if let Some(runtime) = app.try_state::<AppRuntime>() {
+        release_power_assertion(&runtime, "settings_opened");
+    }
     if let Some(window) = app.get_webview_window("main") {
         if let Ok(url) = settings_url(app) {
             let _ = window.navigate(url);
@@ -317,6 +370,8 @@ pub fn run() {
                 .map(PathBuf::from)
                 .unwrap_or(app.path().resource_dir()?);
             let onboarding_path = onboarding::path(&app_support_dir);
+            let preferences_path = preferences::path(&app_support_dir);
+            let preferences = load_preferences(&preferences_path).unwrap_or_default();
             let credential_store: Arc<dyn CredentialStore> = Arc::new(MacKeychainStore);
             let mut supervisor = SidecarSupervisor::new(
                 app_support_dir.clone(),
@@ -333,6 +388,10 @@ pub fn run() {
                 supervisor: Mutex::new(supervisor),
                 credentials: credential_store,
                 onboarding_path,
+                preferences_path,
+                power_policy: Mutex::new(power::PowerPolicy::system(
+                    preferences.smart_speaker_mode,
+                )),
                 app_support_dir,
                 diagnostics,
             });
@@ -375,8 +434,10 @@ pub fn run() {
                         })
                         .unwrap_or_else(|_| "resume_required".into());
                     let _ = monitor_voice_status.set_text(availability_menu_text(&availability));
+                    update_power_availability(&runtime, &availability);
                     continue;
                 }
+                release_power_assertion(&runtime, "sidecar_exit");
                 let Ok(credentials) = RuntimeCredentials::load(runtime.credentials.as_ref()) else {
                     runtime.diagnostics.record(
                         "native",
@@ -390,6 +451,7 @@ pub fn run() {
                     let _ = supervisor.recover_if_needed(&credentials);
                     let availability = supervisor.snapshot().availability;
                     let _ = monitor_voice_status.set_text(availability_menu_text(&availability));
+                    update_power_availability(&runtime, &availability);
                 };
             });
             if let Some(window) = app.get_webview_window("main") {
@@ -447,6 +509,7 @@ pub fn run() {
             sidecar_health,
             restart_sidecar,
             onboarding_status,
+            set_smart_speaker_mode,
             enter_settings,
             prompt_save_credential,
             delete_credential,

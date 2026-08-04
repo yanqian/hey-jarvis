@@ -19,6 +19,8 @@ const elements = {
   microphoneCheck: document.querySelector("#microphone-check"),
   microphoneSettings: document.querySelector("#microphone-settings"),
   readinessCheck: document.querySelector("#readiness-check"),
+  smartSpeakerMode: document.querySelector("#smart-speaker-mode"),
+  smartSpeakerStatus: document.querySelector("#smart-speaker-status"),
   returnAssistant: document.querySelector("#return-assistant"),
   exportSupport: document.querySelector("#export-support"),
   clearDiagnostics: document.querySelector("#clear-diagnostics"),
@@ -56,6 +58,8 @@ const recoveryMessages = {
   keychain_unavailable: "macOS Keychain is unavailable. Restart the app; if it persists, open Keychain Access and check the login keychain.",
   onboarding_state_corrupt: "First-run state is damaged. Your Keychain keys were not changed; retry setup or reinstall this app version.",
   onboarding_state_unavailable: "Hey Jarvis cannot write its Application Support settings. Check disk access and available space.",
+  preferences_corrupt: "Smart Speaker preferences are damaged. The mode remains inactive until the settings file is repaired.",
+  preferences_unavailable: "Hey Jarvis cannot save Smart Speaker preferences. Check disk access and available space.",
   onboarding_incomplete: "Finish the key and microphone checks before starting the voice runtime.",
   openai_credential_invalid: "OpenAI rejected this key. Replace it with an active project key, then rerun the readiness check.",
   openai_service_unavailable: "OpenAI is temporarily unavailable. Listening remains off; retry the readiness check later.",
@@ -110,6 +114,10 @@ function renderSetup(snapshot) {
   elements.start.disabled = !snapshot.openai_configured;
   elements.returnAssistant.hidden = !snapshot.completed || !snapshot.openai_configured;
   elements.readiness.textContent = readinessText(snapshot);
+  elements.smartSpeakerMode.checked = snapshot.smart_speaker_mode === true;
+  elements.smartSpeakerStatus.textContent = snapshot.smart_speaker_mode
+    ? "Enabled. It activates only after you return and Wake listening is confirmed."
+    : "Off. Hey Jarvis follows normal Mac sleep behavior.";
   if (snapshot.microphone_permission === "denied") {
     elements.microphoneStatus.textContent = "Access was denied. Enable Hey Jarvis in Privacy & Security → Microphone, then retry.";
     elements.microphoneSettings.hidden = false;
@@ -276,6 +284,22 @@ async function runReadinessCheck() {
   }
 }
 
+async function setSmartSpeakerMode() {
+  const enabled = elements.smartSpeakerMode.checked;
+  elements.smartSpeakerMode.disabled = true;
+  try {
+    renderSetup(await invoke("set_smart_speaker_mode", { enabled }));
+    elements.message.textContent = enabled
+      ? "Smart Speaker Mode enabled. It will activate only during confirmed wake listening."
+      : "Smart Speaker Mode disabled. Normal Mac sleep behavior is restored.";
+  } catch (error) {
+    elements.smartSpeakerMode.checked = !enabled;
+    elements.message.textContent = friendlyError(error);
+  } finally {
+    elements.smartSpeakerMode.disabled = false;
+  }
+}
+
 async function exportSupport() {
   try {
     const result = await invoke("export_support_bundle");
@@ -296,6 +320,7 @@ elements.start.addEventListener("click", checkMicrophoneAndStart);
 elements.microphoneCheck.addEventListener("click", checkMicrophoneOnly);
 elements.returnAssistant.addEventListener("click", returnToAssistant);
 elements.readinessCheck.addEventListener("click", runReadinessCheck);
+elements.smartSpeakerMode.addEventListener("change", setSmartSpeakerMode);
 elements.microphoneSettings.addEventListener("click", async () => {
   try {
     await invoke("open_microphone_settings");

@@ -23,6 +23,7 @@ for path in \
   app/src-tauri/src/lib.rs \
   app/src-tauri/src/onboarding.rs \
   app/src-tauri/src/power.rs \
+  app/src-tauri/src/preferences.rs \
   app/src-tauri/src/protocol.rs \
   app/src-tauri/src/supervisor.rs \
   app/src-tauri/tauri.conf.json \

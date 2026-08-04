@@ -1433,6 +1433,7 @@ name = "hey-jarvis-mac"
 version = "0.1.0"
 dependencies = [
  "block2",
+ "core-foundation",
  "getrandom 0.3.4",
  "objc2-app-kit",
  "objc2-foundation",

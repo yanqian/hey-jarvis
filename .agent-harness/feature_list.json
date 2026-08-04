@@ -2396,8 +2396,8 @@
         "Injectable power-backend tests, Settings persistence/accessibility tests, source checks for no shell caffeinate and no display-sleep assertion, pmset/process inspection, a display-off and lock trial beyond the configured idle-sleep deadline with a complete voice loop, full project tests, final ./init.sh, fast coding evidence, and separate evaluator approval pass."
       ],
       "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

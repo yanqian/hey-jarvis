@@ -68,6 +68,19 @@
               </div>
             </div>
 
+            <div class="smart-speaker-card">
+              <div>
+                <h3>Smart Speaker Mode</h3>
+                <p id="smart-speaker-status">Off. Hey Jarvis follows normal Mac sleep behavior.</p>
+              </div>
+              <label class="switch-control">
+                <input id="smart-speaker-mode" type="checkbox" />
+                <span aria-hidden="true"></span>
+                <span class="visually-hidden">Enable Smart Speaker Mode</span>
+              </label>
+            </div>
+            <p class="boundary-note smart-speaker-note">When enabled, Hey Jarvis prevents automatic system sleep only while wake listening is genuinely active. The display may still turn off and the Mac may be locked. This can use more battery; explicit Sleep, shutdown, and closing a MacBook lid still stop voice availability.</p>
+
             <div class="action-row">
               <button id="start" class="primary" type="button">Check microphone &amp; start</button>
               <button id="readiness-check" class="secondary" type="button">Run readiness check</button>

@@ -4,6 +4,18 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F105 coding is complete but target-Mac acceptance and evaluator approval are
+pending. General settings now contain a default-off, persisted Smart Speaker
+Mode. A native, injectable power policy holds one
+`PreventUserIdleSystemSleep` assertion only during F104-confirmed
+`wake_listening`, and releases it through the shared Settings, unavailable
+listening, microphone denial, sidecar stop/crash, system sleep, disable, and
+quit paths. Final recovery passes with 424 project tests, ten Mac
+frontend/sidecar tests, and 23 Rust tests. Coding evidence and the deferred
+joint `pmset`, display-off, lock, voice-loop, and release checklist are in
+`.agent-harness/runs/F105-fast-coding.md`; F105 must remain in progress until
+those checks and a separate evaluator pass succeed.
+
 F086 is complete at commit `cd8e4d7`. Its isolated Tauri 2, WKWebView, and
 Python-sidecar spike passed offline, packaged-app, Apple Silicon live-device,
 audible playback, natural interruption, media-release, bounded Python

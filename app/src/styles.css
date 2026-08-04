@@ -247,7 +247,8 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 .settings-panel h2:focus { outline: none; }
 
 .summary-card,
-.permission-card {
+.permission-card,
+.smart-speaker-card {
   display: flex;
   align-items: center;
   gap: 13px;
@@ -277,6 +278,8 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 .summary-card p,
 .permission-card h3,
 .permission-card p,
+.smart-speaker-card h3,
+.smart-speaker-card p,
 .setting-row h3,
 .setting-row p,
 .disclosure h3,
@@ -284,11 +287,13 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 
 .summary-card h3,
 .permission-card h3,
+.smart-speaker-card h3,
 .setting-row h3,
 .disclosure h3 { font-size: 13px; }
 
 .summary-card p,
 .permission-card p,
+.smart-speaker-card p,
 .setting-row p,
 .disclosure p,
 .boundary-note {
@@ -307,6 +312,46 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 
 .action-row { margin-top: 16px; flex-wrap: wrap; }
 .boundary-note { margin: 16px 0 0; }
+.smart-speaker-card { justify-content: space-between; }
+.smart-speaker-note { margin-top: 10px; }
+
+.switch-control { position: relative; flex: 0 0 auto; width: 38px; height: 22px; }
+.switch-control input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.switch-control > span[aria-hidden="true"] {
+  position: absolute;
+  inset: 0;
+  border: 1px solid #40504a;
+  border-radius: 999px;
+  background: #222b28;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease;
+}
+.switch-control > span[aria-hidden="true"]::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #aab5b1;
+  content: "";
+  transition: transform .16s ease, background .16s ease;
+}
+.switch-control input:checked + span { border-color: #5cb596; background: #285e4d; }
+.switch-control input:checked + span::after { transform: translateX(16px); background: #a8f1d8; }
+.switch-control input:focus-visible + span { outline: 2px solid #9af4d5; outline-offset: 2px; }
+.switch-control input:disabled + span { cursor: not-allowed; opacity: .45; }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .setting-list {
   margin-top: 18px;

@@ -313,6 +313,33 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('"voice-status"', native)
         self.assertIn('"Status: Wake listening"', native)
 
+    def test_smart_speaker_mode_is_opt_in_native_and_voice_gated(self):
+        page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        frontend = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(
+            encoding="utf-8"
+        )
+        power = (APP / "src-tauri" / "src" / "power.rs").read_text(
+            encoding="utf-8"
+        )
+        preferences = (APP / "src-tauri" / "src" / "preferences.rs").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('id="smart-speaker-mode" type="checkbox"', page)
+        self.assertIn("This can use more battery", page)
+        self.assertIn("explicit Sleep, shutdown, and closing a MacBook lid", page)
+        self.assertIn('invoke("set_smart_speaker_mode", { enabled })', frontend)
+        self.assertIn("set_smart_speaker_mode", native)
+        self.assertIn('availability == "wake_listening"', power)
+        self.assertIn('CFString::new("PreventUserIdleSystemSleep")', power)
+        self.assertIn("IOPMAssertionCreateWithName", power)
+        self.assertIn("IOPMAssertionRelease", power)
+        self.assertNotIn("caffeinate", power)
+        self.assertNotIn("PreventUserIdleDisplaySleep", power)
+        self.assertIn("smart_speaker_mode: false", preferences)
+        self.assertIn('preferences-v1.json', preferences)
+
     def test_product_sidecar_reuses_runtime_without_chrome_or_root_env(self):
         sidecar = (APP / "sidecar" / "product_sidecar.py").read_text(
             encoding="utf-8"
