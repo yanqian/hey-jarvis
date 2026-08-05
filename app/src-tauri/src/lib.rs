@@ -1,5 +1,6 @@
 mod credentials;
 mod diagnostics;
+mod native_i18n;
 mod onboarding;
 mod power;
 mod preferences;
@@ -12,7 +13,9 @@ use credentials::{
 };
 use diagnostics::{Diagnostics, SupportExport};
 use onboarding::{load as load_onboarding, save as save_onboarding, OnboardingRecord};
-use preferences::{load as load_preferences, save as save_preferences};
+use preferences::{
+    load as load_preferences, normalize_language, save as save_preferences, ENGLISH,
+};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{
@@ -39,16 +42,41 @@ struct AppRuntime {
     diagnostics: Diagnostics,
 }
 
-static SETTINGS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+struct NativeMenuItems {
+    voice_status: MenuItem<tauri::Wry>,
+    application_settings: MenuItem<tauri::Wry>,
+    tray_show: MenuItem<tauri::Wry>,
+    tray_settings: MenuItem<tauri::Wry>,
+    tray_quit: MenuItem<tauri::Wry>,
+}
 
-fn availability_menu_text(availability: &str) -> &'static str {
-    match availability {
-        "ready" => "Status: Ready",
-        "wake_listening" => "Status: Wake listening",
-        "busy" => "Status: Busy",
-        _ => "Status: Resume required",
+impl NativeMenuItems {
+    fn apply(&self, locale: &str, availability: &str) {
+        let _ = self
+            .voice_status
+            .set_text(native_i18n::availability(locale, availability));
+        let _ = self.application_settings.set_text(native_i18n::text(
+            locale,
+            "Settings…",
+            "设置…",
+        ));
+        let _ = self.tray_show.set_text(native_i18n::text(
+            locale,
+            "Show Hey Jarvis",
+            "显示 Hey Jarvis",
+        ));
+        let _ = self
+            .tray_settings
+            .set_text(native_i18n::text(locale, "Settings…", "设置…"));
+        let _ = self.tray_quit.set_text(native_i18n::text(
+            locale,
+            "Quit Hey Jarvis",
+            "退出 Hey Jarvis",
+        ));
     }
 }
+
+static SETTINGS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 #[tauri::command]
 fn record_webview_lifecycle(
@@ -97,6 +125,7 @@ struct OnboardingSnapshot {
     finnhub_configured: bool,
     smart_speaker_mode: bool,
     smart_speaker_active: bool,
+    app_language: String,
 }
 
 #[tauri::command]
@@ -232,6 +261,34 @@ fn set_smart_speaker_mode(
 }
 
 #[tauri::command]
+fn set_app_language(
+    locale: String,
+    app: tauri::AppHandle,
+    runtime: State<'_, AppRuntime>,
+    menus: State<'_, NativeMenuItems>,
+) -> Result<OnboardingSnapshot, String> {
+    let locale = normalize_language(&locale)?;
+    let mut preferences = load_preferences(&runtime.preferences_path)?;
+    preferences.app_language = locale.into();
+    save_preferences(&runtime.preferences_path, &preferences)?;
+    let availability = runtime
+        .supervisor
+        .lock()
+        .map_err(|_| "sidecar supervisor is unavailable".to_string())?
+        .snapshot()
+        .availability;
+    menus.apply(locale, &availability);
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.set_title(native_i18n::text(
+            locale,
+            "Hey Jarvis Settings",
+            "Hey Jarvis 设置",
+        ));
+    }
+    onboarding_status(runtime)
+}
+
+#[tauri::command]
 fn enter_settings(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
     onboarding_status(runtime)
 }
@@ -256,7 +313,8 @@ fn prompt_save_credential(
     runtime: State<'_, AppRuntime>,
 ) -> Result<CredentialStatus, String> {
     let kind = CredentialKind::parse(&kind)?;
-    let result = prompt_and_store(runtime.credentials.as_ref(), kind)?;
+    let locale = load_preferences(&runtime.preferences_path)?.app_language;
+    let result = prompt_and_store(runtime.credentials.as_ref(), kind, &locale)?;
     stop_sidecar(&runtime, "credential_replaced");
     Ok(result)
 }
@@ -358,6 +416,7 @@ fn onboarding_snapshot(
         finnhub_configured: credentials.finnhub_configured,
         smart_speaker_mode: preferences.smart_speaker_mode,
         smart_speaker_active: power.active,
+        app_language: preferences.app_language,
     })
 }
 
@@ -519,8 +578,17 @@ fn open_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         let _ = window.set_focus();
         return Ok(());
     }
+    let locale = app
+        .try_state::<AppRuntime>()
+        .and_then(|runtime| load_preferences(&runtime.preferences_path).ok())
+        .map(|preferences| preferences.app_language)
+        .unwrap_or_else(|| ENGLISH.into());
     let window = WebviewWindowBuilder::new(app, "settings", settings_url(app)?)
-        .title("Hey Jarvis Settings")
+        .title(native_i18n::text(
+            &locale,
+            "Hey Jarvis Settings",
+            "Hey Jarvis 设置",
+        ))
         .inner_size(820.0, 640.0)
         .min_inner_size(700.0, 520.0)
         .build()
@@ -572,6 +640,7 @@ pub fn run() {
             let onboarding_path = onboarding::path(&app_support_dir);
             let preferences_path = preferences::path(&app_support_dir);
             let preferences = load_preferences(&preferences_path).unwrap_or_default();
+            let _ = save_preferences(&preferences_path, &preferences);
             let credential_store: Arc<dyn CredentialStore> = Arc::new(MacKeychainStore);
             let mut supervisor = SidecarSupervisor::new(
                 app_support_dir.clone(),
@@ -606,7 +675,7 @@ pub fn run() {
             let voice_status = MenuItem::with_id(
                 app,
                 "voice-status",
-                availability_menu_text(&initial_availability),
+                native_i18n::availability(&preferences.app_language, &initial_availability),
                 false,
                 None::<&str>,
             )?;
@@ -634,7 +703,11 @@ pub fn run() {
                             supervisor.snapshot().availability
                         })
                         .unwrap_or_else(|_| "resume_required".into());
-                    let _ = monitor_voice_status.set_text(availability_menu_text(&availability));
+                    let locale = load_preferences(&runtime.preferences_path)
+                        .map(|preferences| preferences.app_language)
+                        .unwrap_or_else(|_| ENGLISH.into());
+                    let _ = monitor_voice_status
+                        .set_text(native_i18n::availability(&locale, &availability));
                     update_power_availability(&runtime, &availability);
                     continue;
                 }
@@ -651,7 +724,11 @@ pub fn run() {
                 if let Ok(mut supervisor) = runtime.supervisor.lock() {
                     let _ = supervisor.recover_if_needed(&credentials);
                     let availability = supervisor.snapshot().availability;
-                    let _ = monitor_voice_status.set_text(availability_menu_text(&availability));
+                    let locale = load_preferences(&runtime.preferences_path)
+                        .map(|preferences| preferences.app_language)
+                        .unwrap_or_else(|_| ENGLISH.into());
+                    let _ = monitor_voice_status
+                        .set_text(native_i18n::availability(&locale, &availability));
                     update_power_availability(&runtime, &availability);
                 };
             });
@@ -661,11 +738,16 @@ pub fn run() {
             }
 
             let application_menu = Menu::default(app.handle())?;
+            let settings_shortcut = MenuItem::with_id(
+                app,
+                "app-settings",
+                native_i18n::text(&preferences.app_language, "Settings…", "设置…"),
+                true,
+                Some("CmdOrCtrl+,"),
+            )?;
             if let Some(MenuItemKind::Submenu(application_submenu)) =
                 application_menu.items()?.into_iter().next()
             {
-                let settings_shortcut =
-                    MenuItem::with_id(app, "app-settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
                 application_submenu.insert(&settings_shortcut, 1)?;
                 application_submenu.insert(&PredefinedMenuItem::separator(app)?, 2)?;
             }
@@ -676,10 +758,35 @@ pub fn run() {
                 }
             });
 
-            let show = MenuItem::with_id(app, "show", "Show Hey Jarvis", true, None::<&str>)?;
-            let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit Hey Jarvis", true, None::<&str>)?;
+            let show = MenuItem::with_id(
+                app,
+                "show",
+                native_i18n::text(&preferences.app_language, "Show Hey Jarvis", "显示 Hey Jarvis"),
+                true,
+                None::<&str>,
+            )?;
+            let settings = MenuItem::with_id(
+                app,
+                "settings",
+                native_i18n::text(&preferences.app_language, "Settings…", "设置…"),
+                true,
+                None::<&str>,
+            )?;
+            let quit = MenuItem::with_id(
+                app,
+                "quit",
+                native_i18n::text(&preferences.app_language, "Quit Hey Jarvis", "退出 Hey Jarvis"),
+                true,
+                None::<&str>,
+            )?;
             let menu = Menu::with_items(app, &[&voice_status, &show, &settings, &quit])?;
+            app.manage(NativeMenuItems {
+                voice_status: voice_status.clone(),
+                application_settings: settings_shortcut.clone(),
+                tray_show: show.clone(),
+                tray_settings: settings.clone(),
+                tray_quit: quit.clone(),
+            });
             let tray = TrayIconBuilder::with_id("hey-jarvis")
                 .menu(&menu)
                 .icon(tauri::include_image!("icons/trayTemplate@2x.png"))
@@ -712,6 +819,7 @@ pub fn run() {
             resume_voice_assistant,
             onboarding_status,
             set_smart_speaker_mode,
+            set_app_language,
             enter_settings,
             open_settings,
             close_settings_window,

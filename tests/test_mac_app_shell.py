@@ -223,7 +223,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("show_resume_required_window", native)
         self.assertIn('url.set_fragment(Some("smart-speaker-resume"))', native)
         self.assertIn('location.hash==="#smart-speaker-resume"', host)
-        self.assertIn('$("arm").querySelector("span").textContent="Resume voice assistant"', host)
+        self.assertIn('HeyJarvisI18n.text("Resume voice assistant")', host)
 
     def test_settings_surface_has_unified_entry_points_and_privacy_safe_sections(self):
         page = (APP / "src" / "index.html").read_text(encoding="utf-8")
@@ -276,7 +276,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertNotIn("App data", page)
         self.assertNotIn('type="password"', page)
         self.assertIn('invoke("record_microphone_granted")', script)
-        self.assertIn('window.confirm("Clear all local Hey Jarvis diagnostics?', script)
+        self.assertIn('window.confirm(ui("Clear all local Hey Jarvis diagnostics?', script)
         self.assertIn("prefers-reduced-motion", styles)
         self.assertIn(":focus-visible", styles)
         self.assertIn("fn open_settings_window", native)
@@ -285,7 +285,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('"settings" => {\n                    request_open_settings(app.clone());', native)
         self.assertNotIn("Add key…", page)
         self.assertNotIn("Replace key…", script)
-        self.assertIn('? "Replace key" : "Add key"', script)
+        self.assertIn('ui(snapshot.openai_configured ? "Replace key" : "Add key")', script)
         self.assertIn("font-size: 12px;\n  font-weight: 500;", styles)
         self.assertIn("@media (max-width: 700px)", styles)
         self.assertIn(".settings-group {", styles)
@@ -330,7 +330,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("<title>Hey Jarvis</title>", settings_page)
         self.assertIn("<title>Hey Jarvis</title>", home_page)
         self.assertNotIn("Hey Jarvis Settings", settings_page)
-        self.assertIn('title("Hey Jarvis Settings")', native)
+        self.assertIn('"Hey Jarvis Settings",\n            "Hey Jarvis 设置"', native)
         self.assertNotIn('class="eyebrow"', settings_page)
         self.assertIn('id="settings-title" class="context-title">Settings</h1>', settings_page)
         self.assertIn('class="app-header returning-header"', settings_page)
@@ -392,7 +392,11 @@ class MacAppShellTests(unittest.TestCase):
         for availability in ("ready", "wake_listening", "busy", "resume_required"):
             self.assertIn(f'"{availability}"', supervisor)
         self.assertIn('"voice-status"', native)
-        self.assertIn('"Status: Wake listening"', native)
+        native_i18n = (APP / "src-tauri" / "src" / "native_i18n.rs").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"Status: Wake listening"', native_i18n)
+        self.assertIn('"状态：正在等待唤醒"', native_i18n)
 
     def test_smart_speaker_mode_is_opt_in_native_and_voice_gated(self):
         page = (APP / "src" / "index.html").read_text(encoding="utf-8")
@@ -438,6 +442,65 @@ class MacAppShellTests(unittest.TestCase):
         )
         self.assertIn('audio.srcObject=remoteStream', host)
         self.assertIn("if(warmStream){warmStream.getTracks().forEach", host)
+
+    def test_language_setting_is_two_choice_immediate_and_runtime_safe(self):
+        page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        frontend = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        catalog = (APP / "src" / "i18n.js").read_text(encoding="utf-8")
+        host = (ROOT / "src" / "realtime_host" / "static" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        host_catalog = (
+            ROOT / "src" / "realtime_host" / "static" / "i18n.js"
+        ).read_text(encoding="utf-8")
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
+        preferences = (APP / "src-tauri" / "src" / "preferences.rs").read_text(
+            encoding="utf-8"
+        )
+        credentials = (APP / "src-tauri" / "src" / "credentials.rs").read_text(
+            encoding="utf-8"
+        )
+
+        language_group = page.split('aria-labelledby="language-title"', 1)[1].split(
+            "</section>", 1
+        )[0]
+        self.assertEqual(language_group.count("<option "), 2)
+        self.assertIn('<option value="en">English</option>', language_group)
+        self.assertIn('<option value="zh-CN">简体中文</option>', language_group)
+        self.assertNotIn("Follow System", language_group)
+        self.assertEqual(language_group.count("<h3"), 1)
+        self.assertEqual(language_group.count("<p"), 1)
+        self.assertNotIn("App language", language_group)
+        self.assertIn(
+            "The interface updates immediately; fixed voice cues use the selected language from the next wake.",
+            language_group,
+        )
+        self.assertIn('aria-labelledby="language-title"', language_group)
+        self.assertIn('aria-describedby="language-description"', language_group)
+        self.assertIn(
+            '"The interface updates immediately; fixed voice cues use the selected language from the next wake.": "界面会立即切换；固定语音提示从下一次唤醒起使用所选语言。"',
+            catalog,
+        )
+        styles = (APP / "src" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn(".language-setting {", styles)
+        language_rule = styles.split(".language-setting {", 1)[1].split("}", 1)[0]
+        self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);", language_rule)
+        self.assertNotIn(".language-row", styles)
+        self.assertIn('invoke("set_app_language", { locale: elements.appLanguage.value })', frontend)
+        language_handler = frontend.split("async function setAppLanguage", 1)[1].split(
+            "async function", 1
+        )[0]
+        self.assertNotIn("restart_sidecar", language_handler)
+        self.assertNotIn("stop_sidecar", language_handler)
+        self.assertIn('fetch("/api/app-language"', host)
+        self.assertIn("setInterval(refreshAvailability,1000)", host)
+        self.assertIn('Settings: "设置"', catalog)
+        self.assertIn('label:"正在聆听"', host_catalog)
+        self.assertIn("fn set_app_language", native)
+        self.assertIn("menus.apply(locale, &availability)", native)
+        self.assertIn('Command::new("/usr/bin/defaults")', preferences)
+        self.assertIn('SIMPLIFIED_CHINESE: &str = "zh-CN"', preferences)
+        self.assertIn("请输入", credentials)
 
     def test_product_sidecar_reuses_runtime_without_chrome_or_root_env(self):
         sidecar = (APP / "sidecar" / "product_sidecar.py").read_text(

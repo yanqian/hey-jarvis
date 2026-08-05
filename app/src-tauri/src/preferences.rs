@@ -1,13 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
-const PREFERENCES_VERSION: u8 = 1;
+const PREFERENCES_VERSION: u8 = 2;
+pub const ENGLISH: &str = "en";
+pub const SIMPLIFIED_CHINESE: &str = "zh-CN";
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Preferences {
     pub version: u8,
     pub smart_speaker_mode: bool,
+    pub app_language: String,
 }
 
 impl Default for Preferences {
@@ -15,28 +19,93 @@ impl Default for Preferences {
         Self {
             version: PREFERENCES_VERSION,
             smart_speaker_mode: false,
+            app_language: ENGLISH.into(),
         }
     }
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreferencesV1 {
+    version: u8,
+    smart_speaker_mode: bool,
+}
+
+pub fn normalize_language(value: &str) -> Result<&'static str, String> {
+    match value {
+        ENGLISH => Ok(ENGLISH),
+        SIMPLIFIED_CHINESE => Ok(SIMPLIFIED_CHINESE),
+        _ => Err("unsupported_app_language".into()),
+    }
+}
+
+pub fn language_from_macos_output(output: &str) -> &'static str {
+    let first = output
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with('"'))
+        .unwrap_or("")
+        .trim_matches(|character| matches!(character, '"' | ','));
+    let normalized = first.to_ascii_lowercase();
+    if normalized == "zh" || normalized.starts_with("zh-") || normalized.starts_with("zh_") {
+        SIMPLIFIED_CHINESE
+    } else {
+        ENGLISH
+    }
+}
+
+pub fn preferred_macos_language() -> &'static str {
+    Command::new("/usr/bin/defaults")
+        .args(["read", "-g", "AppleLanguages"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|output| language_from_macos_output(&output))
+        .unwrap_or(ENGLISH)
+}
+
 pub fn path(app_support_dir: &Path) -> PathBuf {
+    // Keep the stable filename while versioning the schema inside the record.
     app_support_dir.join("preferences-v1.json")
 }
 
 pub fn load(path: &Path) -> Result<Preferences, String> {
     if !path.exists() {
-        return Ok(Preferences::default());
+        return Ok(Preferences {
+            app_language: preferred_macos_language().into(),
+            ..Preferences::default()
+        });
     }
     let contents = std::fs::read(path).map_err(|_| "preferences_unavailable".to_string())?;
-    let preferences: Preferences =
+    let value: serde_json::Value =
         serde_json::from_slice(&contents).map_err(|_| "preferences_corrupt".to_string())?;
-    if preferences.version != PREFERENCES_VERSION {
+    if value.get("version").and_then(serde_json::Value::as_u64) == Some(1) {
+        let legacy: PreferencesV1 =
+            serde_json::from_value(value).map_err(|_| "preferences_corrupt".to_string())?;
+        if legacy.version != 1 {
+            return Err("preferences_corrupt".into());
+        }
+        let migrated = Preferences {
+            smart_speaker_mode: legacy.smart_speaker_mode,
+            app_language: preferred_macos_language().into(),
+            ..Preferences::default()
+        };
+        save(path, &migrated)?;
+        return Ok(migrated);
+    }
+    let preferences: Preferences =
+        serde_json::from_value(value).map_err(|_| "preferences_corrupt".to_string())?;
+    if preferences.version != PREFERENCES_VERSION
+        || normalize_language(&preferences.app_language).is_err()
+    {
         return Err("preferences_corrupt".into());
     }
     Ok(preferences)
 }
 
 pub fn save(path: &Path, preferences: &Preferences) -> Result<(), String> {
+    normalize_language(&preferences.app_language).map_err(|_| "preferences_corrupt")?;
     let parent = path
         .parent()
         .ok_or_else(|| "preferences_unavailable".to_string())?;
@@ -53,34 +122,65 @@ mod tests {
     use super::*;
 
     fn fixture(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("hey-jarvis-f105-{name}-{}", std::process::id()))
+        std::env::temp_dir().join(format!("hey-jarvis-f118-{name}-{}", std::process::id()))
     }
 
     #[test]
-    fn defaults_off_and_round_trips_without_secrets() {
+    fn defaults_to_a_supported_language_and_round_trips_without_secrets() {
         let directory = fixture("round-trip");
         let state_path = path(&directory);
         let _ = std::fs::remove_dir_all(&directory);
-        assert_eq!(load(&state_path).unwrap(), Preferences::default());
+        let initial = load(&state_path).unwrap();
+        assert!(matches!(initial.app_language.as_str(), ENGLISH | SIMPLIFIED_CHINESE));
+        assert!(!initial.smart_speaker_mode);
 
         let preferences = Preferences {
             smart_speaker_mode: true,
+            app_language: SIMPLIFIED_CHINESE.into(),
             ..Preferences::default()
         };
         save(&state_path, &preferences).unwrap();
         assert_eq!(load(&state_path).unwrap(), preferences);
         let contents = std::fs::read_to_string(&state_path).unwrap();
         assert!(!contents.contains("api_key"));
+        assert!(contents.contains("zh-CN"));
         let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]
-    fn corrupt_or_unknown_preferences_fail_closed() {
+    fn macos_language_mapping_is_bounded_to_two_supported_locales() {
+        assert_eq!(language_from_macos_output("(\n    \"zh-Hans-SG\"\n)"), SIMPLIFIED_CHINESE);
+        assert_eq!(language_from_macos_output("(\n    \"zh_TW\"\n)"), SIMPLIFIED_CHINESE);
+        assert_eq!(language_from_macos_output("(\n    \"en-US\"\n)"), ENGLISH);
+        assert_eq!(language_from_macos_output("garbage"), ENGLISH);
+        assert!(normalize_language("fr").is_err());
+    }
+
+    #[test]
+    fn version_one_migrates_without_losing_smart_speaker_mode() {
+        let directory = fixture("migration");
+        let state_path = path(&directory);
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(&state_path, br#"{"version":1,"smart_speaker_mode":true}"#).unwrap();
+        let migrated = load(&state_path).unwrap();
+        assert_eq!(migrated.version, 2);
+        assert!(migrated.smart_speaker_mode);
+        assert!(matches!(migrated.app_language.as_str(), ENGLISH | SIMPLIFIED_CHINESE));
+        let persisted = std::fs::read_to_string(&state_path).unwrap();
+        assert!(persisted.contains("\"version\":2"));
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn corrupt_unknown_or_unsupported_preferences_fail_closed() {
         let directory = fixture("corrupt");
         let state_path = path(&directory);
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(&state_path, b"{\"version\":2,\"smart_speaker_mode\":true}").unwrap();
+        assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
+        std::fs::write(&state_path, b"{\"version\":2,\"smart_speaker_mode\":false,\"app_language\":\"fr\"}").unwrap();
         assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
         let _ = std::fs::remove_dir_all(&directory);
     }

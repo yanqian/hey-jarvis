@@ -344,6 +344,32 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
   padding-top: 23px;
   border-top: 1px solid #202b27;
 }
+
+.language-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);
+  gap: 20px;
+  align-items: center;
+}
+
+.language-setting select {
+  width: 100%;
+  border: 1px solid #31423b;
+  border-radius: 9px;
+  background: #111a17;
+  color: #eff8f3;
+  padding: 9px 34px 9px 11px;
+  font: inherit;
+}
+
+.language-setting select:focus-visible {
+  outline: 2px solid #79d7ad;
+  outline-offset: 2px;
+}
+
+@media (max-width: 700px) {
+  .language-setting { grid-template-columns: 1fr; gap: 12px; }
+}
 .settings-group-heading h3 { margin: 0 0 3px; font-size: 15px; }
 .settings-group-heading > p:last-child {
   margin: 0;

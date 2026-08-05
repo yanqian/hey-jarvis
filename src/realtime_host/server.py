@@ -45,6 +45,7 @@ STATIC_ROOT = Path(__file__).resolve().parent / "static"
 STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/i18n.js": ("i18n.js", "text/javascript; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
 }
 
@@ -319,6 +320,7 @@ class HostHTTPServer(ThreadingHTTPServer):
     cached_acknowledgement_manifest: dict[str, object] | None
     cached_farewell_audio: bytes | None
     cached_farewell_manifest: dict[str, object] | None
+    app_language_path: Path | None
 
 
 def build_server(
@@ -339,6 +341,7 @@ def build_server(
     cached_acknowledgement_manifest_path: str | Path | None = None,
     cached_farewell_audio_path: str | Path | None = None,
     cached_farewell_manifest_path: str | Path | None = None,
+    app_language_path: str | Path | None = None,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
@@ -396,6 +399,7 @@ def build_server(
     server.cached_acknowledgement_manifest = cached_manifest
     server.cached_farewell_audio = cached_farewell_audio
     server.cached_farewell_manifest = cached_farewell_manifest
+    server.app_language_path = Path(app_language_path) if app_language_path is not None else None
     return server
 
 
@@ -444,6 +448,20 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 HTTPStatus.OK,
                 {"availability": self.server.coordinator.availability()},
             )
+            return
+        if parsed.path == "/api/app-language":
+            locale = "en"
+            language_path = getattr(self.server, "app_language_path", None)
+            if isinstance(language_path, Path):
+                try:
+                    raw = language_path.read_bytes()
+                    if len(raw) <= 4096:
+                        value = json.loads(raw).get("app_language")
+                        if value in {"en", "zh-CN"}:
+                            locale = value
+                except (OSError, ValueError, AttributeError):
+                    pass
+            self._json(HTTPStatus.OK, {"app_language": locale})
             return
         if parsed.path == "/api/realtime-settings":
             try:

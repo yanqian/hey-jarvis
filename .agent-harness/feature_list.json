@@ -2547,7 +2547,7 @@
       "status": "todo",
       "attempts": 0,
       "last_error": "",
-      "priority": "P0",
+      "priority": "P1",
       "depends_on": [
         "F111"
       ]
@@ -2655,6 +2655,90 @@
         "F107",
         "F110",
         "F111"
+      ]
+    },
+    {
+      "id": "F118",
+      "title": "Add a bilingual app-language preference and localized Mac UI",
+      "description": "Let users select English or Simplified Chinese and localize every app-owned Mac UI surface without disturbing the active voice runtime.",
+      "acceptance": [
+        "General exposes exactly `English` and `简体中文`; with no saved choice, Chinese macOS preferred languages resolve to `zh-CN` and all other or unavailable languages resolve to `en`, while a schema-versioned migration preserves the existing Smart Speaker preference and an explicit choice persists without secrets.",
+        "The main interaction page, complete Settings window, returning and Resume-required states, every dynamic availability/readiness/permission/Keychain/diagnostic/error message, native application and tray menus, credential prompts, window labels, tooltips, and accessibility names render from complete English and Simplified Chinese catalogs while `Hey Jarvis`, internal codes, protocols, logs, and support schemas remain unchanged.",
+        "Changing Language updates all open app-owned UI, native menus, accessibility text, and document `lang` immediately but is runtime-neutral: the sidecar PID/session, wake availability, retained media, active conversation, and Smart Speaker assertion remain unchanged.",
+        "Both locales preserve semantic headings, keyboard and screen-reader operation, compact/default/fullscreen layout, focus styling, reduced motion, privacy disclosures, action IDs, and all existing Settings and Resume behavior without mixed-language fallback in any supported user-visible state.",
+        "Focused preference migration/default/validation tests, localization catalog and state-matrix contracts, JavaScript syntax, Rust and Mac shell tests, rebuilt Debug-app inspection in both languages and key viewport sizes, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credential mutation, microphone request, speaker, or paid API use."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F100",
+        "F114",
+        "F116"
+      ]
+    },
+    {
+      "id": "F119",
+      "title": "Create and select English cached voice cues",
+      "description": "Generate, validate, audition, and package one English ACK saying `I'm here. Yes?` and one English farewell saying `See you.` in the accepted voice.",
+      "acceptance": [
+        "One explicitly owner-authorized bounded paid workflow generates English `alloy` ACK candidates speaking exactly `I'm here. Yes?` and farewell candidates speaking exactly `See you.`, using the existing reproducible Realtime-quality capture or TTS asset paths without altering the accepted Mandarin assets.",
+        "Candidate validation proves exact intended phrase metadata, 24 kHz mono PCM WAV format, bounded non-silent duration, configured browser gain, safe leading/trailing audio, and SHA-256 integrity; only deliberately retained candidate audio and privacy-safe metadata become durable, while credentials, provider bodies, session identifiers, transcripts, and unrelated audio remain excluded.",
+        "The owner auditions both candidate sets on the target Mac and explicitly selects one natural, clear, light English ACK and one natural, light English farewell; rejection or regeneration remains bounded and cannot silently promote an asset.",
+        "Selected canonical English files and manifests have locale-explicit names, prepare into the packaged runtime with identical digests, coexist with the Mandarin assets, and fail closed on missing, corrupt, wrong-phrase, wrong-format, or out-of-bound content without paid runtime fallback.",
+        "Focused generator/capture/privacy/manifest/hash/format/duration/preparation/package tests, saved owner selection evidence, final `./init.sh`, fast coding evidence, one explicitly authorized target-Mac audition, and separate cold-start evaluator approval pass."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F110",
+        "F117"
+      ]
+    },
+    {
+      "id": "F120",
+      "title": "Play cached voice cues in the selected app language",
+      "description": "Snapshot the selected app language at each wake and use it for both cached acknowledgement and farewell while preserving per-turn Realtime discussion language.",
+      "acceptance": [
+        "At each wake handoff, the runtime captures exactly one supported app-language snapshot: `zh-CN` selects the existing Mandarin ACK and farewell, while `en` selects the F119 `I'm here. Yes?` ACK and `See you.` farewell; no GPT output, transcription, current utterance, or conversation-history language inference controls fixed cues.",
+        "All four canonical assets validate and preload before listening, selected ACK playback uses the existing browser audio element and gain while Realtime connects, and input remains disabled until both selected playback and configured-session readiness complete with F111 ordering and latency evidence intact.",
+        "Exact-phrase or semantic ending mutes input and plays the farewell from the same wake snapshot through the existing browser path; it does not create a farewell model response, and playback completion preserves F117 exactly-once teardown, bounded failure, retained-media cleanup, and wake recovery.",
+        "A language change during an active session updates UI only: that session keeps its captured ACK/farewell language, the next wake uses the new preference, and the GPT Realtime prompt continues answering each current user turn in that turn's primary language even when it differs from the fixed-cue language.",
+        "Focused locale snapshot/config/server/browser/controller/coordinator/sidecar/package tests, both-language ACK gates and farewell recovery, switch-during-session and missing/corrupt/stale/failure cases, JavaScript syntax, Realtime fake smoke, final `./init.sh`, fast coding evidence, owner-led target-Mac English and Chinese overall flows, and separate cold-start evaluator approval pass."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F118",
+        "F119"
+      ]
+    },
+    {
+      "id": "F121",
+      "title": "Simplify the Language setting hierarchy",
+      "description": "Present the language selector as one title, one combined timing explanation, and one aligned control without redundant visible labels.",
+      "acceptance": [
+        "General shows one visible `Language` heading, one explanatory paragraph containing both immediate-interface and next-wake fixed-cue timing, and the unchanged selector with exactly `English` and `简体中文`; visible `App language` and the former second paragraph are absent.",
+        "The selector retains `app-language`, is named by `language-title`, is described by the merged explanation, remains keyboard and screen-reader operable, aligns beside the copy at regular/fullscreen widths, and stacks without overflow at compact width.",
+        "English renders `The interface updates immediately; fixed voice cues use the selected language from the next wake.` and Simplified Chinese renders `界面会立即切换；固定语音提示从下一次唤醒起使用所选语言。` without mixed-language fallback.",
+        "Language options, persistence, immediate localization, native menu updates, sidecar/runtime neutrality, Settings grouping/dividers, other panels, and all F118 behavior remain unchanged; no audio, network, credential, microphone, or paid action occurs.",
+        "Focused DOM/CSS/catalog contracts, JavaScript syntax, rebuilt Debug-app inspection in both languages at compact and fullscreen sizes, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F118"
       ]
     }
   ]

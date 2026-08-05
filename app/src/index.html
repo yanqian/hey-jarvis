@@ -80,6 +80,19 @@
               <p>Hey Jarvis uses local wake detection and starts an OpenAI conversation only after the wake phrase.</p>
             </div>
 
+            <section class="settings-group" aria-labelledby="language-title">
+              <div class="language-setting">
+                <header class="settings-group-heading">
+                  <h3 id="language-title">Language</h3>
+                  <p id="language-description">The interface updates immediately; fixed voice cues use the selected language from the next wake.</p>
+                </header>
+                <select id="app-language" aria-labelledby="language-title" aria-describedby="language-description">
+                  <option value="en">English</option>
+                  <option value="zh-CN">简体中文</option>
+                </select>
+              </div>
+            </section>
+
             <section class="settings-group" aria-labelledby="assistant-setup-title">
               <header class="settings-group-heading">
                 <h3 id="assistant-setup-title">Setup and start</h3>

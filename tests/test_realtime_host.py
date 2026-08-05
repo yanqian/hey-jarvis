@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import http.client
+import tempfile
 import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -265,6 +267,36 @@ class RealtimeHostTests(unittest.TestCase):
             responses,
             [(HTTPStatus.OK, {"availability": "ready"})],
         )
+
+    def test_app_language_endpoint_tracks_preferences_without_server_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            preferences = Path(directory) / "preferences-v1.json"
+            responses: list[tuple[HTTPStatus, dict[str, object]]] = []
+            handler = object.__new__(server.HostRequestHandler)
+            handler.path = "/api/app-language"
+            handler.server = SimpleNamespace(app_language_path=preferences)
+            handler._json = lambda status, payload: responses.append((status, dict(payload)))
+
+            handler.do_GET()
+            preferences.write_text(
+                json.dumps({"version": 2, "app_language": "zh-CN"}),
+                encoding="utf-8",
+            )
+            handler.do_GET()
+            preferences.write_text(
+                json.dumps({"version": 2, "app_language": "unsupported"}),
+                encoding="utf-8",
+            )
+            handler.do_GET()
+
+            self.assertEqual(
+                responses,
+                [
+                    (HTTPStatus.OK, {"app_language": "en"}),
+                    (HTTPStatus.OK, {"app_language": "zh-CN"}),
+                    (HTTPStatus.OK, {"app_language": "en"}),
+                ],
+            )
 
     def test_realtime_acknowledgement_experiment_is_one_handoff_only(self):
         coordinator, _lease = self.build_coordinator()

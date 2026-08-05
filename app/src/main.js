@@ -1,3 +1,5 @@
+import { applyDocumentLocale, supportedLocale, text } from "./i18n.js";
+
 const invoke = window.__TAURI__?.core?.invoke;
 
 const elements = {
@@ -32,13 +34,94 @@ const elements = {
   exportSupport: document.querySelector("#export-support"),
   clearDiagnostics: document.querySelector("#clear-diagnostics"),
   diagnosticsMessage: document.querySelector("#diagnostics-message"),
+  appLanguage: document.querySelector("#app-language"),
 };
 
 let setup = null;
 let lastVoiceAvailability = null;
 let runtimeRestartNeeded = false;
+let appLanguage = "en";
 const SETTINGS_HASH = "#settings";
 const RESUME_REQUIRED_HASH = "#resume-required";
+
+const DYNAMIC_ZH = new Map(Object.entries({
+  "That key format is invalid. Copy the complete key without spaces and try again.": "密钥格式无效。请复制不含空格的完整密钥后重试。",
+  "Add an OpenAI API key before starting Hey Jarvis.": "启动 Hey Jarvis 前请先添加 OpenAI API 密钥。",
+  "macOS denied Keychain access. Unlock your login keychain and try again.": "macOS 拒绝访问钥匙串。请解锁登录钥匙串后重试。",
+  "Keychain is locked or interaction is unavailable. Unlock this Mac, then retry.": "钥匙串已锁定或无法交互。请解锁这台 Mac 后重试。",
+  "macOS Keychain is unavailable. Restart the app; if it persists, open Keychain Access and check the login keychain.": "macOS 钥匙串不可用。请重启应用；如果问题仍然存在，请打开“钥匙串访问”检查登录钥匙串。",
+  "First-run state is damaged. Your Keychain keys were not changed; retry setup or reinstall this app version.": "首次运行状态已损坏。钥匙串密钥未被修改；请重试设置或重新安装此版本。",
+  "Hey Jarvis cannot write its Application Support settings. Check disk access and available space.": "Hey Jarvis 无法写入应用支持设置。请检查磁盘访问权限和可用空间。",
+  "Smart Speaker preferences are damaged. The mode remains inactive until the settings file is repaired.": "智能音箱偏好设置已损坏。修复设置文件前，该模式将保持关闭。",
+  "Hey Jarvis cannot save Smart Speaker preferences. Check disk access and available space.": "Hey Jarvis 无法保存智能音箱偏好设置。请检查磁盘访问权限和可用空间。",
+  "Finish the key and microphone checks before starting the voice runtime.": "启动语音运行环境前，请完成密钥和麦克风检查。",
+  "OpenAI rejected this key. Replace it with an active project key, then rerun the readiness check.": "OpenAI 拒绝了此密钥。请换成有效的项目密钥，然后重新运行就绪检查。",
+  "OpenAI is temporarily unavailable. Listening remains off; retry the readiness check later.": "OpenAI 暂时不可用。监听保持关闭；请稍后重试就绪检查。",
+  "OpenAI is unreachable. Check your internet connection, then run the readiness check again.": "无法连接 OpenAI。请检查网络连接，然后重新运行就绪检查。",
+  "The local runtime did not become ready. Retry; if it repeats, quit and reopen Hey Jarvis.": "本地运行环境未能就绪。请重试；如果问题重复出现，请退出并重新打开 Hey Jarvis。",
+  "The microphone check timed out. No stream was retained; retry after checking the selected input device.": "麦克风检查超时。没有保留音频流；请检查所选输入设备后重试。",
+  "System Settings could not be opened. Open Privacy & Security → Microphone manually.": "无法打开系统设置。请手动打开“隐私与安全性 → 麦克风”。",
+  "The local wake model is not ready. Restart the runtime; reinstall this app version if the error repeats.": "本地唤醒模型尚未就绪。请重启运行环境；如果错误重复出现，请重新安装此版本。",
+  "The local runtime could not start. Retry, then quit and reopen Hey Jarvis if the problem continues.": "本地运行环境无法启动。请重试；如果问题持续存在，请退出并重新打开 Hey Jarvis。",
+  "OpenAI key required before voice listening can start.": "开始语音监听前需要 OpenAI 密钥。",
+  "Microphone access needs attention in System Settings.": "需要在系统设置中处理麦克风访问权限。",
+  "OpenAI is configured. Complete the microphone check to start.": "OpenAI 已配置。请完成麦克风检查以启动。",
+  "API key and microphone permission are ready.": "API 密钥和麦克风权限均已就绪。",
+  "Stored in macOS Keychain. The value is never displayed.": "已存储在 macOS 钥匙串中，密钥内容不会显示。",
+  "Not configured. A key is required before listening can start.": "尚未配置。开始监听前需要密钥。",
+  "Stored in macOS Keychain. Stock quotes are enabled.": "已存储在 macOS 钥匙串中，股票报价已启用。",
+  "Not configured. Other assistant features still work.": "尚未配置，助手的其他功能仍可使用。",
+  "Replace key": "更换密钥",
+  "Add key": "添加密钥",
+  "Enabled. It activates only after you return and Wake listening is confirmed.": "已启用。返回助手并确认唤醒监听后才会生效。",
+  "Off. Hey Jarvis follows normal Mac sleep behavior.": "已关闭。Hey Jarvis 遵循 Mac 的正常睡眠行为。",
+  "Access was denied. Enable Hey Jarvis in Privacy & Security → Microphone, then retry.": "访问被拒绝。请在“隐私与安全性 → 麦克风”中启用 Hey Jarvis，然后重试。",
+  "Access granted. Local wake listening continues unless you run a new microphone check.": "访问已允许。除非重新运行麦克风检查，否则本地唤醒监听会继续。",
+  "Permission has not been checked yet.": "尚未检查权限。",
+  "Runtime ready": "运行环境就绪",
+  "Open the assistant to begin wake listening.": "打开助手以开始唤醒监听。",
+  "Wake listening": "正在等待唤醒",
+  "Listening continues while Settings is open.": "打开设置时监听仍会继续。",
+  "Conversation active": "对话进行中",
+  "The current conversation continues in the assistant window.": "当前对话会在助手窗口中继续。",
+  "Resume required": "需要恢复",
+  "Voice listening is off until you resume.": "恢复前，语音监听保持关闭。",
+  "Open this page through the Hey Jarvis desktop app.": "请通过 Hey Jarvis 桌面应用打开此页面。",
+  "A native secure entry window is open.": "原生安全输入窗口已打开。",
+  "Saved in macOS Keychain. Resume voice listening when you are ready.": "已保存到 macOS 钥匙串。准备好后恢复语音监听。",
+  "No changes were made.": "未进行任何更改。",
+  "Removed from macOS Keychain. Voice listening remains off until setup is ready again.": "已从 macOS 钥匙串移除。设置重新就绪前，语音监听保持关闭。",
+  "Microphone access is required, but listening remains off. Enable it in System Settings and retry.": "需要麦克风访问权限，但监听仍保持关闭。请在系统设置中启用后重试。",
+  "No microphone was found. Connect or enable an input device, then retry.": "未找到麦克风。请连接或启用输入设备后重试。",
+  "The microphone check failed and listening remains off. Check the input device and retry.": "麦克风检查失败，监听保持关闭。请检查输入设备后重试。",
+  "Access granted; the temporary check stream was released.": "访问已允许；临时检查音频流已释放。",
+  "Checking the microphone…": "正在检查麦克风…",
+  "Microphone access is ready. Resume voice listening when you are ready.": "麦克风访问已就绪。准备好后恢复语音监听。",
+  "Add an OpenAI key before starting Hey Jarvis.": "启动 Hey Jarvis 前请先添加 OpenAI 密钥。",
+  "Checking the built-in microphone…": "正在检查内置麦克风…",
+  "Microphone access is ready. Starting the local voice runtime…": "麦克风访问已就绪。正在启动本地语音运行环境…",
+  "Voice listening resumed. Settings can remain open.": "语音监听已恢复，设置窗口可以保持打开。",
+  "Starting the local voice runtime…": "正在启动本地语音运行环境…",
+  "Restarting local wake listening…": "正在重新启动本地唤醒监听…",
+  "Local setup is ready. Existing voice listening is unchanged.": "本地设置已就绪，现有语音监听不受影响。",
+  "Setup needs attention. Review API Keys and Microphone before starting.": "设置需要处理。启动前请检查 API 密钥和麦克风。",
+  "Smart Speaker Mode enabled. It will activate only during confirmed wake listening.": "智能音箱模式已启用，只会在确认唤醒监听时生效。",
+  "Smart Speaker Mode disabled. Normal Mac sleep behavior is restored.": "智能音箱模式已关闭，Mac 已恢复正常睡眠行为。",
+  "Support export was rejected or unavailable; diagnostics were not changed.": "支持导出被拒绝或不可用；诊断数据未被更改。",
+  "Clear all local Hey Jarvis diagnostics? This cannot be undone.": "清除所有本地 Hey Jarvis 诊断数据？此操作无法撤销。",
+  "Local diagnostics were cleared.": "本地诊断数据已清除。",
+  "Diagnostics could not be cleared.": "无法清除诊断数据。",
+}));
+
+function ui(english) {
+  return text(appLanguage, english, DYNAMIC_ZH.get(english) || english);
+}
+
+function setLocale(locale) {
+  appLanguage = supportedLocale(locale);
+  applyDocumentLocale(appLanguage);
+  elements.appLanguage.value = appLanguage;
+}
 
 function isSettingsWindow() {
   return window.location.hash === SETTINGS_HASH;
@@ -94,15 +177,15 @@ const recoveryMessages = {
 function friendlyError(error) {
   const value = String(error);
   for (const [code, message] of Object.entries(recoveryMessages)) {
-    if (value.includes(code)) return message;
+    if (value.includes(code)) return ui(message);
   }
   if (value.includes("offline") || value.includes("network")) {
-    return "OpenAI is unreachable. Check your internet connection, then run the readiness check again.";
+    return ui("OpenAI is unreachable. Check your internet connection, then run the readiness check again.");
   }
   if (value.includes("model") || value.includes("wake")) {
-    return "The local wake model is not ready. Restart the runtime; reinstall this app version if the error repeats.";
+    return ui("The local wake model is not ready. Restart the runtime; reinstall this app version if the error repeats.");
   }
-  return "The local runtime could not start. Retry, then quit and reopen Hey Jarvis if the problem continues.";
+  return ui("The local runtime could not start. Retry, then quit and reopen Hey Jarvis if the problem continues.");
 }
 
 function activatePanel(name, focus = false) {
@@ -116,22 +199,23 @@ function activatePanel(name, focus = false) {
 }
 
 function readinessText(snapshot) {
-  if (!snapshot.openai_configured) return "OpenAI key required before voice listening can start.";
-  if (snapshot.microphone_permission === "denied") return "Microphone access needs attention in System Settings.";
-  if (snapshot.microphone_permission !== "granted") return "OpenAI is configured. Complete the microphone check to start.";
-  return "API key and microphone permission are ready.";
+  if (!snapshot.openai_configured) return ui("OpenAI key required before voice listening can start.");
+  if (snapshot.microphone_permission === "denied") return ui("Microphone access needs attention in System Settings.");
+  if (snapshot.microphone_permission !== "granted") return ui("OpenAI is configured. Complete the microphone check to start.");
+  return ui("API key and microphone permission are ready.");
 }
 
 function renderSetup(snapshot) {
   setup = snapshot;
+  setLocale(snapshot.app_language);
   elements.openaiStatus.textContent = snapshot.openai_configured
-    ? "Stored in macOS Keychain. The value is never displayed."
-    : "Not configured. A key is required before listening can start.";
+    ? ui("Stored in macOS Keychain. The value is never displayed.")
+    : ui("Not configured. A key is required before listening can start.");
   elements.finnhubStatus.textContent = snapshot.finnhub_configured
-    ? "Stored in macOS Keychain. Stock quotes are enabled."
-    : "Not configured. Other assistant features still work.";
-  elements.saveOpenai.textContent = snapshot.openai_configured ? "Replace key" : "Add key";
-  elements.saveFinnhub.textContent = snapshot.finnhub_configured ? "Replace key" : "Add key";
+    ? ui("Stored in macOS Keychain. Stock quotes are enabled.")
+    : ui("Not configured. Other assistant features still work.");
+  elements.saveOpenai.textContent = ui(snapshot.openai_configured ? "Replace key" : "Add key");
+  elements.saveFinnhub.textContent = ui(snapshot.finnhub_configured ? "Replace key" : "Add key");
   elements.deleteOpenai.hidden = !snapshot.openai_configured;
   elements.deleteFinnhub.hidden = !snapshot.finnhub_configured;
   elements.start.disabled = !snapshot.openai_configured;
@@ -141,16 +225,16 @@ function renderSetup(snapshot) {
   elements.readiness.textContent = readinessText(snapshot);
   elements.smartSpeakerMode.checked = snapshot.smart_speaker_mode === true;
   elements.smartSpeakerStatus.textContent = snapshot.smart_speaker_mode
-    ? "Enabled. It activates only after you return and Wake listening is confirmed."
-    : "Off. Hey Jarvis follows normal Mac sleep behavior.";
+    ? ui("Enabled. It activates only after you return and Wake listening is confirmed.")
+    : ui("Off. Hey Jarvis follows normal Mac sleep behavior.");
   if (snapshot.microphone_permission === "denied") {
-    elements.microphoneStatus.textContent = "Access was denied. Enable Hey Jarvis in Privacy & Security → Microphone, then retry.";
+    elements.microphoneStatus.textContent = ui("Access was denied. Enable Hey Jarvis in Privacy & Security → Microphone, then retry.");
     elements.microphoneSettings.hidden = false;
   } else if (snapshot.microphone_permission === "granted") {
-    elements.microphoneStatus.textContent = "Access granted. Local wake listening continues unless you run a new microphone check.";
+    elements.microphoneStatus.textContent = ui("Access granted. Local wake listening continues unless you run a new microphone check.");
     elements.microphoneSettings.hidden = true;
   } else {
-    elements.microphoneStatus.textContent = "Permission has not been checked yet.";
+    elements.microphoneStatus.textContent = ui("Permission has not been checked yet.");
     elements.microphoneSettings.hidden = true;
   }
 }
@@ -172,10 +256,10 @@ function renderVoiceStatus(snapshot) {
   if (availability === lastVoiceAvailability) return;
   lastVoiceAvailability = availability;
   const labels = {
-    ready: ["Runtime ready", "Open the assistant to begin wake listening."],
-    wake_listening: ["Wake listening", "Listening continues while Settings is open."],
-    busy: ["Conversation active", "The current conversation continues in the assistant window."],
-    resume_required: ["Resume required", "Voice listening is off until you resume."],
+    ready: [ui("Runtime ready"), ui("Open the assistant to begin wake listening.")],
+    wake_listening: [ui("Wake listening"), ui("Listening continues while Settings is open.")],
+    busy: [ui("Conversation active"), ui("The current conversation continues in the assistant window.")],
+    resume_required: [ui("Resume required"), ui("Voice listening is off until you resume.")],
   };
   const [label, summary] = labels[availability] || labels.resume_required;
   elements.voiceStatusLabel.textContent = label;
@@ -220,12 +304,13 @@ function navigateToAssistant(snapshot, { recovery = false } = {}) {
 
 async function load() {
   if (!invoke) {
-    elements.message.textContent = "Open this page through the Hey Jarvis desktop app.";
+    elements.message.textContent = ui("Open this page through the Hey Jarvis desktop app.");
     return;
   }
   try {
     recordLifecycle("loaded");
     if (isResumeRequired()) {
+      renderSetup(await invoke("onboarding_status"));
       showResumeRequired();
       return;
     }
@@ -252,29 +337,32 @@ async function load() {
 }
 
 async function saveCredential(kind) {
-  elements.message.textContent = "A native secure entry window is open.";
+  elements.message.textContent = ui("A native secure entry window is open.");
   try {
     await invoke("prompt_save_credential", { kind });
     runtimeRestartNeeded = true;
     renderSetup(await invoke("onboarding_status"));
     await refreshVoiceStatus();
-    elements.message.textContent = "Saved in macOS Keychain. Resume voice listening when you are ready.";
+    elements.message.textContent = ui("Saved in macOS Keychain. Resume voice listening when you are ready.");
   } catch (error) {
     elements.message.textContent = String(error).includes("credential_prompt_cancelled")
-      ? "No changes were made."
+      ? ui("No changes were made.")
       : friendlyError(error);
   }
 }
 
 async function deleteCredential(kind) {
   const label = kind === "openai" ? "OpenAI" : "Finnhub";
-  if (!window.confirm(`Delete the ${label} key from macOS Keychain?`)) return;
+  const confirmation = appLanguage === "zh-CN"
+    ? `从 macOS 钥匙串中删除 ${label} 密钥？`
+    : `Delete the ${label} key from macOS Keychain?`;
+  if (!window.confirm(confirmation)) return;
   try {
     await invoke("delete_credential", { kind });
     runtimeRestartNeeded = true;
     renderSetup(await invoke("onboarding_status"));
     await refreshVoiceStatus();
-    elements.message.textContent = "Removed from macOS Keychain. Voice listening remains off until setup is ready again.";
+    elements.message.textContent = ui("Removed from macOS Keychain. Voice listening remains off until setup is ready again.");
   } catch (error) {
     elements.message.textContent = friendlyError(error);
   }
@@ -315,45 +403,45 @@ async function acquireMicrophone() {
     if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
       renderSetup(await invoke("record_microphone_denied"));
       recordLifecycle("microphone_denied");
-      elements.message.textContent = "Microphone access is required, but listening remains off. Enable it in System Settings and retry.";
+      elements.message.textContent = ui("Microphone access is required, but listening remains off. Enable it in System Settings and retry.");
     } else if (String(error).includes("microphone_check_timed_out")) {
-      elements.message.textContent = recoveryMessages.microphone_check_timed_out;
+      elements.message.textContent = ui(recoveryMessages.microphone_check_timed_out);
     } else if (error?.name === "NotFoundError") {
-      elements.message.textContent = "No microphone was found. Connect or enable an input device, then retry.";
+      elements.message.textContent = ui("No microphone was found. Connect or enable an input device, then retry.");
     } else {
-      elements.message.textContent = "The microphone check failed and listening remains off. Check the input device and retry.";
+      elements.message.textContent = ui("The microphone check failed and listening remains off. Check the input device and retry.");
     }
     return false;
   }
   for (const track of stream.getTracks()) track.stop();
   recordLifecycle("microphone_check_passed");
-  elements.microphoneStatus.textContent = "Access granted; the temporary check stream was released.";
+  elements.microphoneStatus.textContent = ui("Access granted; the temporary check stream was released.");
   return true;
 }
 
 async function checkMicrophoneOnly() {
-  elements.message.textContent = "Checking the microphone…";
+  elements.message.textContent = ui("Checking the microphone…");
   if (!await acquireMicrophone()) return;
   renderSetup(await invoke("record_microphone_granted"));
   await refreshVoiceStatus();
-  elements.message.textContent = "Microphone access is ready. Resume voice listening when you are ready.";
+  elements.message.textContent = ui("Microphone access is ready. Resume voice listening when you are ready.");
 }
 
 async function checkMicrophoneAndStart() {
   if (!setup?.openai_configured) {
     activatePanel("api-keys");
-    elements.message.textContent = "Add an OpenAI key before starting Hey Jarvis.";
+    elements.message.textContent = ui("Add an OpenAI key before starting Hey Jarvis.");
     return;
   }
-  elements.message.textContent = "Checking the built-in microphone…";
+  elements.message.textContent = ui("Checking the built-in microphone…");
   if (!await acquireMicrophone()) return;
-  elements.message.textContent = "Microphone access is ready. Starting the local voice runtime…";
+  elements.message.textContent = ui("Microphone access is ready. Starting the local voice runtime…");
   try {
     if (isSettingsWindow()) {
       renderSetup(await invoke("record_microphone_granted"));
       await invoke("restart_voice_from_settings");
       await waitForWakeListening();
-      elements.message.textContent = "Voice listening resumed. Settings can remain open.";
+      elements.message.textContent = ui("Voice listening resumed. Settings can remain open.");
     } else {
       navigateToAssistant(await invoke("complete_onboarding"));
     }
@@ -373,7 +461,7 @@ async function returnToAssistant() {
   }
   elements.settingsShell.hidden = true;
   elements.returningView.hidden = false;
-  elements.returningStatus.textContent = "Starting the local voice runtime…";
+  elements.returningStatus.textContent = ui("Starting the local voice runtime…");
   try {
     await recordLifecycle("runtime_restart_requested");
     navigateToAssistant(await invoke("restart_sidecar"));
@@ -387,12 +475,12 @@ async function returnToAssistant() {
 
 async function restartVoiceFromSettings() {
   elements.restartVoice.disabled = true;
-  elements.message.textContent = "Restarting local wake listening…";
+  elements.message.textContent = ui("Restarting local wake listening…");
   try {
     await recordLifecycle("runtime_restart_requested");
     await invoke("restart_voice_from_settings");
     await waitForWakeListening();
-    elements.message.textContent = "Voice listening resumed. Settings can remain open.";
+    elements.message.textContent = ui("Voice listening resumed. Settings can remain open.");
   } catch (error) {
     elements.message.textContent = friendlyError(error);
   } finally {
@@ -402,7 +490,7 @@ async function restartVoiceFromSettings() {
 
 async function resumeVoiceAssistant() {
   elements.resumeVoice.disabled = true;
-  elements.resumeStatus.textContent = "Restarting local wake listening…";
+  elements.resumeStatus.textContent = ui("Restarting local wake listening…");
   try {
     await recordLifecycle("runtime_restart_requested");
     navigateToAssistant(await invoke("resume_voice_assistant"), { recovery: true });
@@ -418,8 +506,8 @@ async function runReadinessCheck() {
     const snapshot = await invoke("onboarding_status");
     renderSetup(snapshot);
     elements.message.textContent = snapshot.openai_configured && snapshot.microphone_permission === "granted"
-      ? "Local setup is ready. Existing voice listening is unchanged."
-      : "Setup needs attention. Review API Keys and Microphone before starting.";
+      ? ui("Local setup is ready. Existing voice listening is unchanged.")
+      : ui("Setup needs attention. Review API Keys and Microphone before starting.");
   } catch (error) {
     elements.message.textContent = friendlyError(error);
   }
@@ -431,8 +519,8 @@ async function setSmartSpeakerMode() {
   try {
     renderSetup(await invoke("set_smart_speaker_mode", { enabled }));
     elements.message.textContent = enabled
-      ? "Smart Speaker Mode enabled. It will activate only during confirmed wake listening."
-      : "Smart Speaker Mode disabled. Normal Mac sleep behavior is restored.";
+      ? ui("Smart Speaker Mode enabled. It will activate only during confirmed wake listening.")
+      : ui("Smart Speaker Mode disabled. Normal Mac sleep behavior is restored.");
   } catch (error) {
     elements.smartSpeakerMode.checked = !enabled;
     elements.message.textContent = friendlyError(error);
@@ -444,9 +532,30 @@ async function setSmartSpeakerMode() {
 async function exportSupport() {
   try {
     const result = await invoke("export_support_bundle");
-    elements.diagnosticsMessage.textContent = `Support bundle exported (${result.records} events, ${result.bytes} bytes): ${result.path}`;
+    elements.diagnosticsMessage.textContent = appLanguage === "zh-CN"
+      ? `支持包已导出（${result.records} 个事件，${result.bytes} 字节）：${result.path}`
+      : `Support bundle exported (${result.records} events, ${result.bytes} bytes): ${result.path}`;
   } catch (_error) {
-    elements.diagnosticsMessage.textContent = "Support export was rejected or unavailable; diagnostics were not changed.";
+    elements.diagnosticsMessage.textContent = ui("Support export was rejected or unavailable; diagnostics were not changed.");
+  }
+}
+
+async function setAppLanguage() {
+  const previous = appLanguage;
+  elements.appLanguage.disabled = true;
+  try {
+    const snapshot = await invoke("set_app_language", { locale: elements.appLanguage.value });
+    lastVoiceAvailability = null;
+    renderSetup(snapshot);
+    await refreshVoiceStatus();
+    elements.message.textContent = appLanguage === "zh-CN"
+      ? "应用语言已更新。固定语音提示将在下一次唤醒时使用中文。"
+      : "App language updated. Fixed voice cues will use English on the next wake.";
+  } catch (error) {
+    setLocale(previous);
+    elements.message.textContent = friendlyError(error);
+  } finally {
+    elements.appLanguage.disabled = false;
   }
 }
 
@@ -465,6 +574,7 @@ elements.resumeVoice.addEventListener("click", resumeVoiceAssistant);
 elements.resumeSettings.addEventListener("click", showSettings);
 elements.readinessCheck.addEventListener("click", runReadinessCheck);
 elements.smartSpeakerMode.addEventListener("change", setSmartSpeakerMode);
+elements.appLanguage.addEventListener("change", setAppLanguage);
 elements.microphoneSettings.addEventListener("click", async () => {
   try {
     await invoke("open_microphone_settings");
@@ -474,12 +584,12 @@ elements.microphoneSettings.addEventListener("click", async () => {
 });
 elements.exportSupport.addEventListener("click", exportSupport);
 elements.clearDiagnostics.addEventListener("click", async () => {
-  if (!window.confirm("Clear all local Hey Jarvis diagnostics? This cannot be undone.")) return;
+  if (!window.confirm(ui("Clear all local Hey Jarvis diagnostics? This cannot be undone."))) return;
   try {
     await invoke("clear_diagnostics");
-    elements.diagnosticsMessage.textContent = "Local diagnostics were cleared.";
+    elements.diagnosticsMessage.textContent = ui("Local diagnostics were cleared.");
   } catch (_error) {
-    elements.diagnosticsMessage.textContent = "Diagnostics could not be cleared.";
+    elements.diagnosticsMessage.textContent = ui("Diagnostics could not be cleared.");
   }
 });
 window.addEventListener("pageshow", (event) => {

@@ -259,6 +259,7 @@ class ProductRuntime:
             cached_acknowledgement_manifest_path=cached_acknowledgement_manifest,
             cached_farewell_audio_path=cached_farewell,
             cached_farewell_manifest_path=cached_farewell_manifest,
+            app_language_path=app_support_dir / "preferences-v1.json",
         )
         server_thread = threading.Thread(
             target=server.serve_forever,

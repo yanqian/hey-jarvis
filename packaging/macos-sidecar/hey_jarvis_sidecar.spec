@@ -18,6 +18,7 @@ missing = [str(path) for path in required_models if not path.is_file()]
 required_static = [
     REALTIME_STATIC / "index.html",
     REALTIME_STATIC / "app.js",
+    REALTIME_STATIC / "i18n.js",
     REALTIME_STATIC / "styles.css",
 ]
 missing.extend(str(path) for path in required_static if not path.is_file())

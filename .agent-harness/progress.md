@@ -4,6 +4,56 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F121 provider-native coding and native visual acceptance are complete. The
+Language setting now presents one heading, one combined timing explanation,
+and the unchanged selector; it aligns as one row at regular widths and stacks
+at compact widths. English and Chinese same-source previews and the rebuilt
+native Debug app pass at 560x600 and full-screen sizes. Accessibility exposes
+one localized heading, one localized description, and one named popup. Seventeen
+focused tests pass, the current-source Debug build succeeds, and final recovery
+passes 460 project tests, 11 Mac frontend/fake-sidecar tests, 30 Rust tests, and
+all smoke paths. Separate cold-start evaluation passed. Evidence is in
+`.agent-harness/runs/F121-fast-coding.md`,
+`.agent-harness/runs/F121-visual-acceptance.md`, and
+`.agent-harness/runs/20260805T160500Z-F121-evaluation-pass.md`.
+
+The owner requested a focused follow-up to F118: collapse the Language setting
+from two visible labels and two explanations into one `Language` heading, one
+sentence preserving both timing facts, and the existing right-aligned selector.
+F121 owns only that bilingual semantic/responsive presentation refinement;
+F119-F120 were temporarily lowered so interactive work selected F121 without
+starting the separately authorized paid English-audio workflow. Their P0
+priority is restored after F121 approval; no paid generation was started.
+
+F118 provider-native coding and local visual acceptance pass. Preferences now
+store one bounded `en` or `zh-CN` choice, migrate the existing Smart Speaker
+setting, and initialize an absent choice from macOS preferred languages.
+Exactly two General choices localize all app-owned WebView, native-menu,
+window, accessibility, dynamic status/error, and secure-prompt text. The
+loopback page observes changes through its existing local poll, so language
+switching does not stop or restart the sidecar, release media, alter the Smart
+Speaker assertion, or disturb an active session. The current-source Debug app
+passed English and Chinese ordinary/compact and fullscreen inspection, with
+every Settings panel checked in Chinese. Final recovery passed 460 project
+tests, 11 Mac frontend/fake-sidecar tests, 30 Rust tests, and all smoke paths.
+Coding and visual evidence are in `.agent-harness/runs/F118-fast-coding.md` and
+`.agent-harness/runs/F118-visual-acceptance.md`; separate cold-start approval is
+recorded as `EVAL_PASS: F118` in
+`.agent-harness/runs/20260805T155003Z-F118-evaluation-pass.md`.
+
+The owner-approved bilingual requirement is normalized in `SPEC.md` and
+decomposed into F118-F120. The app will offer exactly English and Simplified
+Chinese, resolve an absent first-run preference from the macOS preferred
+language, localize all app-owned UI while leaving internal codes stable, and
+apply a language change immediately to UI without restarting the sidecar or
+disturbing an active voice session. Fixed cached cues follow one app-language
+snapshot per wake rather than GPT or transcription language: English says
+`I'm here. Yes?` and `See you.`, while Chinese retains the accepted assets.
+Ordinary Realtime discussion continues to follow each current user turn. F118
+owns preference migration and UI localization, F119 owns explicitly authorized
+paid English asset generation plus owner selection, and F120 owns cross-process
+cue selection, input gating, teardown, and target-Mac overall-flow acceptance.
+
 F117 provider-native coding and owner asset selection are complete. The owner
 rejected 827 ms candidate-01 as too heavy, then selected the light/casual
 candidate-03 over the 784 ms soft candidate-02. After silence analysis and owner
@@ -614,10 +664,17 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Implement and evaluate F112. Then Resume F093 by recording the
-bounded production-app demo and running two additional trusted Apple Silicon
-tester or distinct clean-profile trials. Public binary distribution remains
-on hold.
+Implement and evaluate F118, then F119 and F120. F119 paid generation and live
+speaker audition require fresh explicit owner authorization immediately before
+execution. The older optional F112 Mandarin ACK-shortening experiment and F093
+portfolio demo/trusted-trial work remain deferred behind the owner-prioritized
+bilingual product flow. Then Resume F093 by recording the bounded production-app
+demo and running two additional trusted Apple Silicon tester or distinct
+clean-profile trials. Public binary distribution remains on hold.
+
+For the owner-prioritized interactive F118-F120 sequence, F112 is temporarily
+set to P1 so the priority-and-order-only orchestrator selects F118 first. Restore
+F112 to P0 after F120 evaluation or if the bilingual sequence is abandoned.
 
 F113 was explicitly selected for interactive work ahead of the older F112 todo
 item because the owner reported a repeatable P0 native crash and asked to fix

@@ -26,13 +26,19 @@ impl CredentialKind {
         }
     }
 
-    fn prompt_script(self) -> &'static str {
-        match self {
-            Self::OpenAi => {
+    fn prompt_script(self, locale: &str) -> &'static str {
+        match (self, locale == "zh-CN") {
+            (Self::OpenAi, false) => {
                 r#"text returned of (display dialog "Enter your OpenAI API key. It will be stored in macOS Keychain and will not be shown in the app." default answer "" with hidden answer buttons {"Cancel", "Save"} default button "Save" cancel button "Cancel" with title "Hey Jarvis")"#
             }
-            Self::Finnhub => {
+            (Self::Finnhub, false) => {
                 r#"text returned of (display dialog "Enter an optional Finnhub API key for stock quotes. It will be stored in macOS Keychain." default answer "" with hidden answer buttons {"Cancel", "Save"} default button "Save" cancel button "Cancel" with title "Hey Jarvis")"#
+            }
+            (Self::OpenAi, true) => {
+                r#"text returned of (display dialog "请输入 OpenAI API 密钥。密钥会存储在 macOS 钥匙串中，不会显示在应用里。" default answer "" with hidden answer buttons {"取消", "保存"} default button "保存" cancel button "取消" with title "Hey Jarvis")"#
+            }
+            (Self::Finnhub, true) => {
+                r#"text returned of (display dialog "请输入用于股票报价的可选 Finnhub API 密钥。密钥会存储在 macOS 钥匙串中。" default answer "" with hidden answer buttons {"取消", "保存"} default button "保存" cancel button "取消" with title "Hey Jarvis")"#
             }
         }
     }
@@ -110,10 +116,11 @@ pub fn status(store: &dyn CredentialStore) -> Result<CredentialStatus, String> {
 pub fn prompt_and_store(
     store: &dyn CredentialStore,
     kind: CredentialKind,
+    locale: &str,
 ) -> Result<CredentialStatus, String> {
     let mut output = Command::new("/usr/bin/osascript")
         .arg("-e")
-        .arg(kind.prompt_script())
+        .arg(kind.prompt_script(locale))
         .output()
         .map_err(|_| "credential_prompt_unavailable".to_string())?;
     if !output.status.success() {

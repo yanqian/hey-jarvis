@@ -15,24 +15,24 @@ let cachedFarewellUrl=null,cachedFarewellPending=false,cachedFarewellToken=0;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
-const UI_STATES={
-  ready:{label:"Ready",title:"Meet your voice assistant",detail:"Enable hands-free audio once, then wake Jarvis with your voice."},
-  "wake-ready":{label:"Wake listening",title:'Waiting for “Hey Jarvis”',detail:"Wake phrase detection stays on this Mac."},
-  connecting:{label:"Connecting",title:"Getting ready",detail:"Conversation audio stays off until the secure session is ready."},
-  listening:{label:"Listening",title:"I’m listening",detail:"Speak naturally — you can follow up or interrupt at any time."},
-  thinking:{label:"Thinking",title:"Working on it",detail:"Jarvis is preparing a response."},
-  speaking:{label:"Speaking",title:"Responding",detail:"You can interrupt at any time."},
-  stopping:{label:"Ending",title:"Closing the conversation",detail:"Releasing the microphone and restoring local wake listening."},
-  "resume-required":{label:"Resume required",title:"Voice assistant paused",detail:"Open Settings or restart Hey Jarvis to restore voice listening."},
-  error:{label:"Needs attention",title:"Jarvis couldn’t continue",detail:"Wake listening is safe. Try again or open Settings for recovery."},
-};
+let appLanguage="en",currentUiState="ready",currentUiDetail=null;
 
 function setUiState(state,detail=null){
-  const presentation=UI_STATES[state]||UI_STATES.error;
-  document.body.dataset.uiState=state in UI_STATES?state:"error";
+  currentUiState=state;currentUiDetail=detail;
+  const catalog=window.HeyJarvisI18n.states[appLanguage];
+  const presentation=catalog[state]||catalog.error;
+  document.body.dataset.uiState=state in catalog?state:"error";
   $("status-label").textContent=presentation.label;
   $("status-title").textContent=presentation.title;
-  $("status-detail").textContent=detail||presentation.detail;
+  $("status-detail").textContent=detail?window.HeyJarvisI18n.detail(appLanguage,detail):presentation.detail;
+}
+
+async function refreshAppLanguage(){
+  try{
+    const response=await fetch("/api/app-language",{cache:"no-store"}),payload=await response.json();
+    if(!response.ok)return;const next=window.HeyJarvisI18n.locale(payload.app_language);
+    if(next===appLanguage)return;appLanguage=next;window.HeyJarvisI18n.apply(appLanguage);setUiState(currentUiState,currentUiDetail);
+  }catch{}
 }
 function configuredOutputVolume(){return Number.isFinite(sessionConfig?.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;}
 
@@ -235,7 +235,7 @@ async function arm(){
     else audio.volume=configuredOutputVolume();
     sessionId=null;await hostEvent("armed");armed=true;$("arm").disabled=true;$("arm").hidden=true;
     setUiState("wake-ready");log("armed");poll();
-  }catch(error){releasePageMedia();sessionConfig=null;$("arm").disabled=false;$("arm").hidden=false;$("arm").querySelector("span").textContent="Resume voice assistant";setUiState("resume-required",`Voice setup needs your permission: ${error.message}`);}
+  }catch(error){releasePageMedia();sessionConfig=null;$("arm").disabled=false;$("arm").hidden=false;$("arm").querySelector("span").textContent=HeyJarvisI18n.text("Resume voice assistant");setUiState("resume-required",appLanguage==="zh-CN"?`语音设置需要你的许可：${error.message}`:`Voice setup needs your permission: ${error.message}`);}
 }
 
 function elapsedMs(start,end){return Math.max(0,Math.round(end-start));}
@@ -502,11 +502,12 @@ function failClosedAvailability(){
   showEndControl(false);
   $("arm").disabled=!RESUME_FLOW;
   $("arm").hidden=!RESUME_FLOW;
-  if(RESUME_FLOW)$("arm").querySelector("span").textContent="Resume voice assistant";
+  if(RESUME_FLOW)$("arm").querySelector("span").textContent=HeyJarvisI18n.text("Resume voice assistant");
   setUiState("resume-required");
 }
 
 async function refreshAvailability(){
+  await refreshAppLanguage();
   try{
     const response=await fetch("/api/availability",{cache:"no-store"});
     const data=await response.json();
@@ -529,7 +530,7 @@ async function sendFixtureAudio(command){
 async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error","error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
 function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:"Count slowly from one to one hundred, saying every number clearly. Do not abbreviate or skip any number."}]}}));dc.send(JSON.stringify({type:"response.create"}));}
 
-$("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop").addEventListener("click",()=>{setUiState("stopping");$("stop").disabled=true;post("/api/stop").catch(error=>setUiState("error",`Could not end the conversation: ${error.message}`));});$("app-settings").addEventListener("click",openAppSettings);
+$("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop").addEventListener("click",()=>{setUiState("stopping");$("stop").disabled=true;post("/api/stop").catch(error=>setUiState("error",appLanguage==="zh-CN"?`无法结束对话：${error.message}`:`Could not end the conversation: ${error.message}`));});$("app-settings").addEventListener("click",openAppSettings);
 function releasePageMedia(){
   if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
   resetCachedAcknowledgementPlayback();
@@ -549,6 +550,8 @@ function releasePageMedia(){
 window.addEventListener("beforeunload",releasePageMedia);
 window.addEventListener("pagehide",releasePageMedia);
 document.addEventListener("freeze",releasePageMedia);
-if(RESUME_FLOW){setUiState("resume-required","Restoring local wake listening after system sleep…");$("arm").querySelector("span").textContent="Resume voice assistant";$("arm").disabled=true;$("arm").hidden=true;arm();}
-else refreshAvailability();
+refreshAppLanguage().finally(()=>{
+  if(RESUME_FLOW){setUiState("resume-required","Restoring local wake listening after system sleep…");$("arm").querySelector("span").textContent=HeyJarvisI18n.text("Resume voice assistant");$("arm").disabled=true;$("arm").hidden=true;arm();}
+  else refreshAvailability();
+});
 setInterval(refreshAvailability,1000);
