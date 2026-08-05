@@ -137,7 +137,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('SETTINGS_HASH = "#settings"', app_script)
         self.assertIn('recordLifecycle("settings_opened")', app_script)
         self.assertIn("function renderVoiceStatus(snapshot)", app_script)
-        self.assertIn("Wake listening remains active while Settings is open.", app_script)
+        self.assertIn("Listening continues while Settings is open.", app_script)
         self.assertIn('await invoke("open_settings")', app_script)
         self.assertIn("if (settingsMode) {", app_script)
         self.assertIn("resetSettingsSurface();\n      await afterCommittedPaint();", app_script)
@@ -242,12 +242,35 @@ class MacAppShellTests(unittest.TestCase):
         ):
             self.assertIn(section, page)
         for phrase in (
-            "Checking live voice status",
-            "reading local voice availability",
+            "VOICE STATUS",
+            "Reading local voice availability",
             "never keys, raw audio, transcripts, answers, tool arguments, SDP, ICE, or provider bodies",
             "Unsigned trusted testing only",
         ):
             self.assertIn(phrase, page)
+        self.assertNotIn('id="page-summary"', page)
+        self.assertEqual(page.count('id="voice-status"'), 1)
+        self.assertIn('id="voice-status-label"', page)
+        self.assertIn('id="voice-status-detail"', page)
+        self.assertIn('class="settings-group" aria-labelledby="assistant-setup-title"', page)
+        self.assertIn('class="settings-group" aria-labelledby="smart-speaker-title"', page)
+        self.assertIn("Setup and start", page)
+        self.assertIn("Smart Speaker Mode", page)
+        self.assertNotIn("ASSISTANT SETUP", page)
+        self.assertNotIn("POWER &amp; WAKE", page)
+        self.assertIn("Prevent automatic sleep while listening", page)
+        self.assertIn("<summary>How sleep and wake work</summary>", page)
+        self.assertIn('class="local-privacy-note"', page)
+        assistant_group = page.split('aria-labelledby="assistant-setup-title"', 1)[1].split("</section>", 1)[0]
+        smart_speaker_group = page.split('aria-labelledby="smart-speaker-title"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('id="start"', assistant_group)
+        self.assertIn('id="readiness-check"', assistant_group)
+        self.assertNotIn('id="smart-speaker-mode"', assistant_group)
+        self.assertIn('id="smart-speaker-mode"', smart_speaker_group)
+        self.assertIn("This can use more battery", smart_speaker_group)
+        self.assertIn("explicit Sleep and closing a MacBook lid", smart_speaker_group)
+        self.assertIn("one safe recovery attempt after wake", smart_speaker_group)
+        self.assertIn("Shutdown still stops voice availability", smart_speaker_group)
         self.assertNotIn("Protocol", page)
         self.assertNotIn("Session", page)
         self.assertNotIn("App data", page)
@@ -265,6 +288,29 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('? "Replace key" : "Add key"', script)
         self.assertIn("font-size: 12px;\n  font-weight: 500;", styles)
         self.assertIn("@media (max-width: 700px)", styles)
+        self.assertIn(".settings-group {", styles)
+        settings_group_rule = styles.split(".settings-group {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("border:", settings_group_rule)
+        self.assertNotIn("background:", settings_group_rule)
+        self.assertIn(".settings-group + .settings-group {", styles)
+        group_boundary_rule = styles.split(".settings-group + .settings-group {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-top: 1px solid #202b27;", group_boundary_rule)
+        action_rule = styles.split(".settings-group-actions {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("border", action_rule)
+        self.assertNotIn("padding", action_rule)
+        disclosure_rule = styles.split(".setting-disclosure {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("border", disclosure_rule)
+        self.assertNotIn("padding", disclosure_rule)
+        self.assertNotIn(".settings-group-label", styles)
+        self.assertIn(".setting-disclosure summary:focus-visible", styles)
+        self.assertIn(".local-privacy-note {", styles)
+        self.assertIn(".local-privacy-note::before {", styles)
+        privacy_boundary_rule = styles.split(".local-privacy-note::before {", 1)[1].split("}", 1)[0]
+        self.assertIn("height: 1px;", privacy_boundary_rule)
+        self.assertIn("background: #202b27;", privacy_boundary_rule)
+        self.assertIn("@media (min-width: 1100px) and (min-height: 800px)", styles)
+        fullscreen_rule = styles.split("@media (min-width: 1100px) and (min-height: 800px) {", 1)[1].split("}", 2)[0]
+        self.assertIn("padding-top: clamp(40px, 4vh, 52px);", fullscreen_rule)
         self.assertIn(".row-actions { justify-content: flex-start; width: 100%; }", styles)
         self.assertIn(".row-actions button { flex: 1 1 108px; }", styles)
 
@@ -298,7 +344,7 @@ class MacAppShellTests(unittest.TestCase):
 
         self.assertIn(".settings-shell {\n  width: 100%;", settings_styles)
         self.assertIn("width: min(100%, 1180px);", settings_styles)
-        self.assertIn("min-height: max(410px, calc(100vh - 154px));", settings_styles)
+        self.assertIn("min-height: max(410px, calc(100vh - 132px));", settings_styles)
         self.assertIn(".settings-panel { width: min(100%, 760px); }", settings_styles)
         self.assertIn("@media (min-width: 1100px)", settings_styles)
         self.assertNotIn("--shell-gutter: 18px", settings_styles)

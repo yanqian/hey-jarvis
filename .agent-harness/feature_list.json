@@ -2593,6 +2593,47 @@
         "F104",
         "F113"
       ]
+    },
+    {
+      "id": "F115",
+      "title": "Clarify Settings status and General-page relationships",
+      "description": "Remove duplicated live-status copy and group General-page readiness, actions, Smart Speaker controls, and disclosures by relationship.",
+      "acceptance": [
+        "Settings presents one compact live Voice status component with a non-color state label and concise supporting detail; the former duplicate page-summary sentence is absent in every availability state.",
+        "General has distinct semantic and visual groups for Assistant setup and Smart Speaker Mode: readiness and its start/check actions stay together, while the mode toggle, current state, and sleep/wake explanation stay together.",
+        "The full battery, explicit Sleep, lid-close, recovery-attempt, and shutdown disclosure remains keyboard and screen-reader accessible behind a clearly named native disclosure, and the local-before-wake privacy boundary remains visibly separate.",
+        "Existing action IDs, invocation behavior, live availability polling, non-disruptive Settings lifecycle, Resume behavior, compact-window usability, focus styling, reduced motion, privacy boundaries, and all other Settings panels remain unchanged.",
+        "Focused DOM/CSS/source contracts, JavaScript syntax, a rebuilt Debug app inspection at regular and compact sizes, full project tests, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F100",
+        "F114"
+      ]
+    },
+    {
+      "id": "F116",
+      "title": "Refine General grouping and fullscreen spacing",
+      "description": "Remove redundant General micro-labels and misplaced dividers while preserving functional grouping and fullscreen-safe Settings chrome.",
+      "acceptance": [
+        "The Settings title and Done button remain fully visible in a native fullscreen window through deterministic wide-and-tall viewport top spacing, without changing the ordinary main assistant shell.",
+        "The redundant `ASSISTANT SETUP` and `POWER & WAKE` eyebrow labels are absent while the semantic `Setup and start` and `Smart Speaker Mode` headings, descriptions, controls, IDs, and DOM order remain intact.",
+        "Readiness and its actions form one uninterrupted setup group; one quiet divider remains between Setup and Smart Speaker Mode; the sleep/wake disclosure has no separating top rule and stays visually associated with Smart Speaker Mode.",
+        "A quiet divider immediately above `Local until you wake it.` separates the privacy note from the complete Smart Speaker group, with compact-window, keyboard, screen-reader, reduced-motion, and dark-theme behavior unchanged.",
+        "Focused DOM/CSS/source contracts, JavaScript syntax, a rebuilt Debug app native-fullscreen inspection, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F115"
+      ]
     }
   ]
 }

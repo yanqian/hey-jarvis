@@ -4,6 +4,32 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F116 is evaluator-approved. It removes two redundant General micro-labels and
+two misplaced internal dividers while preserving one clear boundary between
+Setup and Smart Speaker Mode, then places the second boundary above the
+independent local-before-wake privacy note. Settings and Done remain fully
+visible in native fullscreen. Runtime behavior and other panels are unchanged.
+Focused contracts, Debug and release builds, native fullscreen inspection, 456
+project tests, 11 Mac app tests, 27 Rust tests, and all smoke paths pass.
+Independent approval is recorded as `EVAL_PASS: F116` in
+`.agent-harness/runs/20260805T092826Z-F116-evaluation-pass.md`. F112 is restored
+to P0 after the temporary interactive selection override.
+
+F115 provider-native coding and local visual acceptance pass. Settings now has
+one compact live Voice status component instead of duplicate availability
+sentences. General separates Assistant setup from Smart Speaker Mode while
+keeping each action beside the state it affects. Per owner visual feedback,
+the two section containers are unboxed: headings, whitespace, and one quiet
+divider provide hierarchy, and only the actionable readiness and Smart Speaker
+surfaces retain card borders. The complete sleep/wake safety explanation is an
+accessible native disclosure, and the local-before-wake privacy boundary stays
+separate. Regular and compact Debug-app inspection, 33 focused tests, 456
+project tests, 11 Mac app tests, 27 Rust tests, and all smoke paths pass.
+Coding and visual evidence are in `.agent-harness/runs/F115-fast-coding.md` and
+`.agent-harness/runs/F115-visual-acceptance.md`. Independent approval is
+recorded as `EVAL_PASS: F115` in
+`.agent-harness/runs/20260805T090405Z-F115-evaluation-pass.md`.
+
 F114 provider-native coding and target-Mac Settings acceptance pass. Settings
 is now a singleton native window that leaves the main loopback runtime,
 sidecar PID/session, wake availability, retained media, and Smart Speaker
@@ -507,9 +533,8 @@ F050 has been completed through evaluator-gated fast work and separate cold-star
 
 ## Current Feature
 
-F112 is the owner-prioritized active direction behind evaluator-approved F111.
-It will separately A/B shorter natural variants so an experimental preference
-cannot destabilize the accepted parallel production path.
+F112 is the next active direction after evaluator-approved F116. It remains a
+separate owner-led ACK experiment and does not affect Settings.
 
 F108 is evaluator-approved. The bounded A/B runner,
 one-shot same-session Realtime ACK path, privacy oracle, deterministic cleanup,
@@ -571,9 +596,7 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-F106 is committed at `daec7f3`. Implement and evaluate F113, then F114, for the
-owner-requested safe sidecar shutdown and non-disruptive Settings lifecycle.
-After that, implement and evaluate F112. Then Resume F093 by recording the
+Implement and evaluate F112. Then Resume F093 by recording the
 bounded production-app demo and running two additional trusted Apple Silicon
 tester or distinct clean-profile trials. Public binary distribution remains
 on hold.

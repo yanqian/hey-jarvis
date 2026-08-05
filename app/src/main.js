@@ -27,8 +27,8 @@ const elements = {
   smartSpeakerStatus: document.querySelector("#smart-speaker-status"),
   returnAssistant: document.querySelector("#return-assistant"),
   restartVoice: document.querySelector("#restart-voice"),
-  pageSummary: document.querySelector("#page-summary"),
-  voiceStatus: document.querySelector("#voice-status"),
+  voiceStatusLabel: document.querySelector("#voice-status-label"),
+  voiceStatusDetail: document.querySelector("#voice-status-detail"),
   exportSupport: document.querySelector("#export-support"),
   clearDiagnostics: document.querySelector("#clear-diagnostics"),
   diagnosticsMessage: document.querySelector("#diagnostics-message"),
@@ -172,14 +172,14 @@ function renderVoiceStatus(snapshot) {
   if (availability === lastVoiceAvailability) return;
   lastVoiceAvailability = availability;
   const labels = {
-    ready: ["Runtime ready", "The local runtime is ready and will begin wake listening after the main window arms."],
-    wake_listening: ["Wake listening", "Wake listening remains active while Settings is open."],
-    busy: ["Conversation active", "The current voice conversation continues while Settings is open."],
-    resume_required: ["Resume required", "Voice listening is off. Resume after finishing any runtime-affecting change."],
+    ready: ["Runtime ready", "Open the assistant to begin wake listening."],
+    wake_listening: ["Wake listening", "Listening continues while Settings is open."],
+    busy: ["Conversation active", "The current conversation continues in the assistant window."],
+    resume_required: ["Resume required", "Voice listening is off until you resume."],
   };
   const [label, summary] = labels[availability] || labels.resume_required;
-  elements.pageSummary.textContent = summary;
-  elements.voiceStatus.textContent = `${label} — ${summary}`;
+  elements.voiceStatusLabel.textContent = label;
+  elements.voiceStatusDetail.textContent = summary;
 }
 
 async function refreshVoiceStatus() {

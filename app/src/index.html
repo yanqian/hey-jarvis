@@ -54,11 +54,13 @@
         <button id="return-assistant" class="done-button" type="button" hidden>Done</button>
       </header>
 
-      <p id="page-summary">Checking live voice status…</p>
-
-      <div class="privacy-state" role="status">
-        <span class="privacy-state-icon" aria-hidden="true"></span>
-        <span id="voice-status"><strong>Checking</strong> — reading local voice availability.</span>
+      <div id="voice-status" class="voice-status-card" role="status" aria-live="polite" aria-atomic="true">
+        <span class="voice-status-icon" aria-hidden="true"></span>
+        <span class="voice-status-copy">
+          <span class="voice-status-eyebrow">VOICE STATUS</span>
+          <strong id="voice-status-label">Checking</strong>
+          <span id="voice-status-detail">Reading local voice availability.</span>
+        </span>
       </div>
 
       <div class="settings-layout">
@@ -78,32 +80,54 @@
               <p>Hey Jarvis uses local wake detection and starts an OpenAI conversation only after the wake phrase.</p>
             </div>
 
-            <div class="summary-card">
-              <div class="summary-icon" aria-hidden="true">J</div>
-              <div>
-                <h3>Hey Jarvis is ready when you are</h3>
-                <p id="assistant-readiness">Checking local setup…</p>
-              </div>
-            </div>
+            <section class="settings-group" aria-labelledby="assistant-setup-title">
+              <header class="settings-group-heading">
+                <h3 id="assistant-setup-title">Setup and start</h3>
+                <p>Review the requirements for voice listening, then start or check them again.</p>
+              </header>
 
-            <div class="smart-speaker-card">
-              <div>
-                <h3>Smart Speaker Mode</h3>
-                <p id="smart-speaker-status">Off. Hey Jarvis follows normal Mac sleep behavior.</p>
+              <div class="summary-card">
+                <div class="summary-icon" aria-hidden="true">J</div>
+                <div>
+                  <h4>Hey Jarvis is ready when you are</h4>
+                  <p id="assistant-readiness">Checking local setup…</p>
+                </div>
               </div>
-              <label class="switch-control">
-                <input id="smart-speaker-mode" type="checkbox" />
-                <span aria-hidden="true"></span>
-                <span class="visually-hidden">Enable Smart Speaker Mode</span>
-              </label>
-            </div>
-            <p class="boundary-note smart-speaker-note">When enabled, Hey Jarvis prevents automatic system sleep only while wake listening is genuinely active. The display may still turn off and the Mac may be locked. This can use more battery; explicit Sleep and closing a MacBook lid stop listening while asleep, then make one safe recovery attempt after wake. Shutdown still stops voice availability.</p>
 
-            <div class="action-row">
-              <button id="start" class="primary" type="button">Check microphone &amp; start</button>
-              <button id="readiness-check" class="secondary" type="button">Run readiness check</button>
-            </div>
-            <p class="boundary-note"><strong>Local until you wake it.</strong> Wake phrase detection stays on this Mac. Conversation audio reaches OpenAI only after wake.</p>
+              <div class="action-row settings-group-actions">
+                <button id="start" class="primary" type="button">Check microphone &amp; start</button>
+                <button id="readiness-check" class="secondary" type="button">Run readiness check</button>
+              </div>
+            </section>
+
+            <section class="settings-group" aria-labelledby="smart-speaker-title">
+              <header class="settings-group-heading">
+                <h3 id="smart-speaker-title">Smart Speaker Mode</h3>
+                <p>Control whether Hey Jarvis stays available during normal Mac idle time.</p>
+              </header>
+
+              <div class="smart-speaker-card">
+                <div>
+                  <h4>Prevent automatic sleep while listening</h4>
+                  <p id="smart-speaker-status">Off. Hey Jarvis follows normal Mac sleep behavior.</p>
+                </div>
+                <label class="switch-control">
+                  <input id="smart-speaker-mode" type="checkbox" />
+                  <span aria-hidden="true"></span>
+                  <span class="visually-hidden">Enable Smart Speaker Mode</span>
+                </label>
+              </div>
+
+              <details class="setting-disclosure">
+                <summary>How sleep and wake work</summary>
+                <p>When enabled, Hey Jarvis prevents automatic system sleep only while wake listening is genuinely active. The display may still turn off and the Mac may be locked. This can use more battery; explicit Sleep and closing a MacBook lid stop listening while asleep, then make one safe recovery attempt after wake. Shutdown still stops voice availability.</p>
+              </details>
+            </section>
+
+            <aside class="local-privacy-note">
+              <strong>Local until you wake it.</strong>
+              <span>Wake phrase detection stays on this Mac. Conversation audio reaches OpenAI only after wake.</span>
+            </aside>
           </section>
 
           <section class="settings-panel" data-settings-panel="api-keys" aria-labelledby="keys-title" hidden>
