@@ -21,8 +21,13 @@ sidecar before the non-listening banner is shown. The **Done** action explicitly
 restarts the local runtime before returning to the conversation surface.
 
 The native supervisor distinguishes intentional stops from unexpected exits.
-An intentional Settings, permission, credential, sleep/wake, or quit stop never
-restarts. An unexpected child exit is retried at most three times with bounded
+An intentional Settings, permission, credential, or quit stop never restarts.
+System sleep records only whether Smart Speaker Mode was genuinely active,
+stops local media, and permits one bounded local-runtime recovery attempt after
+wake. Browser re-arming must restore real `wake_listening` within 15 seconds;
+otherwise the app remains truthfully non-listening and exposes focused Resume
+and Settings actions. Neither path starts paid Realtime activity before a new
+wake phrase. An unexpected child exit is retried at most three times with bounded
 backoff; a fourth exit enters `crash_loop`, remains non-listening, and requires
 an explicit user restart. Restarting restores local wake listening only and
 never creates paid Realtime activity before a fresh wake phrase.

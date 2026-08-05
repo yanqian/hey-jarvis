@@ -4,6 +4,35 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F106 is evaluator-approved after provider-native coding and owner-led target-Mac
+acceptance. The explicit-sleep trial released the active
+assertion, stopped the old sidecar, made one automatic wake attempt, and
+returned to truthful `wake_listening` about 5.9 seconds after wake without a
+Resume click. The recovered declarative Settings link opened on the first
+click, and the owner heard the requested time answer, ended the conversation
+with the farewell phrase, and woke the assistant again. Durable external
+evidence is recorded in `.agent-harness/runs/F106-live-acceptance.md`.
+
+Target-Mac diagnostics originally reproduced the reported screen as the
+existing `system_will_sleep -> sidecar_stopped -> system_did_wake` path: this
+was not a 30-minute application expiry, and the old wake callback deliberately
+did not restart voice listening. The correction records only whether Smart
+Speaker Mode was genuinely active, releases media and the power assertion,
+runs one off-callback-thread recovery attempt, accepts success only at real
+`wake_listening`, and falls back after 15 seconds to a focused Resume screen.
+The Home gear is now a declarative custom-scheme link, so native Settings
+navigation remains available even if asynchronous cleanup fails. Stale timeout,
+mode-off, one-attempt, Resume UI, JavaScript, 454 project tests, 10 app tests,
+27 Rust tests, release build, and final recovery verification pass. Fast coding
+evidence is recorded in `.agent-harness/runs/F106-fast-coding.md`, and separate
+cold-start approval is recorded as `EVAL_PASS: F106` in
+`.agent-harness/runs/20260805T042628Z-F106-evaluation-pass.md`. The owner
+separately identified the pre-existing
+Settings stop policy as too coarse after it exposed a repeatable Python/
+PortAudio shutdown race. Per owner direction, F106 will be committed separately
+and a new normalized feature will keep the sidecar alive for ordinary Settings
+use, rebuild audio only when required, and make genuine shutdown race-free.
+
 F110 is evaluator-approved. Three digitally captured `gpt-realtime-2.1` /
 `alloy` candidates passed bounded validation and wake recovery; the owner
 selected the 2,429 ms `candidate-02`. The canonical asset and manifest are
@@ -509,8 +538,10 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Implement and evaluate F112. After the cached ACK work, resume F106 to add bounded
-post-wake recovery with a truthful Resume fallback. After F106, Resume F093 by recording the
+Commit the owner-accepted and evaluator-approved F106 scope. Next normalize and
+implement the owner-requested Settings lifecycle and safe sidecar shutdown
+feature. After that, implement and
+evaluate F112. Then Resume F093 by recording the
 bounded production-app demo and running two additional trusted Apple Silicon
 tester or distinct clean-profile trials. Public binary distribution remains
 on hold.

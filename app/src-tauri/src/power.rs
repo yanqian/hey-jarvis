@@ -18,6 +18,61 @@ pub struct PowerPolicy {
     backend: Box<dyn PowerAssertionBackend>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SleepRecoveryPolicy {
+    generation: u64,
+    resume_expected: bool,
+    attempt_started: bool,
+}
+
+impl SleepRecoveryPolicy {
+    pub fn record_sleep(&mut self, was_smart_speaker_active: bool) -> Option<u64> {
+        self.generation = self.generation.wrapping_add(1);
+        self.resume_expected = was_smart_speaker_active;
+        self.attempt_started = false;
+        was_smart_speaker_active.then_some(self.generation)
+    }
+
+    pub fn begin_wake_attempt(&mut self) -> Option<u64> {
+        if !self.resume_expected || self.attempt_started {
+            return None;
+        }
+        self.attempt_started = true;
+        Some(self.generation)
+    }
+
+    pub fn begin_manual_resume(&mut self) -> u64 {
+        self.generation = self.generation.wrapping_add(1);
+        self.resume_expected = true;
+        self.attempt_started = true;
+        self.generation
+    }
+
+    pub fn complete_if_current(&mut self, generation: Option<u64>) -> bool {
+        if !self.resume_expected || generation.is_some_and(|value| value != self.generation) {
+            return false;
+        }
+        self.resume_expected = false;
+        self.attempt_started = false;
+        true
+    }
+
+    pub fn timeout_if_current(&mut self, generation: u64) -> bool {
+        if self.generation != generation || !self.resume_expected || !self.attempt_started {
+            return false;
+        }
+        self.resume_expected = false;
+        self.attempt_started = false;
+        true
+    }
+
+    pub fn cancel(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        self.resume_expected = false;
+        self.attempt_started = false;
+    }
+}
+
 impl PowerPolicy {
     pub fn system(enabled: bool) -> Self {
         Self::with_backend(enabled, Box::new(SystemPowerAssertionBackend))
@@ -201,18 +256,54 @@ pub fn install(app: tauri::AppHandle) {
     let sleep_app = app.clone();
     let sleep: RcBlock<dyn Fn(NonNull<NSNotification>)> = RcBlock::new(move |_| {
         if let Some(runtime) = sleep_app.try_state::<crate::AppRuntime>() {
-            runtime
-                .diagnostics
-                .record("native", "system_will_sleep", None, Some("non_listening"));
+            let was_active = runtime
+                .power_policy
+                .lock()
+                .map(|policy| {
+                    let snapshot = policy.snapshot();
+                    snapshot.enabled && snapshot.active
+                })
+                .unwrap_or(false);
+            if let Ok(mut recovery) = runtime.sleep_recovery.lock() {
+                recovery.record_sleep(was_active);
+            }
+            runtime.diagnostics.record(
+                "native",
+                "system_will_sleep",
+                None,
+                Some(if was_active {
+                    "recovery_pending"
+                } else {
+                    "non_listening"
+                }),
+            );
             crate::release_power_assertion(&runtime, "system_sleep");
-            crate::stop_sidecar(&runtime, "system_will_sleep");
+            crate::show_resume_required_window(&sleep_app);
+            let stop_app = sleep_app.clone();
+            std::thread::spawn(move || {
+                if let Some(runtime) = stop_app.try_state::<crate::AppRuntime>() {
+                    crate::stop_sidecar(&runtime, "system_will_sleep");
+                }
+            });
         }
     });
+    let wake_app = app.clone();
     let wake: RcBlock<dyn Fn(NonNull<NSNotification>)> = RcBlock::new(move |_| {
-        if let Some(runtime) = app.try_state::<crate::AppRuntime>() {
+        if let Some(runtime) = wake_app.try_state::<crate::AppRuntime>() {
             runtime
                 .diagnostics
                 .record("native", "system_did_wake", None, Some("non_listening"));
+            let generation = runtime
+                .sleep_recovery
+                .lock()
+                .ok()
+                .and_then(|mut recovery| recovery.begin_wake_attempt());
+            if let Some(generation) = generation {
+                let recovery_app = wake_app.clone();
+                std::thread::spawn(move || {
+                    crate::recover_after_system_wake(recovery_app, generation)
+                });
+            }
         }
     });
     unsafe {
@@ -344,5 +435,29 @@ mod tests {
         policy.update_availability("wake_listening", &diagnostics);
         assert_eq!(state.lock().unwrap().acquire_calls, 1);
         assert!(!policy.snapshot().active);
+    }
+
+    #[test]
+    fn sleep_recovery_allows_one_attempt_only_for_a_previously_active_session() {
+        let mut recovery = SleepRecoveryPolicy::default();
+        assert_eq!(recovery.record_sleep(false), None);
+        assert_eq!(recovery.begin_wake_attempt(), None);
+
+        let generation = recovery.record_sleep(true).expect("active sleep");
+        assert_eq!(recovery.begin_wake_attempt(), Some(generation));
+        assert_eq!(recovery.begin_wake_attempt(), None);
+        assert!(recovery.complete_if_current(Some(generation)));
+        assert!(!recovery.complete_if_current(Some(generation)));
+    }
+
+    #[test]
+    fn stale_recovery_timeout_cannot_cancel_a_newer_manual_resume() {
+        let mut recovery = SleepRecoveryPolicy::default();
+        let stale = recovery.record_sleep(true).expect("sleep generation");
+        assert_eq!(recovery.begin_wake_attempt(), Some(stale));
+        let current = recovery.begin_manual_resume();
+        assert_ne!(stale, current);
+        assert!(!recovery.timeout_if_current(stale));
+        assert!(recovery.complete_if_current(Some(current)));
     }
 }

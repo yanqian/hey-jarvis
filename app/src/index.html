@@ -8,6 +8,24 @@
     <script type="module" src="./main.js" defer></script>
   </head>
   <body>
+    <main id="resume-view" class="resume-view" aria-labelledby="resume-title" hidden>
+      <header class="app-header returning-header">
+        <div class="app-context" aria-label="Hey Jarvis">
+          <span class="context-icon"><span class="status-dot paused" aria-hidden="true"></span></span>
+          <span class="context-title">Hey Jarvis</span>
+        </div>
+        <button id="resume-settings" class="done-button secondary-button" type="button">Settings</button>
+      </header>
+      <div class="returning-content">
+        <div class="returning-orb paused" aria-hidden="true"><span></span></div>
+        <p class="section-label">RESUME REQUIRED</p>
+        <h1 id="resume-title">Voice assistant paused</h1>
+        <p class="resume-detail">The Mac slept, so microphone access was released safely.</p>
+        <button id="resume-voice" class="primary resume-action" type="button">Resume voice assistant</button>
+        <p id="resume-status" role="status" aria-live="polite">Wake listening is off until you resume.</p>
+      </div>
+    </main>
+
     <main id="returning-view" class="returning-view" aria-labelledby="returning-title" hidden>
       <header class="app-header returning-header">
         <div class="app-context" aria-label="Hey Jarvis">
@@ -79,7 +97,7 @@
                 <span class="visually-hidden">Enable Smart Speaker Mode</span>
               </label>
             </div>
-            <p class="boundary-note smart-speaker-note">When enabled, Hey Jarvis prevents automatic system sleep only while wake listening is genuinely active. The display may still turn off and the Mac may be locked. This can use more battery; explicit Sleep, shutdown, and closing a MacBook lid still stop voice availability.</p>
+            <p class="boundary-note smart-speaker-note">When enabled, Hey Jarvis prevents automatic system sleep only while wake listening is genuinely active. The display may still turn off and the Mac may be locked. This can use more battery; explicit Sleep and closing a MacBook lid stop listening while asleep, then make one safe recovery attempt after wake. Shutdown still stops voice availability.</p>
 
             <div class="action-row">
               <button id="start" class="primary" type="button">Check microphone &amp; start</button>

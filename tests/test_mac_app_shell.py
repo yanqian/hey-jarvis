@@ -125,7 +125,8 @@ class MacAppShellTests(unittest.TestCase):
         self.assertNotIn('id="settings"', host_page)
         self.assertIn('id="return-assistant"', app_page)
         self.assertNotIn("window.history.back()", host_script)
-        self.assertIn('window.location.assign("hey-jarvis://settings/open")', host_script)
+        self.assertIn('href="hey-jarvis://settings/open"', host_page)
+        self.assertNotIn('window.location.assign("hey-jarvis://settings/open")', host_script)
         self.assertIn('SETTINGS_RETURN_HASH = "#settings-return"', app_script)
         self.assertIn('recordLifecycle("settings_opened")', app_script)
         self.assertIn("function afterCommittedPaint()", app_script)
@@ -172,10 +173,11 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("static SETTINGS_REQUEST_ID: AtomicU64", native)
         self.assertIn("SETTINGS_REQUEST_ID.fetch_add(1, Ordering::Relaxed)", native)
         self.assertIn('.append_pair("settings-request", &request_id.to_string())', native)
-        self.assertIn('url.set_fragment(Some("settings-return"))', native)
+        self.assertIn('local_shell_url(app, "settings-return")', native)
+        self.assertIn("url.set_fragment(Some(fragment))", native)
 
         request_token = native.index('.append_pair("settings-request"')
-        settings_fragment = native.index('url.set_fragment(Some("settings-return"))')
+        settings_fragment = native.index("url.set_fragment(Some(fragment))")
         self.assertLess(request_token, settings_fragment)
 
         enter_settings_start = native.index("fn enter_settings")
@@ -188,6 +190,37 @@ class MacAppShellTests(unittest.TestCase):
         open_settings = native[open_settings_start:open_settings_end]
         self.assertIn("window.navigate(url)", open_settings)
         self.assertNotIn("stop_sidecar", open_settings)
+
+    def test_system_sleep_has_bounded_recovery_and_a_clickable_fallback(self):
+        page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        frontend = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(
+            encoding="utf-8"
+        )
+        power = (APP / "src-tauri" / "src" / "power.rs").read_text(
+            encoding="utf-8"
+        )
+        host = (ROOT / "src" / "realtime_host" / "static" / "app.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('id="resume-voice"', page)
+        self.assertIn('id="resume-settings"', page)
+        self.assertIn("The Mac slept", page)
+        self.assertIn('RESUME_REQUIRED_HASH = "#resume-required"', frontend)
+        self.assertIn('invoke("resume_voice_assistant")', frontend)
+        self.assertIn('endpoint.hash = "smart-speaker-resume"', frontend)
+        self.assertIn("struct SleepRecoveryPolicy", power)
+        self.assertIn("snapshot.enabled && snapshot.active", power)
+        self.assertIn("begin_wake_attempt", power)
+        self.assertIn("std::thread::spawn", power)
+        self.assertIn('stop_sidecar(&runtime, "system_will_sleep")', power)
+        self.assertIn("WAKE_RECOVERY_TIMEOUT", native)
+        self.assertIn("timeout_if_current(generation)", native)
+        self.assertIn("show_resume_required_window", native)
+        self.assertIn('url.set_fragment(Some("smart-speaker-resume"))', native)
+        self.assertIn('location.hash==="#smart-speaker-resume"', host)
+        self.assertIn('$("arm").querySelector("span").textContent="Resume voice assistant"', host)
 
     def test_settings_surface_has_unified_entry_points_and_privacy_safe_sections(self):
         page = (APP / "src" / "index.html").read_text(encoding="utf-8")
@@ -328,7 +361,8 @@ class MacAppShellTests(unittest.TestCase):
 
         self.assertIn('id="smart-speaker-mode" type="checkbox"', page)
         self.assertIn("This can use more battery", page)
-        self.assertIn("explicit Sleep, shutdown, and closing a MacBook lid", page)
+        self.assertIn("explicit Sleep and closing a MacBook lid", page)
+        self.assertIn("one safe recovery attempt after wake", page)
         self.assertIn('invoke("set_smart_speaker_mode", { enabled })', frontend)
         self.assertIn('endpoint.hash = "smart-speaker-mode"', frontend)
         self.assertIn("set_smart_speaker_mode", native)

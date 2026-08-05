@@ -1,6 +1,10 @@
 const invoke = window.__TAURI__?.core?.invoke;
 
 const elements = {
+  resumeView: document.querySelector("#resume-view"),
+  resumeVoice: document.querySelector("#resume-voice"),
+  resumeSettings: document.querySelector("#resume-settings"),
+  resumeStatus: document.querySelector("#resume-status"),
   settingsShell: document.querySelector("#settings-shell"),
   returningView: document.querySelector("#returning-view"),
   returningStatus: document.querySelector("#returning-status"),
@@ -29,9 +33,21 @@ const elements = {
 
 let setup = null;
 const SETTINGS_RETURN_HASH = "#settings-return";
+const RESUME_REQUIRED_HASH = "#resume-required";
 
 function isSettingsReturn() {
   return window.location.hash === SETTINGS_RETURN_HASH;
+}
+
+function isResumeRequired() {
+  return window.location.hash === RESUME_REQUIRED_HASH;
+}
+
+function showResumeRequired() {
+  elements.settingsShell.hidden = true;
+  elements.returningView.hidden = true;
+  elements.resumeView.hidden = false;
+  elements.resumeVoice.disabled = false;
 }
 
 function afterCommittedPaint() {
@@ -41,6 +57,7 @@ function afterCommittedPaint() {
 }
 
 function resetSettingsSurface() {
+  elements.resumeView.hidden = true;
   elements.returningView.hidden = true;
   elements.settingsShell.hidden = false;
 }
@@ -143,7 +160,7 @@ async function showSettings() {
   }
 }
 
-function navigateToAssistant(snapshot) {
+function navigateToAssistant(snapshot, { recovery = false } = {}) {
   if (snapshot.state !== "ready" || !snapshot.control_url) {
     throw new Error(snapshot.detail || "sidecar_readiness_timed_out");
   }
@@ -151,7 +168,8 @@ function navigateToAssistant(snapshot) {
   if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1") {
     throw new Error("Sidecar returned an invalid control endpoint.");
   }
-  if (setup?.smart_speaker_mode === true) endpoint.hash = "smart-speaker-mode";
+  if (recovery) endpoint.hash = "smart-speaker-resume";
+  else if (setup?.smart_speaker_mode === true) endpoint.hash = "smart-speaker-mode";
   window.history.replaceState(null, "", SETTINGS_RETURN_HASH);
   recordLifecycle("runtime_navigation", snapshot.session_id);
   window.location.assign(endpoint.href);
@@ -164,6 +182,10 @@ async function load() {
   }
   try {
     recordLifecycle("loaded");
+    if (isResumeRequired()) {
+      showResumeRequired();
+      return;
+    }
     const settingsMode = isSettingsReturn();
     if (settingsMode) {
       resetSettingsSurface();
@@ -273,6 +295,19 @@ async function returnToAssistant() {
   }
 }
 
+async function resumeVoiceAssistant() {
+  elements.resumeVoice.disabled = true;
+  elements.resumeStatus.textContent = "Restarting local wake listening…";
+  try {
+    await recordLifecycle("runtime_restart_requested");
+    navigateToAssistant(await invoke("resume_voice_assistant"), { recovery: true });
+  } catch (error) {
+    elements.resumeVoice.disabled = false;
+    elements.resumeStatus.textContent = friendlyError(error);
+    elements.resumeVoice.focus();
+  }
+}
+
 async function runReadinessCheck() {
   try {
     const snapshot = await invoke("onboarding_status");
@@ -320,6 +355,8 @@ elements.deleteFinnhub.addEventListener("click", () => deleteCredential("finnhub
 elements.start.addEventListener("click", checkMicrophoneAndStart);
 elements.microphoneCheck.addEventListener("click", checkMicrophoneOnly);
 elements.returnAssistant.addEventListener("click", returnToAssistant);
+elements.resumeVoice.addEventListener("click", resumeVoiceAssistant);
+elements.resumeSettings.addEventListener("click", showSettings);
 elements.readinessCheck.addEventListener("click", runReadinessCheck);
 elements.smartSpeakerMode.addEventListener("change", setSmartSpeakerMode);
 elements.microphoneSettings.addEventListener("click", async () => {

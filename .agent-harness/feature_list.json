@@ -2415,11 +2415,11 @@
         "If WKWebView or microphone policy prevents automatic re-arming, Home and menu-bar state remain truthfully non-listening and present one focused Resume voice assistant action whose success reacquires the F105 assertion and restores Wake listening.",
         "Sleep/wake ordering and timeout tests, restart and stale-event fault injection, automatic-success and Resume-required UI tests, one real explicit-sleep/wake trial, one post-recovery voice loop, full project tests, final ./init.sh, fast coding evidence, and separate evaluator approval pass."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
-      "priority": "P1",
+      "priority": "P0",
       "depends_on": [
         "F104",
         "F105"

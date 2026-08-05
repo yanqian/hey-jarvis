@@ -3,7 +3,8 @@
 const AUDIO_CONSTRAINTS={echoCancellation:{exact:true},noiseSuppression:true,autoGainControl:true,channelCount:1};
 const REMOTE_AUDIO_VOLUME=0.1;
 const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
-const KEEP_WARM_MICROPHONE=location.hash==="#smart-speaker-mode";
+const RESUME_FLOW=location.hash==="#smart-speaker-resume";
+const KEEP_WARM_MICROPHONE=location.hash==="#smart-speaker-mode"||RESUME_FLOW;
 let armed=false,lastCommand=0,pc=null,dc=null,stream=null,warmStream=null,inputTrack=null,sessionId=null,sessionConfig=null,events=[],handoffTiming=null,sessionCreatedAt=null,dataChannelOpenedAt=null,transportReported=false,configurationReportStarted=false;
 let levelContext=null,levelAnalyser=null,levelSource=null,levelTimer=null,levelSamples=[],assistantSpeaking=false;
 let responseActive=false,turnResponsePending=false,farewellPending=false,farewellStarted=false,farewellCallId=null,farewellResponseActive=false;
@@ -206,7 +207,7 @@ async function arm(){
     else audio.volume=configuredOutputVolume();
     sessionId=null;await hostEvent("armed");armed=true;$("arm").disabled=true;$("arm").hidden=true;
     setUiState("wake-ready");log("armed");poll();
-  }catch(error){releasePageMedia();sessionConfig=null;$("arm").disabled=false;$("arm").hidden=false;setUiState("error",`Voice setup failed: ${error.message}`);}
+  }catch(error){releasePageMedia();sessionConfig=null;$("arm").disabled=false;$("arm").hidden=false;$("arm").querySelector("span").textContent="Resume voice assistant";setUiState("resume-required",`Voice setup needs your permission: ${error.message}`);}
 }
 
 function elapsedMs(start,end){return Math.max(0,Math.round(end-start));}
@@ -462,7 +463,6 @@ async function openAppSettings(){
   try{if(sessionId)await stop("open_settings");}catch{}
   stopInputLevels();
   releasePageMedia();
-  window.location.assign("hey-jarvis://settings/open");
 }
 
 function failClosedAvailability(){
@@ -470,8 +470,9 @@ function failClosedAvailability(){
   stopInputLevels();
   releasePageMedia();
   showEndControl(false);
-  $("arm").disabled=true;
-  $("arm").hidden=true;
+  $("arm").disabled=!RESUME_FLOW;
+  $("arm").hidden=!RESUME_FLOW;
+  if(RESUME_FLOW)$("arm").querySelector("span").textContent="Resume voice assistant";
   setUiState("resume-required");
 }
 
@@ -481,7 +482,7 @@ async function refreshAvailability(){
     const data=await response.json();
     if(!response.ok)throw new Error(data.error||"availability_unavailable");
     if(data.availability==="resume_required"){failClosedAvailability();return;}
-    if(data.availability==="ready"&&!armed&&!sessionId)setUiState("ready");
+    if(data.availability==="ready"&&!armed&&!sessionId&&!RESUME_FLOW)setUiState("ready");
     if(data.availability==="wake_listening"&&armed&&!sessionId)setUiState("wake-ready");
   }catch{failClosedAvailability();}
 }
@@ -516,5 +517,6 @@ function releasePageMedia(){
 window.addEventListener("beforeunload",releasePageMedia);
 window.addEventListener("pagehide",releasePageMedia);
 document.addEventListener("freeze",releasePageMedia);
-refreshAvailability();
+if(RESUME_FLOW){setUiState("resume-required","Restoring local wake listening after system sleep…");$("arm").querySelector("span").textContent="Resume voice assistant";$("arm").disabled=true;$("arm").hidden=true;arm();}
+else refreshAvailability();
 setInterval(refreshAvailability,1000);

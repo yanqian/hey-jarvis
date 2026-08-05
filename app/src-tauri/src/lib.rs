@@ -34,6 +34,7 @@ struct AppRuntime {
     onboarding_path: PathBuf,
     preferences_path: PathBuf,
     power_policy: Mutex<power::PowerPolicy>,
+    sleep_recovery: Mutex<power::SleepRecoveryPolicy>,
     app_support_dir: PathBuf,
     diagnostics: Diagnostics,
 }
@@ -129,6 +130,14 @@ fn restart_sidecar_runtime(runtime: &AppRuntime) -> Result<RuntimeSnapshot, Stri
         .start_with_credentials(Some(&credentials))
 }
 
+const WAKE_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15);
+
+fn cancel_sleep_recovery(runtime: &AppRuntime) {
+    if let Ok(mut recovery) = runtime.sleep_recovery.lock() {
+        recovery.cancel();
+    }
+}
+
 #[tauri::command]
 async fn restart_sidecar(app: tauri::AppHandle) -> Result<RuntimeSnapshot, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -139,7 +148,26 @@ async fn restart_sidecar(app: tauri::AppHandle) -> Result<RuntimeSnapshot, Strin
     .map_err(|_| "sidecar restart task failed".to_string())?
 }
 
+#[tauri::command]
+async fn resume_voice_assistant(app: tauri::AppHandle) -> Result<RuntimeSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let runtime = app.state::<AppRuntime>();
+        if let Ok(mut recovery) = runtime.sleep_recovery.lock() {
+            recovery.begin_manual_resume();
+        }
+        runtime
+            .diagnostics
+            .record("native", "voice_resume_requested", None, Some("starting"));
+        restart_sidecar_runtime(&runtime)
+    })
+    .await
+    .map_err(|_| "voice resume task failed".to_string())?
+}
+
 fn stop_sidecar(runtime: &AppRuntime, reason: &str) {
+    if reason != "system_will_sleep" {
+        cancel_sleep_recovery(runtime);
+    }
     release_power_assertion(runtime, reason);
     if let Ok(mut supervisor) = runtime.supervisor.lock() {
         let _ = supervisor.stop(reason);
@@ -155,6 +183,21 @@ fn release_power_assertion(runtime: &AppRuntime, reason: &str) {
 fn update_power_availability(runtime: &AppRuntime, availability: &str) {
     if let Ok(mut policy) = runtime.power_policy.lock() {
         policy.update_availability(availability, &runtime.diagnostics);
+    }
+    if availability == "wake_listening" {
+        let completed = runtime
+            .sleep_recovery
+            .lock()
+            .map(|mut recovery| recovery.complete_if_current(None))
+            .unwrap_or(false);
+        if completed {
+            runtime.diagnostics.record(
+                "native",
+                "voice_resume_completed",
+                None,
+                Some("wake_listening"),
+            );
+        }
     }
 }
 
@@ -309,6 +352,10 @@ fn development_sidecar_path() -> PathBuf {
 }
 
 fn settings_url(app: &tauri::AppHandle) -> Result<tauri::Url, String> {
+    local_shell_url(app, "settings-return")
+}
+
+fn local_shell_url(app: &tauri::AppHandle, fragment: &str) -> Result<tauri::Url, String> {
     let mut url = app
         .config()
         .build
@@ -318,8 +365,105 @@ fn settings_url(app: &tauri::AppHandle) -> Result<tauri::Url, String> {
     let request_id = SETTINGS_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
     url.query_pairs_mut()
         .append_pair("settings-request", &request_id.to_string());
-    url.set_fragment(Some("settings-return"));
+    url.set_fragment(Some(fragment));
     Ok(url)
+}
+
+pub(crate) fn show_resume_required_window(app: &tauri::AppHandle) {
+    let ui_app = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(window) = ui_app.get_webview_window("main") {
+            if let Ok(url) = local_shell_url(&ui_app, "resume-required") {
+                let _ = window.navigate(url);
+            }
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    });
+}
+
+fn navigate_to_recovery_runtime(
+    app: &tauri::AppHandle,
+    snapshot: &RuntimeSnapshot,
+) -> Result<(), String> {
+    let control_url = snapshot
+        .control_url
+        .as_deref()
+        .ok_or("sidecar_readiness_timed_out")?;
+    let mut url = tauri::Url::parse(control_url).map_err(|_| "invalid_control_url")?;
+    if url.scheme() != "http" || url.host_str() != Some("127.0.0.1") {
+        return Err("invalid_control_url".into());
+    }
+    url.set_fragment(Some("smart-speaker-resume"));
+    let ui_app = app.clone();
+    app.run_on_main_thread(move || {
+        if let Some(window) = ui_app.get_webview_window("main") {
+            let _ = window.navigate(url);
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    })
+    .map_err(|_| "runtime_navigation_failed".to_string())
+}
+
+pub(crate) fn recover_after_system_wake(app: tauri::AppHandle, generation: u64) {
+    let result = app
+        .try_state::<AppRuntime>()
+        .ok_or_else(|| "runtime_unavailable".to_string())
+        .and_then(|runtime| restart_sidecar_runtime(&runtime));
+    match result {
+        Ok(snapshot) if navigate_to_recovery_runtime(&app, &snapshot).is_ok() => {
+            if let Some(runtime) = app.try_state::<AppRuntime>() {
+                runtime.diagnostics.record(
+                    "native",
+                    "voice_resume_arming",
+                    Some(&snapshot.session_id),
+                    Some("bounded"),
+                );
+            }
+            let timeout_app = app.clone();
+            thread::spawn(move || {
+                thread::sleep(WAKE_RECOVERY_TIMEOUT);
+                let timed_out = timeout_app
+                    .try_state::<AppRuntime>()
+                    .and_then(|runtime| {
+                        runtime
+                            .sleep_recovery
+                            .lock()
+                            .ok()
+                            .map(|mut recovery| recovery.timeout_if_current(generation))
+                    })
+                    .unwrap_or(false);
+                if timed_out {
+                    if let Some(runtime) = timeout_app.try_state::<AppRuntime>() {
+                        runtime.diagnostics.record(
+                            "native",
+                            "voice_resume_timed_out",
+                            None,
+                            Some("non_listening"),
+                        );
+                        stop_sidecar(&runtime, "wake_recovery_timeout");
+                    }
+                    show_resume_required_window(&timeout_app);
+                }
+            });
+        }
+        _ => {
+            if let Some(runtime) = app.try_state::<AppRuntime>() {
+                let _ = runtime
+                    .sleep_recovery
+                    .lock()
+                    .map(|mut recovery| recovery.timeout_if_current(generation));
+                runtime.diagnostics.record(
+                    "native",
+                    "voice_resume_failed",
+                    None,
+                    Some("non_listening"),
+                );
+            }
+            show_resume_required_window(&app);
+        }
+    }
 }
 
 fn open_settings_window(app: &tauri::AppHandle) {
@@ -392,6 +536,7 @@ pub fn run() {
                 power_policy: Mutex::new(power::PowerPolicy::system(
                     preferences.smart_speaker_mode,
                 )),
+                sleep_recovery: Mutex::new(power::SleepRecoveryPolicy::default()),
                 app_support_dir,
                 diagnostics,
             });
@@ -508,6 +653,7 @@ pub fn run() {
             sidecar_status,
             sidecar_health,
             restart_sidecar,
+            resume_voice_assistant,
             onboarding_status,
             set_smart_speaker_mode,
             enter_settings,

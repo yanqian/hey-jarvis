@@ -22,12 +22,20 @@ body {
 
 button { font: inherit; }
 
-.returning-view {
+.returning-view,
+.resume-view {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 100vh;
   padding: var(--shell-top) var(--shell-gutter) 22px;
 }
+
+.status-dot.paused { background: #8c9793; box-shadow: none; }
+.returning-orb.paused { animation: none; opacity: .72; }
+.resume-detail { margin: 4px 0 18px; color: #87938f; font-size: 13px; }
+.resume-action { min-width: 190px; }
+#resume-status { margin: 12px 0 0; color: #87938f; font-size: 12px; }
+.secondary-button { color: #bdc7c3; border-color: #2a3430; background: #141a18; }
 
 .app-header {
   display: flex;
