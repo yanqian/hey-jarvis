@@ -21,6 +21,7 @@ diagnostics.
 | `REALTIME_INPUT_NOISE_REDUCTION` | `far_field` | Input preprocessing: `far_field` for built-in speaker/mic, `near_field` for a headset, or `none`. |
 | `REALTIME_INPUT_TRANSCRIPTION_ENABLED` | `1` | Enable rough-guide asynchronous input transcription. |
 | `REALTIME_ACKNOWLEDGEMENT_MODE` | `cached` | Play the selected Realtime-quality WAV while connecting; use `realtime` for the paid same-session ACK or `local` for the prior `afplay` rollback. |
+| `REALTIME_FAREWELL_MODE` | `cached` | Play the selected 580 ms local Mandarin `再见`; use `realtime` to restore same-session generated farewells. |
 | `REALTIME_DEBUG` | `0` | Add bounded local lifecycle diagnostics. |
 | `REALTIME_END_PHRASES` | bilingual list | Exact conservative transcription fallback phrases. |
 | `REALTIME_BRIDGE_HOST` | `127.0.0.1` | Loopback host; keep local. |

@@ -25,6 +25,7 @@ from .player import MacOSPlayer, PlaybackError, audio_sha256, benchmark_audio_pl
 from .recorder import RecordingResult
 from .realtime.controller import RealtimeSessionController
 from .realtime_ack_asset import CANONICAL_ACK_ASSET, CANONICAL_ACK_MANIFEST
+from .realtime_farewell_asset import CANONICAL_FAREWELL_ASSET, CANONICAL_FAREWELL_MANIFEST
 from .state_machine import AssistantState, VoiceAssistantStateMachine
 from .tools.providers import provider_config_from_settings
 from .tools.router import format_text_debug
@@ -456,11 +457,14 @@ def run_realtime_forever(settings: Settings) -> int:
             real_microphone=True,
             wake_after_arm=True,
             acknowledgement_mode=settings.realtime_acknowledgement_mode,
+            farewell_mode=settings.realtime_farewell_mode,
             end_phrases=settings.realtime_end_phrases,
             tool_provider_config=provider_config_from_settings(settings),
             settings=settings,
             cached_acknowledgement_audio_path=project_root / CANONICAL_ACK_ASSET,
             cached_acknowledgement_manifest_path=project_root / CANONICAL_ACK_MANIFEST,
+            cached_farewell_audio_path=project_root / CANONICAL_FAREWELL_ASSET,
+            cached_farewell_manifest_path=project_root / CANONICAL_FAREWELL_MANIFEST,
         )
     except HostServerError as exc:
         logger.error("Realtime host startup failed: %s", exc)

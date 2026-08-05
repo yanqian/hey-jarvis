@@ -4,6 +4,24 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F117 provider-native coding and owner asset selection are complete. The owner
+rejected 827 ms candidate-01 as too heavy, then selected the light/casual
+candidate-03 over the 784 ms soft candidate-02. After silence analysis and owner
+approval, its front was trimmed by 20 ms to 580 ms while the natural trailing
+decay was preserved. Candidate-03 is promoted as a checked 24 kHz mono PCM
+`gpt-4o-mini-tts` / `alloy` asset. Realtime now defaults
+to preloading and playing that local Mandarin `再见` through the shared browser
+audio element, without a farewell `response.create`; `realtime` remains the
+validated rollback. Input mute, bounded failure, exactly-once teardown, and
+wake recovery retain F107 semantics. English and language selection remain
+deferred. Focused tests, 458 project tests, 11 sidecar tests, 27 Rust tests,
+JavaScript syntax, and Realtime fake smoke pass. The owner-led target-Mac flow
+also passes: the owner heard the cached farewell, judged its ending natural,
+and successfully woke the assistant a second time after cleanup; bounded
+lifecycle diagnostics confirm two `busy -> wake_listening` cycles in the same
+sidecar session. Independent approval is recorded as `EVAL_PASS: F117` in
+`.agent-harness/runs/20260805T103500Z-F117-evaluation-pass.md`.
+
 F116 is evaluator-approved. It removes two redundant General micro-labels and
 two misplaced internal dividers while preserving one clear boundary between
 Setup and Smart Speaker Mode, then places the second boundary above the

@@ -40,6 +40,8 @@ LOGGER = logging.getLogger("hey_jarvis.mac_sidecar")
 ACKNOWLEDGEMENT_RESOURCE = Path("assets/wake_acknowledgement_alloy.mp3")
 CACHED_ACKNOWLEDGEMENT_RESOURCE = Path("assets/realtime_acknowledgement_alloy_zh.wav")
 CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE = Path("assets/realtime_acknowledgement_alloy_zh.json")
+CACHED_FAREWELL_RESOURCE = Path("assets/realtime_farewell_alloy_zh.wav")
+CACHED_FAREWELL_MANIFEST_RESOURCE = Path("assets/realtime_farewell_alloy_zh.json")
 PRIVATE_BOOTSTRAP_MAX_BYTES = 4096
 OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 DIAGNOSTIC_LIMIT_BYTES = 512 * 1024
@@ -227,6 +229,8 @@ class ProductRuntime:
         cached_acknowledgement_manifest = (
             resource_dir / CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE
         ).resolve()
+        cached_farewell = (resource_dir / CACHED_FAREWELL_RESOURCE).resolve()
+        cached_farewell_manifest = (resource_dir / CACHED_FAREWELL_MANIFEST_RESOURCE).resolve()
         settings = replace(
             settings,
             wake_acknowledgement_audio_path=acknowledgement,
@@ -246,12 +250,15 @@ class ProductRuntime:
             real_microphone=True,
             wake_after_arm=True,
             acknowledgement_mode=settings.realtime_acknowledgement_mode,
+            farewell_mode=settings.realtime_farewell_mode,
             end_phrases=settings.realtime_end_phrases,
             tool_provider_config=provider_config_from_settings(settings),
             settings=settings,
             capability_lease=session_id,
             cached_acknowledgement_audio_path=cached_acknowledgement,
             cached_acknowledgement_manifest_path=cached_acknowledgement_manifest,
+            cached_farewell_audio_path=cached_farewell,
+            cached_farewell_manifest_path=cached_farewell_manifest,
         )
         server_thread = threading.Thread(
             target=server.serve_forever,

@@ -170,11 +170,14 @@ the F060 diagnosis workflow.
 `end_conversation` handles clear semantic requests to finish. Mentions,
 quotations, translations, or requests to say a farewell are not close commands.
 After a matched semantic or exact-phrase ending, browser input is muted and the
-same active Realtime session produces one brief farewell through the ordinary
-configured voice, WebRTC output stream, and browser volume. Media teardown and
-wake recovery wait for both farewell response completion and output-buffer
-playback completion; a bounded timeout or provider/playback failure falls back
-to immediate safe cleanup.
+default `cached` mode plays the owner-selected 580 ms Mandarin `再见` WAV through
+the ordinary browser audio element and configured volume without creating a
+farewell model response. Media teardown and wake recovery wait for local
+playback completion; a bounded timeout or playback failure falls back to
+immediate safe cleanup. `REALTIME_FAREWELL_MODE=realtime` restores the former
+same-session generated farewell and waits for both response and output-buffer
+completion. English and automatic language selection are intentionally
+deferred.
 
 `REALTIME_END_PHRASES` remains a conservative fallback over completed input
 transcription. Matching is exact after case, outer-punctuation, and whitespace

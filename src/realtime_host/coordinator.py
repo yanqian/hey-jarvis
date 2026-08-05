@@ -37,6 +37,7 @@ FIXTURE_AUDIO_NAMES = frozenset({"turn-1", "turn-2"})
 INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 LOCAL_TIMING_MARKERS = frozenset({"wake_confirmed", "ack_started", "ack_completed"})
 ACKNOWLEDGEMENT_MODES = frozenset({"cached", "local", "realtime"})
+FAREWELL_MODES = frozenset({"cached", "realtime"})
 ACKNOWLEDGEMENT_CAPTURE_LABEL = re.compile(r"^candidate-[0-9]{2}$")
 HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
@@ -172,6 +173,7 @@ class HandoffCoordinator:
         session_ids: Callable[[], str] = lambda: uuid.uuid4().hex,
         open_wake_on_init: bool = True,
         acknowledgement_mode: str = "local",
+        farewell_mode: str = "realtime",
         end_phrases: tuple[str, ...] = (),
         tool_provider_config: object | None = None,
         tool_http_client: object | None = None,
@@ -179,6 +181,8 @@ class HandoffCoordinator:
     ) -> None:
         if acknowledgement_mode not in ACKNOWLEDGEMENT_MODES:
             raise ValueError("acknowledgement_mode must be 'cached', 'realtime', or 'local'")
+        if farewell_mode not in FAREWELL_MODES:
+            raise ValueError("farewell_mode must be 'cached' or 'realtime'")
         self._wake_lease = wake_lease
         self._clock = clock
         self._session_ids = session_ids
@@ -196,6 +200,7 @@ class HandoffCoordinator:
         self._acknowledgement_mode = acknowledgement_mode
         self._next_acknowledgement_mode: str | None = None
         self._active_acknowledgement_mode = "local"
+        self._farewell_mode = farewell_mode
         self._next_acknowledgement_capture_label: str | None = None
         self._active_acknowledgement_capture_label: str | None = None
         self._acknowledgement_capture_saved = False
@@ -666,7 +671,11 @@ class HandoffCoordinator:
                 if self._state != HandoffState.HOST_FAREWELL:
                     raise HandoffError("Farewell started outside the farewell phase")
             elif event_type == "farewell_response_created":
-                if self._state != HandoffState.HOST_FAREWELL or self._farewell_response_created:
+                if (
+                    self._state != HandoffState.HOST_FAREWELL
+                    or self._farewell_mode != "realtime"
+                    or self._farewell_response_created
+                ):
                     raise HandoffError("Farewell response creation was duplicated or out of order")
                 self._farewell_response_created = True
             elif event_type == "farewell_response_done":
@@ -679,7 +688,11 @@ class HandoffCoordinator:
                     self._farewell_response_done = True
                     self._finish_farewell_if_ready()
             elif event_type == "farewell_playback_started":
-                if self._state != HandoffState.HOST_FAREWELL or not self._farewell_response_created:
+                if (
+                    self._state != HandoffState.HOST_FAREWELL
+                    or (self._farewell_mode == "realtime" and not self._farewell_response_created)
+                    or self._farewell_playback_started
+                ):
                     raise HandoffError("Farewell playback started out of order")
                 self._farewell_playback_started = True
             elif event_type == "farewell_playback_stopped":
@@ -944,7 +957,7 @@ class HandoffCoordinator:
     def _finish_farewell_if_ready(self) -> None:
         if (
             self._state == HandoffState.HOST_FAREWELL
-            and self._farewell_response_done
+            and (self._farewell_mode == "cached" or self._farewell_response_done)
             and self._farewell_playback_started
             and self._farewell_playback_stopped
         ):

@@ -22,7 +22,15 @@ from typing import Callable, Mapping
 from src.audio_input import open_microphone_stream
 from src.config import ConfigError, DEFAULT_REALTIME_END_PHRASES, load_settings
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffError, SoundDeviceWakeLease
-from src.realtime_ack_asset import RealtimeAckAssetError, load_selected_asset, store_candidate
+from src.realtime_ack_asset import (
+    RealtimeAckAssetError,
+    load_selected_asset as load_acknowledgement_asset,
+    store_candidate as store_acknowledgement_candidate,
+)
+from src.realtime_farewell_asset import (
+    RealtimeFarewellAssetError,
+    load_selected_asset as load_farewell_asset,
+)
 from src.tools.router import FX_SUPPORTED_CURRENCIES
 
 
@@ -309,6 +317,8 @@ class HostHTTPServer(ThreadingHTTPServer):
     acknowledgement_mode: str
     cached_acknowledgement_audio: bytes | None
     cached_acknowledgement_manifest: dict[str, object] | None
+    cached_farewell_audio: bytes | None
+    cached_farewell_manifest: dict[str, object] | None
 
 
 def build_server(
@@ -318,6 +328,7 @@ def build_server(
     real_microphone: bool = False,
     wake_after_arm: bool = False,
     acknowledgement_mode: str = "local",
+    farewell_mode: str = "realtime",
     end_phrases: tuple[str, ...] = DEFAULT_REALTIME_END_PHRASES,
     tool_provider_config: object | None = None,
     tool_http_client: object | None = None,
@@ -326,6 +337,8 @@ def build_server(
     acknowledgement_candidate_root: str | Path = "tmp/realtime-ack-candidates",
     cached_acknowledgement_audio_path: str | Path | None = None,
     cached_acknowledgement_manifest_path: str | Path | None = None,
+    cached_farewell_audio_path: str | Path | None = None,
+    cached_farewell_manifest_path: str | Path | None = None,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
@@ -335,7 +348,7 @@ def build_server(
         if cached_acknowledgement_audio_path is None or cached_acknowledgement_manifest_path is None:
             raise HostServerError("Cached Realtime acknowledgement asset is not configured")
         try:
-            cached_audio, cached_manifest = load_selected_asset(
+            cached_audio, cached_manifest = load_acknowledgement_asset(
                 Path(cached_acknowledgement_audio_path),
                 Path(cached_acknowledgement_manifest_path),
             )
@@ -346,12 +359,30 @@ def build_server(
             or cached_manifest.get("voice") != settings.realtime_voice
         ):
             raise HostServerError("Cached Realtime acknowledgement model or voice does not match settings")
+    cached_farewell_audio: bytes | None = None
+    cached_farewell_manifest: dict[str, object] | None = None
+    if farewell_mode == "cached":
+        if cached_farewell_audio_path is None or cached_farewell_manifest_path is None:
+            raise HostServerError("Cached Realtime farewell asset is not configured")
+        try:
+            cached_farewell_audio, cached_farewell_manifest = load_farewell_asset(
+                Path(cached_farewell_audio_path),
+                Path(cached_farewell_manifest_path),
+            )
+        except RealtimeFarewellAssetError as exc:
+            raise HostServerError(str(exc)) from exc
+        if settings is not None and (
+            cached_farewell_manifest.get("voice") != settings.realtime_voice
+            or cached_farewell_manifest.get("playback_gain") != settings.realtime_output_volume
+        ):
+            raise HostServerError("Cached Realtime farewell voice or gain does not match settings")
     lease = SoundDeviceWakeLease(open_microphone_stream) if real_microphone else MemoryWakeLease()
     server = HostHTTPServer((host, port), HostRequestHandler)
     server.coordinator = HandoffCoordinator(
         lease,
         open_wake_on_init=not wake_after_arm,
         acknowledgement_mode=acknowledgement_mode,
+        farewell_mode=farewell_mode,
         end_phrases=end_phrases,
         tool_provider_config=tool_provider_config,
         tool_http_client=tool_http_client,
@@ -360,8 +391,11 @@ def build_server(
     server.capability_lease = capability_lease
     server.acknowledgement_candidate_root = Path(acknowledgement_candidate_root)
     server.acknowledgement_mode = acknowledgement_mode
+    server.farewell_mode = farewell_mode
     server.cached_acknowledgement_audio = cached_audio
     server.cached_acknowledgement_manifest = cached_manifest
+    server.cached_farewell_audio = cached_farewell_audio
+    server.cached_farewell_manifest = cached_farewell_manifest
     return server
 
 
@@ -433,10 +467,28 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                     "duration_ms": manifest["duration_ms"],
                     "sha256": manifest["sha256"],
                 }
+            farewell_mode = getattr(host_server, "farewell_mode", "realtime")
+            farewell_manifest = getattr(host_server, "cached_farewell_manifest", None)
+            if farewell_mode == "cached" and isinstance(farewell_manifest, dict):
+                payload["farewell"] = {
+                    "mode": "cached",
+                    "url": "/farewell.wav",
+                    "duration_ms": farewell_manifest["duration_ms"],
+                    "sha256": farewell_manifest["sha256"],
+                }
+            else:
+                payload["farewell"] = {"mode": "realtime"}
             self._json(HTTPStatus.OK, payload)
             return
         if parsed.path == "/acknowledgement.wav":
             body = getattr(self.server, "cached_acknowledgement_audio", None)
+            if not isinstance(body, bytes):
+                self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                return
+            self._bytes(HTTPStatus.OK, body, "audio/wav")
+            return
+        if parsed.path == "/farewell.wav":
+            body = getattr(self.server, "cached_farewell_audio", None)
             if not isinstance(body, bytes):
                 self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
                 return
@@ -509,7 +561,7 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 except (binascii.Error, ValueError) as exc:
                     raise HandoffError("Acknowledgement candidate audio was invalid") from exc
                 settings = self._settings(require_openai_api_key=False)
-                candidate = store_candidate(
+                candidate = store_acknowledgement_candidate(
                     self.server.acknowledgement_candidate_root,
                     label=label,
                     wav_data=wav_data,

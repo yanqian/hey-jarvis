@@ -14,6 +14,8 @@ from product_sidecar import (  # noqa: E402
     ACKNOWLEDGEMENT_RESOURCE,
     CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE,
     CACHED_ACKNOWLEDGEMENT_RESOURCE,
+    CACHED_FAREWELL_MANIFEST_RESOURCE,
+    CACHED_FAREWELL_RESOURCE,
     LifecycleDiagnostics,
     ProductRuntime,
     ProductRuntimeError,
@@ -282,6 +284,11 @@ class ProductSidecarTests(unittest.TestCase):
         self.assertEqual(
             CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE.as_posix(),
             "assets/realtime_acknowledgement_alloy_zh.json",
+        )
+        self.assertEqual(CACHED_FAREWELL_RESOURCE.as_posix(), "assets/realtime_farewell_alloy_zh.wav")
+        self.assertEqual(
+            CACHED_FAREWELL_MANIFEST_RESOURCE.as_posix(),
+            "assets/realtime_farewell_alloy_zh.json",
         )
 
 

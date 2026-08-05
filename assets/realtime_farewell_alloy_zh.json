@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "phrase": "再见",
+  "prompt_version": "mandarin-farewell-light-v1",
+  "model": "gpt-4o-mini-tts",
+  "voice": "alloy",
+  "format": "wav_pcm_s16le_mono",
+  "sample_rate": 24000,
+  "duration_ms": 580,
+  "playback_gain": 0.5,
+  "candidate": "candidate-03",
+  "sha256": "cc2c36a568cb1d339cd1eec203f70b0a7f0351761e1553a18820463c617728d8",
+  "leading_trim_ms": 20,
+  "selected_by_owner": true
+}

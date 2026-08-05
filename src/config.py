@@ -112,6 +112,8 @@ SUPPORTED_REALTIME_INPUT_NOISE_REDUCTIONS = ("none", "near_field", "far_field")
 DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED = True
 DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE = "cached"
 SUPPORTED_REALTIME_ACKNOWLEDGEMENT_MODES = ("cached", "realtime", "local")
+DEFAULT_REALTIME_FAREWELL_MODE = "cached"
+SUPPORTED_REALTIME_FAREWELL_MODES = ("cached", "realtime")
 DEFAULT_REALTIME_DEBUG = False
 DEFAULT_REALTIME_END_PHRASES = ("结束对话", "再见", "goodbye", "end conversation")
 DEFAULT_REALTIME_BRIDGE_HOST = "127.0.0.1"
@@ -121,6 +123,13 @@ DEFAULT_REALTIME_BRIDGE_PORT = 8770
 def normalize_realtime_acknowledgement_mode(value: str) -> str:
     normalized = value.strip().lower()
     if normalized not in SUPPORTED_REALTIME_ACKNOWLEDGEMENT_MODES:
+        raise ValueError(value)
+    return normalized
+
+
+def normalize_realtime_farewell_mode(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in SUPPORTED_REALTIME_FAREWELL_MODES:
         raise ValueError(value)
     return normalized
 
@@ -234,6 +243,7 @@ class Settings:
     realtime_input_noise_reduction: str = DEFAULT_REALTIME_INPUT_NOISE_REDUCTION
     realtime_input_transcription_enabled: bool = DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED
     realtime_acknowledgement_mode: str = DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE
+    realtime_farewell_mode: str = DEFAULT_REALTIME_FAREWELL_MODE
     realtime_debug: bool = DEFAULT_REALTIME_DEBUG
     realtime_end_phrases: tuple[str, ...] = DEFAULT_REALTIME_END_PHRASES
     realtime_bridge_host: str = DEFAULT_REALTIME_BRIDGE_HOST
@@ -299,6 +309,7 @@ def load_settings(
     realtime_input_noise_reduction = DEFAULT_REALTIME_INPUT_NOISE_REDUCTION
     realtime_input_transcription_enabled = DEFAULT_REALTIME_INPUT_TRANSCRIPTION_ENABLED
     realtime_acknowledgement_mode = DEFAULT_REALTIME_ACKNOWLEDGEMENT_MODE
+    realtime_farewell_mode = DEFAULT_REALTIME_FAREWELL_MODE
     realtime_debug = DEFAULT_REALTIME_DEBUG
     realtime_end_phrases = DEFAULT_REALTIME_END_PHRASES
     realtime_bridge_host = DEFAULT_REALTIME_BRIDGE_HOST
@@ -361,6 +372,14 @@ def load_settings(
             SUPPORTED_REALTIME_ACKNOWLEDGEMENT_MODES,
             errors,
             normalizer=normalize_realtime_acknowledgement_mode,
+        )
+        realtime_farewell_mode = _choice_value(
+            raw_env,
+            "REALTIME_FAREWELL_MODE",
+            DEFAULT_REALTIME_FAREWELL_MODE,
+            SUPPORTED_REALTIME_FAREWELL_MODES,
+            errors,
+            normalizer=normalize_realtime_farewell_mode,
         )
         realtime_debug = _bool_value(raw_env, "REALTIME_DEBUG", DEFAULT_REALTIME_DEBUG, errors)
         realtime_end_phrases = _text_list_value(
@@ -800,6 +819,7 @@ def load_settings(
         realtime_input_noise_reduction=realtime_input_noise_reduction,
         realtime_input_transcription_enabled=realtime_input_transcription_enabled,
         realtime_acknowledgement_mode=realtime_acknowledgement_mode,
+        realtime_farewell_mode=realtime_farewell_mode,
         realtime_debug=realtime_debug,
         realtime_end_phrases=realtime_end_phrases,
         realtime_bridge_host=realtime_bridge_host,

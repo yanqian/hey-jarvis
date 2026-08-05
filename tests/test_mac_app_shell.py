@@ -432,7 +432,10 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('track.enabled=false', host)
         self.assertIn('audio.srcObject=warmStream;audio.volume=0;await audio.play()', host)
         self.assertIn('remoteStream=event.streams[0]', host)
-        self.assertIn('if(!remoteStream||cachedAcknowledgementPending)return', host)
+        self.assertIn(
+            'if(!remoteStream||cachedAcknowledgementPending||cachedFarewellPending)return',
+            host,
+        )
         self.assertIn('audio.srcObject=remoteStream', host)
         self.assertIn("if(warmStream){warmStream.getTracks().forEach", host)
 

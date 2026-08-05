@@ -36,6 +36,8 @@
       "../../assets/wake_acknowledgement_alloy.mp3": "assets/wake_acknowledgement_alloy.mp3",
       "../../assets/realtime_acknowledgement_alloy_zh.wav": "assets/realtime_acknowledgement_alloy_zh.wav",
       "../../assets/realtime_acknowledgement_alloy_zh.json": "assets/realtime_acknowledgement_alloy_zh.json",
+      "../../assets/realtime_farewell_alloy_zh.wav": "assets/realtime_farewell_alloy_zh.wav",
+      "../../assets/realtime_farewell_alloy_zh.json": "assets/realtime_farewell_alloy_zh.json",
       "../../build/macos-sidecar/hey-jarvis-sidecar": "sidecar",
       "../../build/macos-sidecar/manifests": "packaging-manifests"
     },

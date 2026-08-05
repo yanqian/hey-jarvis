@@ -20,6 +20,7 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertEqual(defaults.realtime_server_vad_threshold, 0.8)
         self.assertEqual(defaults.realtime_input_noise_reduction, "far_field")
         self.assertEqual(defaults.realtime_acknowledgement_mode, "cached")
+        self.assertEqual(defaults.realtime_farewell_mode, "cached")
         settings = load_settings(
             env={
                 "BACKEND": "pipeline",
@@ -45,6 +46,7 @@ class RealtimeConfigTests(unittest.TestCase):
                 "REALTIME_INPUT_NOISE_REDUCTION": "near_field",
                 "REALTIME_INPUT_TRANSCRIPTION_ENABLED": "1",
                 "REALTIME_ACKNOWLEDGEMENT_MODE": "local",
+                "REALTIME_FAREWELL_MODE": "realtime",
                 "REALTIME_DEBUG": "1",
                 "REALTIME_END_PHRASES": "结束,goodbye",
                 "REALTIME_BRIDGE_PORT": "9876",
@@ -62,6 +64,7 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertEqual(settings.realtime_input_noise_reduction, "near_field")
         self.assertTrue(settings.realtime_input_transcription_enabled)
         self.assertEqual(settings.realtime_acknowledgement_mode, "local")
+        self.assertEqual(settings.realtime_farewell_mode, "realtime")
         self.assertEqual(
             load_settings(
                 env={"BACKEND": "realtime", "REALTIME_ACKNOWLEDGEMENT_MODE": "realtime"},
@@ -82,6 +85,7 @@ class RealtimeConfigTests(unittest.TestCase):
                     "REALTIME_MAX_DURATION_SECONDS": "20",
                     "REALTIME_BRIDGE_HOST": "0.0.0.0",
                     "REALTIME_ACKNOWLEDGEMENT_MODE": "remote",
+                    "REALTIME_FAREWELL_MODE": "local",
                     "REALTIME_OUTPUT_VOLUME": "1.1",
                     "REALTIME_SERVER_VAD_THRESHOLD": "1.1",
                     "REALTIME_INPUT_NOISE_REDUCTION": "studio",
@@ -92,6 +96,7 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertIn("MAX_DURATION", message)
         self.assertIn("loopback", message)
         self.assertIn("ACKNOWLEDGEMENT_MODE", message)
+        self.assertIn("FAREWELL_MODE", message)
         self.assertIn("REALTIME_OUTPUT_VOLUME", message)
         self.assertIn("REALTIME_SERVER_VAD_THRESHOLD", message)
         self.assertIn("REALTIME_INPUT_NOISE_REDUCTION", message)

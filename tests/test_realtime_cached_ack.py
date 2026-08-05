@@ -230,7 +230,10 @@ class CachedAcknowledgementTests(unittest.TestCase):
         start = javascript.index('if(command.acknowledgement_mode==="cached")startCachedAcknowledgement(command)')
         microphone = javascript.index('await hostEvent("microphone_requested")', start)
         self.assertLess(start, microphone)
-        self.assertIn('cachedAcknowledgementPending)return', javascript)
+        self.assertIn(
+            'cachedAcknowledgementPending||cachedFarewellPending)return',
+            javascript,
+        )
         self.assertIn('hostEvent("cached_ack_playback_started")', javascript)
         self.assertIn('hostEvent("cached_ack_playback_stopped")', javascript)
         self.assertIn('catch(error){releasePageMedia();sessionConfig=null', javascript)

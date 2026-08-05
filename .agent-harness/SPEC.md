@@ -2373,3 +2373,84 @@ validated rollback, lifecycle wording, documentation, and regression tests form
 one user-visible acknowledgement policy with one configuration and Realtime
 handoff verification surface. Settings UI and broader language selection remain
 separate potential work.
+
+### Cached Mandarin Farewell
+
+Feature mapping: F117.
+
+Goal: replace the fixed Mandarin farewell's per-session Realtime generation
+with one validated, pre-generated local asset so ending a Chinese conversation
+is faster, cheaper, and less dependent on a final provider response.
+
+Included scope: deliberately generate and retain one Mandarin `再见` WAV using
+the existing `gpt-4o-mini-tts` / `alloy` speech path; store a privacy-safe
+manifest with phrase, model, voice, sample format, duration, gain, and digest;
+validate and preload the asset at Realtime-host startup; default production
+farewell playback to the cached asset through the existing browser audio
+element and configured gain; keep input muted and require playback completion
+before existing teardown and wake recovery; and retain an environment-level
+`realtime` rollback mode.
+
+Excluded scope: English or other-language farewell assets, automatic farewell
+language selection, changing the opening ACK, changing ordinary responses,
+changing the Realtime model/voice/output volume, classic pipeline behavior,
+Settings UI controls, public telemetry, or retaining ordinary conversation
+audio. Broader bilingual support is deferred to a later feature.
+
+Core flows: after an exact Mandarin end phrase or semantic
+`end_conversation`, the browser disables input and plays the preloaded `再见`
+asset without sending a farewell `response.create`; the same lifecycle markers
+gate teardown until playback ends, then browser media is released and local
+wake ownership recovers. An operator may select `realtime` mode to restore the
+F107 generated farewell. Missing, corrupt, mismatched, failed, stale, or timed-
+out cached playback fails closed through the existing bounded cleanup and never
+falls through to an unexpected paid response.
+
+Constraints: the retained file must be deliberately generated with explicit
+owner authorization for the one paid live generation, must match its checked-in
+manifest digest, and must use the same browser output element and gain as normal
+Realtime answers. No credential, transcript, answer, SDP, ICE, provider payload,
+or unrelated audio may be retained. Automated tests require no network,
+credential, microphone, or speaker. Cached playback must remain idempotent and
+must not weaken F107 shutdown, timeout, Settings, sleep, or wake-recovery safety.
+
+Ambiguities or assumptions: the first version intentionally always says
+Mandarin `再见`, including after an English conversation; bilingual assets and
+language selection are explicitly deferred per owner direction. `cached` is
+the default and `realtime` is the rollback mode. Playback failure favors silent
+safe cleanup over an automatic paid or duplicate farewell. The asset should be
+short and natural, but final perceptual acceptance remains an owner listening
+decision rather than an automated claim.
+
+Required capabilities: the existing F107 farewell state machine, F110/F111
+validated asset and browser-preload patterns, one explicitly authorized paid
+OpenAI TTS generation, intentional asset retention, deterministic WAV
+and manifest validation, JavaScript syntax checking, full project recovery,
+fast coding evidence, and a separate cold-start Evaluator Agent.
+
+Implementation paths: `src/config.py`, `.env.example`, a project-owned cached
+farewell asset/manifest module and files under `assets/`,
+`src/realtime_host/server.py`, `src/realtime_host/static/app.js`,
+`src/realtime_host/coordinator.py`, `src/evals/`, `app/sidecar/`,
+`app/src-tauri/tauri.conf.json`, `docs/CONFIGURATION.md`, `docs/REALTIME.md`,
+`MANUAL_TESTING.md`, focused tests under `tests/` and `app/sidecar/tests/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: asset transcript/format/duration/digest validation;
+default cached and explicit realtime configuration; no farewell
+`response.create` in cached mode; immediate input mute; shared browser
+audio/gain playback; response-independent playback completion followed by
+exactly-once cleanup and wake recovery; missing/corrupt/mismatched asset startup
+failure; playback error/timeout/stale-event cleanup; unchanged ACK, normal
+turns, tools, Settings, sleep, privacy, and classic pipeline behavior; focused
+tests; JavaScript syntax; Realtime fake smoke; final `./init.sh`; one explicitly
+authorized asset generation and target-Mac listening/overall-flow acceptance;
+fast coding evidence; and separate evaluator approval.
+
+Decomposition decision: F117 intentionally keeps one-time Mandarin asset
+generation, validation, packaging, default selection, rollback, and playback
+lifecycle together because they form one independently valuable cached-farewell
+behavior with one asset/configuration/browser verification surface. Bilingual
+assets and language selection are independently valuable and explicitly
+deferred.

@@ -46,7 +46,12 @@ def validate_ack_transcript(value: object) -> None:
         raise RealtimeAckAssetError("Realtime ACK transcript did not match the accepted phrase")
 
 
-def inspect_wav(data: bytes) -> WavInfo:
+def inspect_wav(
+    data: bytes,
+    *,
+    min_duration_ms: int = MIN_DURATION_MS,
+    max_duration_ms: int = MAX_DURATION_MS,
+) -> WavInfo:
     if not data or len(data) > MAX_CANDIDATE_BYTES:
         raise RealtimeAckAssetError("Realtime ACK candidate size was invalid")
     try:
@@ -63,15 +68,25 @@ def inspect_wav(data: bytes) -> WavInfo:
     if sample_rate not in SUPPORTED_SAMPLE_RATES or frames <= 0:
         raise RealtimeAckAssetError("Realtime ACK WAV sample format was unsupported")
     duration_ms = round(frames * 1000 / sample_rate)
-    if not MIN_DURATION_MS <= duration_ms <= MAX_DURATION_MS:
-        raise RealtimeAckAssetError("Realtime ACK WAV duration was outside the bounded range")
+    if not min_duration_ms <= duration_ms <= max_duration_ms:
+        raise RealtimeAckAssetError(
+            f"Realtime WAV duration {duration_ms} ms was outside "
+            f"{min_duration_ms}-{max_duration_ms} ms"
+        )
     return WavInfo(sample_rate, channels, frames, duration_ms)
 
 
-def trim_bounded_silence(data: bytes, *, threshold: int = 192, padding_ms: int = 40) -> bytes:
+def trim_bounded_silence(
+    data: bytes,
+    *,
+    threshold: int = 192,
+    padding_ms: int = 40,
+    min_duration_ms: int = MIN_DURATION_MS,
+    max_duration_ms: int = MAX_DURATION_MS,
+) -> bytes:
     """Trim digital silence while retaining a small natural boundary."""
 
-    info = inspect_wav(data)
+    info = inspect_wav(data, min_duration_ms=min_duration_ms, max_duration_ms=max_duration_ms)
     with wave.open(io.BytesIO(data), "rb") as audio:
         pcm = audio.readframes(info.frames)
     samples = struct.unpack(f"<{info.frames}h", pcm)
@@ -89,7 +104,7 @@ def trim_bounded_silence(data: bytes, *, threshold: int = 192, padding_ms: int =
         audio.setframerate(info.sample_rate)
         audio.writeframes(trimmed_pcm)
     trimmed = output.getvalue()
-    inspect_wav(trimmed)
+    inspect_wav(trimmed, min_duration_ms=min_duration_ms, max_duration_ms=max_duration_ms)
     return trimmed
 
 

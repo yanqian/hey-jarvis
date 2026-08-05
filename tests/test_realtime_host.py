@@ -468,6 +468,31 @@ class RealtimeHostTests(unittest.TestCase):
                 self.assertNotIn(transcript.strip(), report_text)
                 self.assertNotIn("GOODBYE", report_text)
 
+    def test_cached_farewell_completes_without_realtime_response_events(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(
+            lease,
+            session_ids=lambda: "session-cached-farewell",
+            farewell_mode="cached",
+            end_phrases=("再见",),
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        self.activate_session(coordinator, session_id)
+        self.assertEqual(
+            coordinator.host_event("transcription", session_id, item_id="item-1", transcript="再见"),
+            "farewell",
+        )
+        coordinator.host_event("farewell_started", session_id)
+        coordinator.host_event("farewell_playback_started", session_id)
+        self.assertEqual(
+            coordinator.host_event("farewell_playback_stopped", session_id),
+            "stopping",
+        )
+        self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
+        with self.assertRaisesRegex(HandoffError, "response creation"):
+            coordinator.host_event("farewell_response_created", session_id)
+
     def test_transcription_false_positives_duplicates_failures_and_late_events_are_safe(self):
         lease = FakeLease()
         coordinator = HandoffCoordinator(
@@ -1275,6 +1300,9 @@ class RealtimeHostTests(unittest.TestCase):
             'hostEvent("farewell_playback_started")',
             'hostEvent("farewell_playback_stopped")',
             'metadata:{purpose:"farewell"}',
+            'sessionConfig?.farewell?.mode==="cached"',
+            "async function startCachedFarewell",
+            '"/farewell.wav"',
             'tool_choice:"none"',
             'tools:[]',
             'farewellPending&&dc?.readyState==="open"',
@@ -1460,6 +1488,7 @@ class RealtimeHostTests(unittest.TestCase):
                 "voice": "marin",
                 "input_noise_reduction": "far_field",
                 "output_volume": 0.3,
+                "farewell": {"mode": "realtime"},
             },
         )
         self.assertNotIn("sk-private", json.dumps(responses))

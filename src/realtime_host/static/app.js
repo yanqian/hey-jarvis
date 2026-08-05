@@ -11,6 +11,7 @@ let responseActive=false,turnResponsePending=false,farewellPending=false,farewel
 let realtimeAcknowledgement=false,acknowledgementStarted=false,acknowledgementResponseActive=false;
 let acknowledgementCaptureLabel=null,acknowledgementCapture=null,acknowledgementTranscript=null,remoteStream=null;
 let cachedAcknowledgementUrl=null,cachedAcknowledgementPending=false,cachedAcknowledgementToken=0;
+let cachedFarewellUrl=null,cachedFarewellPending=false,cachedFarewellToken=0;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
@@ -73,12 +74,25 @@ async function prepareCachedAcknowledgement(settings){
   const bytes=await response.arrayBuffer();if(bytes.byteLength<44||bytes.byteLength>1500000)throw new Error("Cached acknowledgement size is invalid");
   cachedAcknowledgementUrl=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
 }
+async function prepareCachedFarewell(settings){
+  if(cachedFarewellUrl){URL.revokeObjectURL(cachedFarewellUrl);cachedFarewellUrl=null;}
+  const farewell=settings?.farewell;
+  if(farewell?.mode!=="cached")return;
+  if(farewell.url!=="/farewell.wav"||!Number.isInteger(farewell.duration_ms)||farewell.duration_ms<150||farewell.duration_ms>3000||typeof farewell.sha256!=="string"||!/^[a-f0-9]{64}$/.test(farewell.sha256))throw new Error("Cached farewell metadata is invalid");
+  const response=await fetch(farewell.url,{cache:"no-store"});if(!response.ok)throw new Error("Cached farewell is unavailable");
+  const bytes=await response.arrayBuffer();if(bytes.byteLength<44||bytes.byteLength>1500000)throw new Error("Cached farewell size is invalid");
+  cachedFarewellUrl=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
+}
 function resetCachedAcknowledgementPlayback(){
   cachedAcknowledgementToken+=1;cachedAcknowledgementPending=false;
   const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");
 }
+function resetCachedFarewellPlayback(){
+  cachedFarewellToken+=1;cachedFarewellPending=false;
+  const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");
+}
 async function attachRemoteAudio(){
-  if(!remoteStream||cachedAcknowledgementPending)return;
+  if(!remoteStream||cachedAcknowledgementPending||cachedFarewellPending)return;
   const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");audio.srcObject=remoteStream;audio.volume=configuredOutputVolume();
   const playAttempt=audio.play();if(playAttempt)await playAttempt;log("remote_audio_track");
 }
@@ -95,6 +109,19 @@ async function startCachedAcknowledgement(command){
   cachedAcknowledgementPending=false;audio.onended=null;audio.onerror=null;
   await attachRemoteAudio();
   await hostEvent("cached_ack_playback_stopped");
+}
+async function startCachedFarewell(){
+  if(sessionConfig?.farewell?.mode!=="cached"||!cachedFarewellUrl)throw new Error("Cached farewell was not prepared");
+  const expectedSession=sessionId,token=++cachedFarewellToken,audio=$("remoteAudio");cachedFarewellPending=true;
+  audio.pause();audio.srcObject=null;audio.src=cachedFarewellUrl;audio.volume=configuredOutputVolume();audio.currentTime=0;
+  const ended=new Promise((resolve,reject)=>{audio.onended=resolve;audio.onerror=()=>reject(new Error("Cached farewell playback failed"));});
+  await audio.play();
+  if(token!==cachedFarewellToken||sessionId!==expectedSession)return;
+  await hostEvent("farewell_playback_started");
+  await ended;
+  if(token!==cachedFarewellToken||sessionId!==expectedSession)return;
+  cachedFarewellPending=false;audio.onended=null;audio.onerror=null;
+  await finishIfStopping(await hostEvent("farewell_playback_stopped"),"farewell_complete");
 }
 
 function showEndControl(show){
@@ -199,6 +226,7 @@ async function arm(){
     const safeSettings=await settingsResponse.json();if(!settingsResponse.ok)throw new Error(safeSettings.message||safeSettings.error);
     sessionConfig=safeSettings;
     await prepareCachedAcknowledgement(safeSettings);
+    await prepareCachedFarewell(safeSettings);
     renderSettings(warm.getAudioTracks()[0]?.getSettings()||{});
     if(KEEP_WARM_MICROPHONE){warm.getAudioTracks().forEach(track=>{track.enabled=false;});warmStream=warm;}
     else warm.getTracks().forEach(track=>track.stop());
@@ -269,6 +297,10 @@ async function startFarewell(){
   farewellStarted=true;
   await hostEvent("farewell_started");
   if(farewellCallId)dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:farewellCallId,output:JSON.stringify({status:"ending"})}}));
+  if(sessionConfig?.farewell?.mode==="cached"){
+    startCachedFarewell().catch(async()=>{if(sessionId){await hostEvent("error",{reason:"cached_farewell_failed"}).catch(()=>{});await stop("cached_farewell_failed","error");}});
+    return;
+  }
   dc.send(JSON.stringify({
     type:"response.create",
     response:{
@@ -439,6 +471,7 @@ async function stop(reason="command",finalState="wake-ready"){
   const endingSession=sessionId;if(!endingSession)return;stopInputLevels();sessionId=null;
   if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
   resetCachedAcknowledgementPlayback();
+  resetCachedFarewellPlayback();
   setUiState("stopping");showEndControl(false);
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
@@ -500,7 +533,9 @@ $("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop")
 function releasePageMedia(){
   if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
   resetCachedAcknowledgementPlayback();
+  resetCachedFarewellPlayback();
   if(cachedAcknowledgementUrl){URL.revokeObjectURL(cachedAcknowledgementUrl);cachedAcknowledgementUrl=null;}
+  if(cachedFarewellUrl){URL.revokeObjectURL(cachedFarewellUrl);cachedFarewellUrl=null;}
   acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;
   const activeStream=stream;stream=null;
   if(activeStream)activeStream.getTracks().forEach(track=>track.stop());

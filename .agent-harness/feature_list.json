@@ -2634,6 +2634,28 @@
       "depends_on": [
         "F115"
       ]
+    },
+    {
+      "id": "F117",
+      "title": "Play a cached Mandarin farewell",
+      "description": "Generate, validate, package, preload, and play one fixed Mandarin farewell locally by default while retaining the existing Realtime-generated farewell as an operator rollback.",
+      "acceptance": [
+        "One explicitly owner-authorized paid generation produces a deliberately retained, natural `再见` WAV using the existing `gpt-4o-mini-tts` / `alloy` speech path, with a checked-in privacy-safe manifest that validates phrase, format, bounded duration, configured gain, and SHA-256 digest; no unrelated conversation audio or private provider data is retained.",
+        "The Realtime host and packaged Mac sidecar validate and preload the farewell asset at startup, default to `cached`, support an explicit validated `realtime` rollback, and fail closed before listening when the selected cached asset is missing, corrupt, or mismatched.",
+        "After exact-phrase or semantic close, cached mode immediately mutes input and plays the preloaded Mandarin asset through the existing browser audio element and configured volume without sending a farewell `response.create`; playback completion preserves F107's ordered exactly-once teardown and wake recovery.",
+        "Cached playback failure, timeout, duplicate/stale events, Settings, sleep, explicit stop, and shutdown remain bounded and recover wake ownership without duplicate audio or automatic paid fallback; opening ACK, ordinary turns/tools, privacy, and classic pipeline behavior remain unchanged.",
+        "Focused asset/config/server/browser/coordinator/sidecar/package tests, JavaScript syntax, Realtime fake smoke, final `./init.sh`, fast coding evidence, one target-Mac listening and overall-flow acceptance, and separate cold-start evaluator approval pass; English and automatic language selection remain explicitly deferred."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F107",
+        "F110",
+        "F111"
+      ]
     }
   ]
 }
