@@ -13,7 +13,10 @@ use std::time::{Duration, Instant};
 // built-in microphone. Keep this bounded, but do not apply the fake fixture's
 // sub-second expectation to the product runtime.
 const START_TIMEOUT: Duration = Duration::from_secs(30);
-const STOP_TIMEOUT: Duration = Duration::from_secs(2);
+// The Python runtime joins its microphone controller for up to four seconds
+// before finalizing PortAudio. Keep the native grace period longer so normal
+// shutdown is never converted into a forced kill mid-cleanup.
+const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_RESTARTS: u8 = 3;
 const RESTART_BACKOFF: Duration = Duration::from_millis(250);
 

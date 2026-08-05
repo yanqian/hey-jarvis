@@ -44,6 +44,7 @@ PRIVATE_BOOTSTRAP_MAX_BYTES = 4096
 OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 DIAGNOSTIC_LIMIT_BYTES = 512 * 1024
 DIAGNOSTIC_GENERATIONS = 3
+CONTROLLER_SHUTDOWN_TIMEOUT_SECONDS = 4.0
 SAFE_DIAGNOSTIC = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 FORBIDDEN_DIAGNOSTIC = ("sk-", "api_key", "authorization", "sdp", "candidate", "transcript", "answer", "tool_argument", "provider_body", "audio")
 
@@ -199,6 +200,8 @@ class ProductRuntime:
         self.controller_thread = controller_thread
         self.stop_event = stop_event
         self.control_url = control_url
+        self._close_lock = threading.Lock()
+        self._closed = False
 
     @classmethod
     def start(
@@ -268,6 +271,7 @@ class ProductRuntime:
             if settings.realtime_acknowledgement_mode == "local":
                 player.play_acknowledgement(settings.wake_acknowledgement_audio_path)
 
+        stop_event = threading.Event()
         controller = RealtimeSessionController(
             coordinator=server.coordinator,
             wake_detector=detector,
@@ -276,8 +280,8 @@ class ProductRuntime:
             idle_timeout_seconds=settings.realtime_idle_timeout_seconds,
             max_duration_seconds=settings.realtime_max_duration_seconds,
             wake_confirmation_frames=settings.wake_confirmation_frames,
+            shutdown_requested=stop_event.is_set,
         )
-        stop_event = threading.Event()
 
         def run_controller() -> None:
             while not stop_event.is_set():
@@ -293,7 +297,6 @@ class ProductRuntime:
         controller_thread = threading.Thread(
             target=run_controller,
             name="hey-jarvis-controller",
-            daemon=True,
         )
         controller_thread.start()
         diagnostics.record("runtime_ready", "ready")
@@ -313,13 +316,21 @@ class ProductRuntime:
         return self.server.coordinator.availability()
 
     def close(self) -> None:
-        self.stop_event.set()
-        self.server.shutdown()
-        self.server.server_close()
-        self.server.coordinator.close()
-        close = getattr(self.detector, "close", None)
-        if close is not None:
-            close()
+        with self._close_lock:
+            if self._closed:
+                return
+            self.stop_event.set()
+            self.server.coordinator.begin_shutdown()
+            self.controller_thread.join(CONTROLLER_SHUTDOWN_TIMEOUT_SECONDS)
+            if self.controller_thread.is_alive():
+                raise ProductRuntimeError("controller_shutdown_timed_out")
+            self.server.shutdown()
+            self.server.server_close()
+            self.server.coordinator.close()
+            close = getattr(self.detector, "close", None)
+            if close is not None:
+                close()
+            self._closed = True
 
 
 RuntimeFactory = Callable[..., ProductRuntime]

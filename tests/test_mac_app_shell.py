@@ -21,7 +21,7 @@ class MacAppShellTests(unittest.TestCase):
         capability = json.loads(
             (APP / "src-tauri" / "capabilities" / "default.json").read_text()
         )
-        self.assertEqual(capability["windows"], ["main"])
+        self.assertEqual(capability["windows"], ["main", "settings"])
         self.assertEqual(capability["permissions"], ["core:default"])
 
         window = config["app"]["windows"][0]
@@ -101,10 +101,12 @@ class MacAppShellTests(unittest.TestCase):
             "track.stop()",
             "Microphone access is ready. Starting the local voice runtime",
             "navigateToAssistant(await invoke(\"complete_onboarding\"))",
+            "microphone_check_timed_out",
+            "for (const track of result.getTracks()) track.stop()",
         ):
             self.assertIn(phrase, script)
 
-    def test_runtime_page_can_return_to_non_listening_settings(self):
+    def test_runtime_page_opens_singleton_non_disruptive_settings(self):
         host_page = (
             ROOT / "src" / "realtime_host" / "static" / "index.html"
         ).read_text(encoding="utf-8")
@@ -127,33 +129,36 @@ class MacAppShellTests(unittest.TestCase):
         self.assertNotIn("window.history.back()", host_script)
         self.assertIn('href="hey-jarvis://settings/open"', host_page)
         self.assertNotIn('window.location.assign("hey-jarvis://settings/open")', host_script)
-        self.assertIn('SETTINGS_RETURN_HASH = "#settings-return"', app_script)
+        settings_handler = host_script.split("async function openAppSettings(){", 1)[1].split("}", 1)[0]
+        self.assertNotIn("stop(", settings_handler)
+        self.assertNotIn("releasePageMedia", settings_handler)
+        self.assertNotIn("armed=false", settings_handler)
+        self.assertIn('log("settings_requested")', settings_handler)
+        self.assertIn('SETTINGS_HASH = "#settings"', app_script)
         self.assertIn('recordLifecycle("settings_opened")', app_script)
-        self.assertIn("function afterCommittedPaint()", app_script)
+        self.assertIn("function renderVoiceStatus(snapshot)", app_script)
+        self.assertIn("Wake listening remains active while Settings is open.", app_script)
+        self.assertIn('await invoke("open_settings")', app_script)
         self.assertIn("if (settingsMode) {", app_script)
         self.assertIn("resetSettingsSurface();\n      await afterCommittedPaint();", app_script)
         self.assertIn("window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))", app_script)
         self.assertIn("function resetSettingsSurface()", app_script)
         self.assertIn("elements.returningView.hidden = true", app_script)
         self.assertIn("elements.settingsShell.hidden = false", app_script)
-        self.assertIn("if (isSettingsReturn()) resetSettingsSurface()", app_script)
         self.assertIn("window.location.assign(endpoint.href)", app_script)
-        self.assertIn("event.persisted && isSettingsReturn()", app_script)
-        self.assertIn('window.history.replaceState(null, "", SETTINGS_RETURN_HASH)', app_script)
+        self.assertIn("event.persisted && isSettingsWindow()", app_script)
         self.assertNotIn('window.location.href.split("#", 1)[0]', app_script)
         self.assertIn('invoke(settingsMode ? "enter_settings"', app_script)
         self.assertIn('if (!settingsMode && snapshot.completed', app_script)
-        self.assertIn('renderSetup(await invoke("enter_settings"))', app_script)
-        self.assertIn('navigateToAssistant(await invoke("restart_sidecar"))', app_script)
+        self.assertIn('await invoke("restart_voice_from_settings")', app_script)
+        self.assertIn('snapshot.availability !== "wake_listening"', app_script)
+        self.assertIn("runtimeRestartNeeded = false", app_script)
+        self.assertIn('await invoke("close_settings_window")', app_script)
         self.assertIn('await recordLifecycle("runtime_restart_requested")', app_script)
-        self.assertNotIn("await new Promise(resolve => window.requestAnimationFrame(resolve))", app_script)
-        return_start = app_script.index("async function returnToAssistant()")
-        return_end = app_script.index("async function runReadinessCheck()", return_start)
-        self.assertNotIn("requestAnimationFrame", app_script[return_start:return_end])
         self.assertIn('id="returning-view"', app_page)
         self.assertIn('role="status" aria-live="polite"', app_page)
-        self.assertIn("elements.settingsShell.hidden = true", app_script)
-        self.assertIn("elements.settingsShell.hidden = false", app_script)
+        self.assertIn('id="voice-status"', app_page)
+        self.assertIn('id="restart-voice"', app_page)
         self.assertIn("fn enter_settings", native)
         self.assertIn('tauri::plugin::Builder::<_, ()>::new("settings-navigation")', native)
         self.assertIn('url.scheme() == "hey-jarvis"', native)
@@ -161,35 +166,33 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('url.path() == "/open"', native)
         self.assertIn("url.query().is_none()", native)
         self.assertIn("url.fragment().is_none()", native)
-        self.assertIn("webview.run_on_main_thread(move || open_settings_window(&app))", native)
+        self.assertIn("request_open_settings(app)", native)
         self.assertIn("return false", native)
         self.assertIn('"runtime_restart_requested"', native)
         self.assertIn("async fn restart_sidecar(app: tauri::AppHandle)", native)
         self.assertIn("tauri::async_runtime::spawn_blocking", native)
         self.assertIn("restart_sidecar_runtime(&runtime)", native)
-        self.assertIn('stop_sidecar(&runtime, "open_settings")', native)
+        self.assertNotIn('stop_sidecar(&runtime, "open_settings")', native)
         self.assertIn("fn settings_url", native)
-        self.assertIn(".build\n        .dev_url", native)
         self.assertIn("static SETTINGS_REQUEST_ID: AtomicU64", native)
         self.assertIn("SETTINGS_REQUEST_ID.fetch_add(1, Ordering::Relaxed)", native)
-        self.assertIn('.append_pair("settings-request", &request_id.to_string())', native)
-        self.assertIn('local_shell_url(app, "settings-return")', native)
-        self.assertIn("url.set_fragment(Some(fragment))", native)
-
-        request_token = native.index('.append_pair("settings-request"')
-        settings_fragment = native.index("url.set_fragment(Some(fragment))")
-        self.assertLess(request_token, settings_fragment)
+        self.assertIn('WebviewWindowBuilder::new(app, "settings", settings_url(app)?)', native)
+        self.assertIn('get_webview_window("settings")', native)
+        self.assertIn('get_webview_window("main")', native)
+        self.assertIn('url.set_fragment(Some("smart-speaker-resume"))', native)
+        self.assertIn('local_shell_url(app, "settings").map(WebviewUrl::External)', native)
 
         enter_settings_start = native.index("fn enter_settings")
         enter_settings_end = native.index("#[tauri::command]", enter_settings_start + 1)
         enter_settings = native[enter_settings_start:enter_settings_end]
-        self.assertIn('stop_sidecar(&runtime, "open_settings")', enter_settings)
+        self.assertNotIn("stop_sidecar", enter_settings)
 
         open_settings_start = native.index("fn open_settings_window")
         open_settings_end = native.index("#[cfg_attr", open_settings_start)
         open_settings = native[open_settings_start:open_settings_end]
-        self.assertIn("window.navigate(url)", open_settings)
+        self.assertIn("WebviewWindowBuilder::new", open_settings)
         self.assertNotIn("stop_sidecar", open_settings)
+        self.assertIn("thread::spawn", native)
 
     def test_system_sleep_has_bounded_recovery_and_a_clickable_fallback(self):
         page = (APP / "src" / "index.html").read_text(encoding="utf-8")
@@ -239,8 +242,8 @@ class MacAppShellTests(unittest.TestCase):
         ):
             self.assertIn(section, page)
         for phrase in (
-            "Listening is off while Settings is open",
-            "the local voice runtime is stopped",
+            "Checking live voice status",
+            "reading local voice availability",
             "never keys, raw audio, transcripts, answers, tool arguments, SDP, ICE, or provider bodies",
             "Unsigned trusted testing only",
         ):
@@ -256,7 +259,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("fn open_settings_window", native)
         self.assertIn('"app-settings"', native)
         self.assertIn('Some("CmdOrCtrl+,")', native)
-        self.assertIn('"settings" => {\n                    open_settings_window(app);', native)
+        self.assertIn('"settings" => {\n                    request_open_settings(app.clone());', native)
         self.assertNotIn("Add key…", page)
         self.assertNotIn("Replace key…", script)
         self.assertIn('? "Replace key" : "Add key"', script)
@@ -281,8 +284,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("<title>Hey Jarvis</title>", settings_page)
         self.assertIn("<title>Hey Jarvis</title>", home_page)
         self.assertNotIn("Hey Jarvis Settings", settings_page)
-        self.assertNotIn("Hey Jarvis Settings", native)
-        self.assertIn('window.set_title("Hey Jarvis")', native)
+        self.assertIn('title("Hey Jarvis Settings")', native)
         self.assertNotIn('class="eyebrow"', settings_page)
         self.assertIn('id="settings-title" class="context-title">Settings</h1>', settings_page)
         self.assertIn('class="app-header returning-header"', settings_page)

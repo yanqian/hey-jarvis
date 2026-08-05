@@ -109,6 +109,28 @@ def today_weather() -> dict[str, object]:
 
 
 class RealtimeHostTests(unittest.TestCase):
+    def test_shutdown_is_idempotent_and_late_host_stop_cannot_reopen_wake(self):
+        lease = FakeLease()
+        coordinator = HandoffCoordinator(lease, session_ids=lambda: "session-shutdown")
+        coordinator.host_event("armed")
+        coordinator.release_wake_for_acknowledgement()
+        session_id = coordinator.begin_handoff()
+
+        coordinator.begin_shutdown()
+        coordinator.host_event("stopped", session_id)
+        coordinator.restore_wake_microphone("late_error")
+        coordinator.close()
+        close_calls = lease.calls.count("close")
+        coordinator.close()
+
+        self.assertTrue(coordinator.closing)
+        self.assertFalse(lease.is_open)
+        self.assertEqual(coordinator.availability(), "non_listening")
+        self.assertEqual(lease.calls.count("close"), close_calls)
+        event_types = [event["type"] for event in coordinator.report()["events"]]
+        self.assertIn("wake_microphone_not_reopened", event_types)
+        self.assertNotIn("wake_microphone_reopened", event_types)
+
     def build_coordinator(self):
         lease = FakeLease()
         ids = iter(f"session-{index}" for index in range(10))

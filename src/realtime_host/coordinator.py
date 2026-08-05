@@ -183,6 +183,8 @@ class HandoffCoordinator:
         self._clock = clock
         self._session_ids = session_ids
         self._lock = threading.RLock()
+        self._closing = False
+        self._closed = False
         self._armed = False
         self._host_id: str | None = None
         self._state = HandoffState.WAKE_OWNED
@@ -249,8 +251,15 @@ class HandoffCoordinator:
     def wake_microphone_open(self) -> bool:
         return self._wake_lease.is_open
 
+    @property
+    def closing(self) -> bool:
+        with self._lock:
+            return self._closing
+
     def read_wake_chunk(self) -> bytes:
         with self._lock:
+            if self._closing:
+                raise HandoffError("Coordinator is shutting down")
             if self._state != HandoffState.WAKE_OWNED:
                 raise HandoffError("Wake microphone cannot be read during a host session")
             read_chunk = getattr(self._wake_lease, "read_chunk", None)
@@ -292,12 +301,16 @@ class HandoffCoordinator:
 
     def restore_wake_microphone(self, reason: str) -> None:
         with self._lock:
+            if self._closing:
+                return
             if self._state == HandoffState.WAKE_OWNED and self._session_id is None and not self._wake_lease.is_open:
                 self._wake_lease.open()
                 self._record("wake_microphone_reopened", result=reason)
 
     def arm_host(self, host_id: str | None = None) -> None:
         with self._lock:
+            if self._closing:
+                raise HandoffError("Coordinator is shutting down")
             if host_id is not None and not _SAFE_VALUE.fullmatch(host_id):
                 raise HandoffError("Host identity was invalid")
             if self._session_id is not None and host_id != self._host_id:
@@ -407,6 +420,8 @@ class HandoffCoordinator:
 
     def begin_handoff(self) -> str:
         with self._lock:
+            if self._closing:
+                raise HandoffError("Coordinator is shutting down")
             if not self._armed:
                 raise HandoffError("WebRTC host must be armed once before wake handoff")
             if self._state != HandoffState.WAKE_OWNED:
@@ -850,6 +865,8 @@ class HandoffCoordinator:
     def availability(self) -> str:
         """Return the bounded, user-facing availability of local voice input."""
         with self._lock:
+            if self._closing:
+                return "non_listening"
             if not self._armed:
                 return "ready"
             if self._state == HandoffState.WAKE_OWNED:
@@ -864,10 +881,23 @@ class HandoffCoordinator:
                 return "busy"
             return "resume_required"
 
-    def close(self) -> None:
+    def begin_shutdown(self) -> None:
+        """Publish shutdown before teardown so no path can reopen the microphone."""
         with self._lock:
-            self.request_stop()
+            if self._closing:
+                return
+            self._closing = True
+            self._armed = False
+            self.request_stop("shutdown")
+            self._record("coordinator_shutdown_started")
+
+    def close(self) -> None:
+        self.begin_shutdown()
+        with self._lock:
+            if self._closed:
+                return
             self._wake_lease.close()
+            self._closed = True
             self._record("coordinator_closed")
 
     def _finish_handoff(self, result: str) -> None:
@@ -889,10 +919,14 @@ class HandoffCoordinator:
         self._handoff_timing_received = False
         self._seen_transcription_items.clear()
         self._handled_tool_calls.clear()
-        if not self._wake_lease.is_open:
+        if not self._closing and not self._wake_lease.is_open:
             self._wake_lease.open()
         self._state = HandoffState.WAKE_OWNED
-        self._record("wake_microphone_reopened", session_id=session_id, result=result)
+        self._record(
+            "wake_microphone_reopened" if not self._closing else "wake_microphone_not_reopened",
+            session_id=session_id,
+            result=result,
+        )
 
     def _begin_farewell(self, session_id: str, *, reason: str) -> None:
         if self._state == HandoffState.HOST_FAREWELL:

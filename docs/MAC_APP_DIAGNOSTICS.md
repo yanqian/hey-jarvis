@@ -16,12 +16,15 @@ Exports are written under the app-owned `support-exports/` directory and must
 pass the same forbidden-content scanner.
 
 The conversation gear, tray **Settings…** item, and standard `⌘,` shortcut all
-resolve to the same Settings route. Entering that route intentionally stops the
-sidecar before the non-listening banner is shown. The **Done** action explicitly
-restarts the local runtime before returning to the conversation surface.
+open or focus one local Settings window without navigating the conversation
+window, releasing the Smart Speaker assertion, or stopping the sidecar. The
+Settings banner reads live bounded availability, and **Done** closes only that
+window. A successful credential change or an explicit microphone check is
+runtime-affecting: it uses the safe sidecar shutdown path and exposes a focused
+Resume action.
 
 The native supervisor distinguishes intentional stops from unexpected exits.
-An intentional Settings, permission, credential, or quit stop never restarts.
+An intentional permission, credential, sleep, or quit stop never restarts.
 System sleep records only whether Smart Speaker Mode was genuinely active,
 stops local media, and permits one bounded local-runtime recovery attempt after
 wake. Browser re-arming must restore real `wake_listening` within 15 seconds;

@@ -459,10 +459,7 @@ async function stop(reason="command",finalState="wake-ready"){
 }
 
 async function openAppSettings(){
-  armed=false;
-  try{if(sessionId)await stop("open_settings");}catch{}
-  stopInputLevels();
-  releasePageMedia();
+  log("settings_requested");
 }
 
 function failClosedAvailability(){

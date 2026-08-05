@@ -15,6 +15,7 @@ from product_sidecar import (  # noqa: E402
     CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE,
     CACHED_ACKNOWLEDGEMENT_RESOURCE,
     LifecycleDiagnostics,
+    ProductRuntime,
     ProductRuntimeError,
     parse_private_credentials,
     run,
@@ -57,6 +58,61 @@ class FakeRuntime:
 
 
 class ProductSidecarTests(unittest.TestCase):
+    def test_runtime_close_joins_controller_before_tearing_down_dependencies(self):
+        calls = []
+
+        class Coordinator:
+            def begin_shutdown(self):
+                calls.append("begin_shutdown")
+
+            def close(self):
+                calls.append("coordinator_close")
+
+        class Server:
+            coordinator = Coordinator()
+
+            def shutdown(self):
+                calls.append("server_shutdown")
+
+            def server_close(self):
+                calls.append("server_close")
+
+        class ControllerThread:
+            def join(self, timeout):
+                self.timeout = timeout
+                calls.append("controller_join")
+
+            def is_alive(self):
+                return False
+
+        class Detector:
+            def close(self):
+                calls.append("detector_close")
+
+        runtime = ProductRuntime(
+            server=Server(),
+            detector=Detector(),
+            controller_thread=ControllerThread(),
+            stop_event=__import__("threading").Event(),
+            control_url="http://127.0.0.1",
+        )
+
+        runtime.close()
+        runtime.close()
+
+        self.assertTrue(runtime.stop_event.is_set())
+        self.assertEqual(
+            calls,
+            [
+                "begin_shutdown",
+                "controller_join",
+                "server_shutdown",
+                "server_close",
+                "coordinator_close",
+                "detector_close",
+            ],
+        )
+
     def test_lifecycle_diagnostics_are_bounded_and_redacted(self):
         with tempfile.TemporaryDirectory() as directory:
             diagnostics = LifecycleDiagnostics(Path(directory), "session-product-1")

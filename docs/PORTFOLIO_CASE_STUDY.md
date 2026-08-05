@@ -48,8 +48,9 @@ Python?”
   product app now supervises a single sidecar and owns the WebView lifecycle.
 - Settings navigation initially raced sidecar startup and later exposed asset
   404 and capability-cookie `forbidden` failures. Durable native frontend
-  history, a settings-return marker, and a one-time loopback capability fixed
-  the actual causes rather than masking the symptoms.
+  history and a one-time loopback capability fixed the original causes; the
+  later product surface moved Settings into a singleton native window so the
+  live loopback page no longer navigates away at all.
 - Keychain access prompted after installation because macOS had to authorize
   the stable service identity. The onboarding and internal-test guide now make
   that recovery explicit without exposing key values.

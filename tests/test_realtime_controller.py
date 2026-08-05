@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import threading
 
 from src.realtime.controller import RealtimeSessionController
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffState
@@ -58,6 +59,35 @@ def build_runtime():
 
 
 class RealtimeControllerTests(unittest.TestCase):
+    def test_shutdown_during_failed_wake_read_never_reopens_microphone(self):
+        shutdown = threading.Event()
+
+        class ShutdownLease(FakeLease):
+            def read_chunk(self) -> bytes:
+                shutdown.set()
+                raise RuntimeError("stream closed during shutdown")
+
+        lease = ShutdownLease([])
+        coordinator = HandoffCoordinator(lease)
+        coordinator.host_event("armed")
+        initial_open_calls = lease.calls.count("open")
+
+        result = RealtimeSessionController(
+            coordinator=coordinator,
+            wake_detector=FakeDetector(),
+            play_acknowledgement=lambda: None,
+            idle_timeout_seconds=1.0,
+            max_duration_seconds=2.0,
+            shutdown_requested=shutdown.is_set,
+        ).run_once()
+
+        self.assertEqual(result.reason, "shutdown")
+        self.assertFalse(result.recovered_to_wake)
+        self.assertEqual(lease.calls.count("open"), initial_open_calls)
+        self.assertFalse(
+            any(event["type"] == "wake_microphone_reopened" for event in coordinator.report()["events"])
+        )
+
     def test_wake_requires_consecutive_confirmations(self):
         clock = FakeClock()
         lease = FakeLease([b"wake", b"quiet", b"wake", b"wake"])

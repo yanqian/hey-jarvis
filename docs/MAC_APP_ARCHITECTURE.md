@@ -82,14 +82,14 @@ and tray Quit before opening the native credential prompt. A microphone stream
 is requested only after an explicit user click and is immediately released
 after the permission check. Denial exposes a direct System Settings recovery
 action; returning users can choose Settings from the tray and rerun checks.
-The loopback voice page also exposes a visible Settings action. The app keeps
-its actual native frontend URL in WebView history before entering the loopback
-voice page, so the action returns to that exact production or dynamic dev URL
-instead of hard-coding a Tauri asset URL. The tray resolves the same URL from
-the native runtime configuration. A settings-return marker stops the sidecar
-before rendering setup and suppresses the normal completed-onboarding redirect.
-This keeps recovery available after a user revokes microphone permission while
-the voice page is already open.
+The loopback voice page also exposes a visible Settings action. Native Tauri
+intercepts the bounded custom-scheme intent and opens or focuses one local
+`settings` WebView; the main loopback page and its retained media stay in
+place. Settings reads only bounded voice availability. General inspection,
+About, diagnostics, and Smart Speaker changes are runtime-neutral. Successful
+credential changes and explicit microphone checks use the safe shutdown path,
+after which Settings exposes a focused Resume action that starts a fresh
+sidecar and navigates only the main window.
 
 After onboarding, Tauri creates a random per-launch session identity, starts
 the product sidecar with piped stdin/stdout, sends the private credential

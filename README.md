@@ -101,8 +101,10 @@ settings.
 
 The Mac app keeps the conversation window intentionally minimal. Open the
 secondary Settings presentation from its top-right button, the menu-bar icon,
-or `⌘,`. Opening Settings stops voice listening; **Done** restarts the local
-runtime and returns to the assistant. Credentials, microphone recovery,
+or `⌘,`. Opening Settings keeps the current voice runtime and wake listening
+active; **Done** closes only the Settings window. Credential changes and an
+explicit microphone check safely stop the runtime and expose a focused Resume
+action. Credentials, microphone recovery,
 readiness, privacy-bounded support export, diagnostics clearing, and build
 information live in General, API Keys, Microphone, Privacy & Diagnostics, and
 About.

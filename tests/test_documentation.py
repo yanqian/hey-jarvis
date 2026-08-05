@@ -232,7 +232,7 @@ class DocumentationTests(unittest.TestCase):
         )
         self.assertIn("F083 (foreign exchange), and F084 (stock quotes)", spec)
 
-    def test_mac_settings_documentation_matches_the_non_listening_surface(self):
+    def test_mac_settings_documentation_matches_the_non_disruptive_surface(self):
         readme = read(README)
         manual = read(MANUAL_TESTING)
         internal = read(ROOT / "docs" / "INTERNAL_MAC_APP_TESTING.md")
@@ -243,7 +243,7 @@ class DocumentationTests(unittest.TestCase):
         for phrase in (
             "menu-bar icon",
             "`⌘,`",
-            "Opening Settings stops voice listening",
+            "Opening Settings keeps the current voice runtime",
             "Privacy & Diagnostics",
         ):
             self.assertIn(phrase, readme)
@@ -253,7 +253,8 @@ class DocumentationTests(unittest.TestCase):
             normalized_internal,
         )
         self.assertIn("standard `⌘,` shortcut", diagnostics)
-        self.assertIn("intentionally stops the sidecar", normalized_diagnostics)
+        self.assertIn("without navigating the conversation window", normalized_diagnostics)
+        self.assertIn("**Done** closes only that window", normalized_diagnostics)
 
     def test_all_env_keys_are_owned_by_configuration_reference(self):
         configuration = read(CONFIGURATION)

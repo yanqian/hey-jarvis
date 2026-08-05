@@ -39,6 +39,7 @@ class RealtimeSessionController:
         close_timeout_seconds: float = 5.0,
         farewell_timeout_seconds: float = 8.0,
         wake_confirmation_frames: int = 2,
+        shutdown_requested: Callable[[], bool] = lambda: False,
     ) -> None:
         self.coordinator = coordinator
         self.wake_detector = wake_detector
@@ -57,10 +58,12 @@ class RealtimeSessionController:
             raise ValueError("farewell_timeout_seconds must be greater than zero")
         self.farewell_timeout_seconds = farewell_timeout_seconds
         self.wake_confirmation_frames = max(1, wake_confirmation_frames)
+        self.shutdown_requested = shutdown_requested
 
     def run_once(self) -> RealtimeSessionResult:
         session_id: str | None = None
         try:
+            self._raise_if_shutting_down()
             self._wait_for_armed_host()
             self._wait_for_local_wake()
             self.coordinator.record_local_timing_marker("wake_confirmed")
@@ -118,6 +121,8 @@ class RealtimeSessionController:
             self._wait_for_wake_ownership()
             raise
         except Exception as exc:
+            if self.shutdown_requested():
+                return RealtimeSessionResult(session_id, "shutdown", False)
             self.coordinator.request_stop("controller_error")
             if session_id is None:
                 self.coordinator.restore_wake_microphone("pre_session_error")
@@ -130,12 +135,16 @@ class RealtimeSessionController:
 
     def _wait_for_armed_host(self) -> None:
         while not self.coordinator.armed:
+            self._raise_if_shutting_down()
             self.sleep(self.poll_seconds)
+        self._raise_if_shutting_down()
 
     def _wait_for_local_wake(self) -> None:
         consecutive_detections = 0
         while True:
+            self._raise_if_shutting_down()
             pcm_chunk = self.coordinator.read_wake_chunk()
+            self._raise_if_shutting_down()
             if self.wake_detector.detect(pcm_chunk):
                 consecutive_detections += 1
                 if consecutive_detections >= self.wake_confirmation_frames:
@@ -146,12 +155,15 @@ class RealtimeSessionController:
     def _wait_until_not(self, state: HandoffState, timeout: float) -> bool:
         deadline = self.clock() + timeout
         while self.coordinator.state == state and self.clock() < deadline:
+            self._raise_if_shutting_down()
             self.sleep(self.poll_seconds)
+        self._raise_if_shutting_down()
         return self.coordinator.state != state
 
     def _wait_for_realtime_acknowledgement(self, timeout: float) -> bool:
         deadline = self.clock() + timeout
         while self.coordinator.state == HandoffState.HOST_READY and self.clock() < deadline:
+            self._raise_if_shutting_down()
             if self.coordinator.realtime_acknowledgement_complete:
                 return True
             self.sleep(self.poll_seconds)
@@ -160,16 +172,21 @@ class RealtimeSessionController:
     def _wait_for_cached_acknowledgement(self, timeout: float) -> bool:
         deadline = self.clock() + timeout
         while self.coordinator.state == HandoffState.HOST_READY and self.clock() < deadline:
+            self._raise_if_shutting_down()
             if self.coordinator.cached_acknowledgement_complete:
                 return True
             self.sleep(self.poll_seconds)
         return self.coordinator.cached_acknowledgement_complete
 
     def _wait_for_wake_ownership(self) -> bool:
+        if self.shutdown_requested():
+            return False
         if self.coordinator.state == HandoffState.WAKE_OWNED:
             return self.coordinator.wake_microphone_open
         deadline = self.clock() + self.close_timeout_seconds
         while self.coordinator.state != HandoffState.WAKE_OWNED and self.clock() < deadline:
+            if self.shutdown_requested():
+                return False
             self.sleep(self.poll_seconds)
         return self.coordinator.state == HandoffState.WAKE_OWNED and self.coordinator.wake_microphone_open
 
@@ -179,3 +196,11 @@ class RealtimeSessionController:
             if event.get("type") == "host_command" and event.get("command") == "stop":
                 return str(event.get("reason", fallback))
         return fallback
+
+    def _raise_if_shutting_down(self) -> None:
+        if self.shutdown_requested():
+            raise _ControllerShutdown
+
+
+class _ControllerShutdown(Exception):
+    """Internal control-flow signal that must not trigger microphone recovery."""

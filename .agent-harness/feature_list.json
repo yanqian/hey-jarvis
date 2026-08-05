@@ -2551,6 +2551,48 @@
       "depends_on": [
         "F111"
       ]
+    },
+    {
+      "id": "F113",
+      "title": "Make sidecar shutdown race-free",
+      "description": "Make every genuine Python sidecar shutdown cancellation-aware and bounded so background wake recovery cannot reopen PortAudio while the interpreter is finalizing.",
+      "acceptance": [
+        "ProductRuntime, RealtimeSessionController, HandoffCoordinator, and the wake-microphone lease share an idempotent shutdown boundary that is marked before audio teardown; shutdown-time read failures, handoff cleanup, and generic error recovery never reopen the microphone or begin new host work.",
+        "The controller loop observes cancellation between bounded audio reads, exits before detector/server destruction, and is joined with a documented bound before `process_stopped` and interpreter finalization instead of relying on a live daemon thread.",
+        "Settings-required restart, app quit, explicit sleep, parent loss, repeated close, blocked/failing wake reads, and stale recovery fault injection converge on truthful non-listening cleanup without deadlock, unbounded retry, paid activity, or loss of later fresh-start capability.",
+        "Focused concurrency and microphone-open-count tests, existing sidecar/controller/coordinator suites, Realtime fake smoke, full project tests, final ./init.sh, fast coding evidence, a target-Mac quit or sleep shutdown with no new matching `OpenAndSetupOneAudioUnit` crash report, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F091",
+        "F106"
+      ]
+    },
+    {
+      "id": "F114",
+      "title": "Keep voice runtime active while viewing Settings",
+      "description": "Open a singleton bundled Settings window without replacing the main runtime document or stopping listening, and restart only after changes that invalidate the running sidecar.",
+      "acceptance": [
+        "The gear, tray item, and Command-, open or focus one bundled Settings window while the main loopback page, sidecar generation, truthful wake availability, retained media, and active Smart Speaker assertion remain unchanged; ordinary Settings entry sends no stop or restart command.",
+        "Settings displays truthful live voice status, and Done or window close dismisses only Settings without restarting Python, reacquiring microphone permission, navigating the main window, or claiming that inspection saved configuration.",
+        "General, About, diagnostics, and Smart Speaker Mode remain live/runtime-neutral, while successful credential replacement/deletion or microphone denial is explicitly runtime-affecting, uses F113 safe shutdown, fails closed against stale capability, and exposes a focused restart/Resume action.",
+        "Repeated entry is singleton and keyboard accessible, credentials and private conversation data remain outside WebView content and diagnostics, and Settings opened during an active conversation neither duplicates the runtime nor retains conversation content.",
+        "Focused native/frontend/window/policy tests, JavaScript syntax, repeated real Settings open/Done cycles with unchanged sidecar PID/session and Wake listening, one runtime-affecting restart-required trial, no new matching Python crash report, full project tests, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F100",
+        "F104",
+        "F113"
+      ]
     }
   ]
 }

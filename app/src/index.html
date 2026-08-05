@@ -54,11 +54,11 @@
         <button id="return-assistant" class="done-button" type="button" hidden>Done</button>
       </header>
 
-      <p id="page-summary">Listening is off while Settings is open.</p>
+      <p id="page-summary">Checking live voice status…</p>
 
       <div class="privacy-state" role="status">
         <span class="privacy-state-icon" aria-hidden="true"></span>
-        <span><strong>Not listening</strong> — the local voice runtime is stopped.</span>
+        <span id="voice-status"><strong>Checking</strong> — reading local voice availability.</span>
       </div>
 
       <div class="settings-layout">
@@ -162,7 +162,7 @@
               <button id="microphone-check" class="primary" type="button">Check microphone</button>
               <button id="microphone-settings" class="secondary" type="button">Open System Settings</button>
             </div>
-            <p class="boundary-note">The temporary check stream is released immediately. Settings never keeps the microphone open.</p>
+            <p class="boundary-note">Running a new microphone check safely pauses the voice runtime first. The temporary check stream is released immediately.</p>
           </section>
 
           <section class="settings-panel" data-settings-panel="privacy" aria-labelledby="privacy-title" hidden>
@@ -204,6 +204,7 @@
           </section>
 
           <p id="setup-message" class="message global-message" role="status"></p>
+          <button id="restart-voice" class="primary" type="button" hidden>Resume voice assistant</button>
         </div>
       </div>
     </main>

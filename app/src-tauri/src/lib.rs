@@ -25,7 +25,7 @@ use supervisor::{RuntimeSnapshot, SidecarSupervisor};
 use tauri::{
     menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Manager, State,
+    Manager, State, WebviewUrl, WebviewWindowBuilder,
 };
 
 struct AppRuntime {
@@ -233,8 +233,21 @@ fn set_smart_speaker_mode(
 
 #[tauri::command]
 fn enter_settings(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
-    stop_sidecar(&runtime, "open_settings");
     onboarding_status(runtime)
+}
+
+#[tauri::command]
+fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
+    request_open_settings(app);
+    Ok(())
+}
+
+#[tauri::command]
+fn close_settings_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != "settings" {
+        return Err("settings_window_required".into());
+    }
+    window.close().map_err(|_| "settings_unavailable".into())
 }
 
 #[tauri::command]
@@ -244,9 +257,7 @@ fn prompt_save_credential(
 ) -> Result<CredentialStatus, String> {
     let kind = CredentialKind::parse(&kind)?;
     let result = prompt_and_store(runtime.credentials.as_ref(), kind)?;
-    if kind == CredentialKind::OpenAi {
-        stop_sidecar(&runtime, "credential_replaced");
-    }
+    stop_sidecar(&runtime, "credential_replaced");
     Ok(result)
 }
 
@@ -256,10 +267,14 @@ fn delete_credential(
     runtime: State<'_, AppRuntime>,
 ) -> Result<CredentialStatus, String> {
     let kind = CredentialKind::parse(&kind)?;
-    if kind == CredentialKind::OpenAi {
-        stop_sidecar(&runtime, "credential_deleted");
-    }
-    delete_and_report(runtime.credentials.as_ref(), kind)
+    let result = delete_and_report(runtime.credentials.as_ref(), kind)?;
+    stop_sidecar(&runtime, "credential_deleted");
+    Ok(result)
+}
+
+#[tauri::command]
+fn prepare_microphone_check(runtime: State<'_, AppRuntime>) {
+    stop_sidecar(&runtime, "microphone_settings_check");
 }
 
 #[tauri::command]
@@ -275,13 +290,25 @@ fn record_microphone_denied(runtime: State<'_, AppRuntime>) -> Result<Onboarding
 
 #[tauri::command]
 fn record_microphone_granted(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
-    stop_sidecar(&runtime, "microphone_settings_check");
     let first_run = !runtime.onboarding_path.exists();
     let mut record = load_onboarding(&runtime.onboarding_path).unwrap_or_default();
     record.microphone_permission = "granted".into();
     save_onboarding(&runtime.onboarding_path, &record)?;
     let credentials = credential_status_value(runtime.credentials.as_ref())?;
     onboarding_snapshot(&runtime, first_run, record, credentials)
+}
+
+#[tauri::command]
+async fn restart_voice_from_settings(app: tauri::AppHandle) -> Result<RuntimeSnapshot, String> {
+    let worker_app = app.clone();
+    let snapshot = tauri::async_runtime::spawn_blocking(move || {
+        let runtime = worker_app.state::<AppRuntime>();
+        restart_sidecar_runtime(&runtime)
+    })
+    .await
+    .map_err(|_| "sidecar restart task failed".to_string())??;
+    navigate_main_to_runtime(&app, &snapshot)?;
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -351,8 +378,8 @@ fn development_sidecar_path() -> PathBuf {
     PathBuf::new()
 }
 
-fn settings_url(app: &tauri::AppHandle) -> Result<tauri::Url, String> {
-    local_shell_url(app, "settings-return")
+fn settings_url(app: &tauri::AppHandle) -> Result<WebviewUrl, String> {
+    local_shell_url(app, "settings").map(WebviewUrl::External)
 }
 
 fn local_shell_url(app: &tauri::AppHandle, fragment: &str) -> Result<tauri::Url, String> {
@@ -404,6 +431,26 @@ fn navigate_to_recovery_runtime(
         }
     })
     .map_err(|_| "runtime_navigation_failed".to_string())
+}
+
+fn navigate_main_to_runtime(
+    app: &tauri::AppHandle,
+    snapshot: &RuntimeSnapshot,
+) -> Result<(), String> {
+    let control_url = snapshot
+        .control_url
+        .as_deref()
+        .ok_or("sidecar_readiness_timed_out")?;
+    let mut url = tauri::Url::parse(control_url).map_err(|_| "invalid_control_url")?;
+    if url.scheme() != "http" || url.host_str() != Some("127.0.0.1") {
+        return Err("invalid_control_url".into());
+    }
+    url.set_fragment(Some("smart-speaker-resume"));
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "runtime_navigation_failed".to_string())?;
+    main.navigate(url)
+        .map_err(|_| "runtime_navigation_failed".to_string())
 }
 
 pub(crate) fn recover_after_system_wake(app: tauri::AppHandle, generation: u64) {
@@ -466,18 +513,27 @@ pub(crate) fn recover_after_system_wake(app: tauri::AppHandle, generation: u64) 
     }
 }
 
-fn open_settings_window(app: &tauri::AppHandle) {
-    if let Some(runtime) = app.try_state::<AppRuntime>() {
-        release_power_assertion(&runtime, "settings_opened");
-    }
-    if let Some(window) = app.get_webview_window("main") {
-        if let Ok(url) = settings_url(app) {
-            let _ = window.navigate(url);
-        }
-        let _ = window.set_title("Hey Jarvis");
+fn open_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("settings") {
         let _ = window.show();
         let _ = window.set_focus();
+        return Ok(());
     }
+    let window = WebviewWindowBuilder::new(app, "settings", settings_url(app)?)
+        .title("Hey Jarvis Settings")
+        .inner_size(820.0, 640.0)
+        .min_inner_size(700.0, 520.0)
+        .build()
+        .map_err(|_| "settings_unavailable".to_string())?;
+    let _ = window.show();
+    let _ = window.set_focus();
+    Ok(())
+}
+
+fn request_open_settings(app: tauri::AppHandle) {
+    thread::spawn(move || {
+        let _ = open_settings_window(&app);
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -493,7 +549,7 @@ pub fn run() {
                         && url.fragment().is_none();
                     if is_settings_intent {
                         let app = webview.app_handle().clone();
-                        let _ = webview.run_on_main_thread(move || open_settings_window(&app));
+                        request_open_settings(app);
                         return false;
                     }
                     true
@@ -616,7 +672,7 @@ pub fn run() {
             app.set_menu(application_menu)?;
             app.on_menu_event(|app, event| {
                 if event.id.as_ref() == "app-settings" {
-                    open_settings_window(app);
+                    request_open_settings(app.clone());
                 }
             });
 
@@ -636,7 +692,7 @@ pub fn run() {
                     }
                 }
                 "settings" => {
-                    open_settings_window(app);
+                    request_open_settings(app.clone());
                 }
                 "quit" => {
                     if let Some(runtime) = app.try_state::<AppRuntime>() {
@@ -657,11 +713,15 @@ pub fn run() {
             onboarding_status,
             set_smart_speaker_mode,
             enter_settings,
+            open_settings,
+            close_settings_window,
             prompt_save_credential,
             delete_credential,
+            prepare_microphone_check,
             record_microphone_denied,
             record_microphone_granted,
             complete_onboarding,
+            restart_voice_from_settings,
             open_microphone_settings,
             record_webview_lifecycle,
             export_support_bundle,

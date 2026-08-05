@@ -4,6 +4,39 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F114 provider-native coding and target-Mac Settings acceptance pass. Settings
+is now a singleton native window that leaves the main loopback runtime,
+sidecar PID/session, wake availability, retained media, and Smart Speaker
+assertion unchanged during ordinary inspection. Done closes only Settings.
+Credential changes and explicit microphone checks use F113 safe shutdown and
+keep a focused Resume action visible until real `wake_listening`; microphone
+probing is bounded and retains no late stream. The live neutral trial kept PID
+87782 and session `session-b63348070cf583adb541bed08a9a40b1` at Wake listening,
+and the runtime-affecting trial stopped in about 220 ms with no new Python crash
+report or exit dialog. Final `./init.sh` passed 456 project tests, 11 Mac app
+tests, 27 Rust tests, and all smoke paths. Coding and live evidence are in
+`.agent-harness/runs/F114-fast-coding.md` and
+`.agent-harness/runs/F114-live-acceptance.md`. Independent approval is recorded
+as `EVAL_PASS: F114` in
+`.agent-harness/runs/20260805T153238Z-F114-evaluation-pass.md`.
+
+F113 provider-native coding and target-Mac acceptance pass. Shutdown is now an
+idempotent boundary shared by ProductRuntime, the controller, and the handoff
+coordinator: cancellation is published before teardown, shutdown-time stream
+failures cannot invoke wake recovery, late host cleanup cannot reopen the
+microphone, and the non-daemon controller is joined before server, PortAudio,
+detector, or interpreter finalization. Python has a four-second join bound and
+the native supervisor a five-second grace period. Focused concurrency tests,
+456 project tests, 11 Mac frontend/sidecar tests, 27 Rust tests, all smoke paths,
+and a fresh Debug build pass. In the live `open_settings` shutdown trial,
+`shutdown_requested -> process_stopped` took about 406 ms, the Python process
+exited, and the six-report crash baseline remained unchanged with no new
+`OpenAndSetupOneAudioUnit` report or Python-exit dialog. Coding and live evidence
+are in `.agent-harness/runs/F113-fast-coding.md` and
+`.agent-harness/runs/F113-live-acceptance.md`. Independent approval is recorded
+as `EVAL_PASS: F113` in
+`.agent-harness/runs/20260805T065031Z-F113-evaluation-pass.md`.
+
 F106 is evaluator-approved after provider-native coding and owner-led target-Mac
 acceptance. The explicit-sleep trial released the active
 assertion, stopped the old sidecar, made one automatic wake attempt, and
@@ -538,13 +571,19 @@ without recreating its narrative, demo, feedback, or verification groundwork.
 
 ## Next Feature
 
-Commit the owner-accepted and evaluator-approved F106 scope. Next normalize and
-implement the owner-requested Settings lifecycle and safe sidecar shutdown
-feature. After that, implement and
-evaluate F112. Then Resume F093 by recording the
+F106 is committed at `daec7f3`. Implement and evaluate F113, then F114, for the
+owner-requested safe sidecar shutdown and non-disruptive Settings lifecycle.
+After that, implement and evaluate F112. Then Resume F093 by recording the
 bounded production-app demo and running two additional trusted Apple Silicon
 tester or distinct clean-profile trials. Public binary distribution remains
 on hold.
+
+F113 was explicitly selected for interactive work ahead of the older F112 todo
+item because the owner reported a repeatable P0 native crash and asked to fix
+it first. The installed orchestrator has no feature-selection flag, so this
+selection state is recorded as an explicit manual priority fallback; the
+required `make -C .agent-harness work-fast` handoff and separate evaluator gate
+remain authoritative.
 
 ## Recently Completed
 
