@@ -78,6 +78,19 @@ class MacOSSidecarPackagingTests(unittest.TestCase):
         supervisor = (ROOT / "app" / "src-tauri" / "src" / "supervisor.rs").read_text()
         self.assertIn('resource_dir.join("sidecar/hey-jarvis-sidecar")', supervisor)
 
+    def test_tauri_bundles_selected_english_cues_with_matching_digests(self) -> None:
+        config = json.loads((ROOT / "app" / "src-tauri" / "tauri.conf.json").read_text())
+        resources = config["bundle"]["resources"]
+        for stem in ("realtime_acknowledgement_alloy_en", "realtime_farewell_alloy_en"):
+            audio_source = ROOT / "assets" / f"{stem}.wav"
+            manifest_source = ROOT / "assets" / f"{stem}.json"
+            self.assertEqual(resources[f"../../assets/{stem}.wav"], f"assets/{stem}.wav")
+            self.assertEqual(resources[f"../../assets/{stem}.json"], f"assets/{stem}.json")
+            manifest = json.loads(manifest_source.read_text())
+            self.assertTrue(manifest["selected_by_owner"])
+            self.assertEqual(manifest["locale"], "en")
+            self.assertEqual(hashlib.sha256(audio_source.read_bytes()).hexdigest(), manifest["sha256"])
+
     def test_zip_normalization_is_byte_reproducible(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.zip"

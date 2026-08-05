@@ -16,6 +16,10 @@ from product_sidecar import (  # noqa: E402
     CACHED_ACKNOWLEDGEMENT_RESOURCE,
     CACHED_FAREWELL_MANIFEST_RESOURCE,
     CACHED_FAREWELL_RESOURCE,
+    ENGLISH_CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE,
+    ENGLISH_CACHED_ACKNOWLEDGEMENT_RESOURCE,
+    ENGLISH_CACHED_FAREWELL_MANIFEST_RESOURCE,
+    ENGLISH_CACHED_FAREWELL_RESOURCE,
     LifecycleDiagnostics,
     ProductRuntime,
     ProductRuntimeError,
@@ -290,6 +294,34 @@ class ProductSidecarTests(unittest.TestCase):
             CACHED_FAREWELL_MANIFEST_RESOURCE.as_posix(),
             "assets/realtime_farewell_alloy_zh.json",
         )
+        self.assertEqual(
+            ENGLISH_CACHED_ACKNOWLEDGEMENT_RESOURCE.as_posix(),
+            "assets/realtime_acknowledgement_alloy_en.wav",
+        )
+        self.assertEqual(
+            ENGLISH_CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE.as_posix(),
+            "assets/realtime_acknowledgement_alloy_en.json",
+        )
+        self.assertEqual(
+            ENGLISH_CACHED_FAREWELL_RESOURCE.as_posix(),
+            "assets/realtime_farewell_alloy_en.wav",
+        )
+        self.assertEqual(
+            ENGLISH_CACHED_FAREWELL_MANIFEST_RESOURCE.as_posix(),
+            "assets/realtime_farewell_alloy_en.json",
+        )
+
+    def test_product_runtime_passes_both_languages_to_the_loopback_host(self):
+        source = (SIDECAR_DIR / "product_sidecar.py").read_text(encoding="utf-8")
+        start = source[source.index("server = build_server("):source.index("server_thread =", source.index("server = build_server("))]
+        self.assertIn("cached_acknowledgement_audio_path=cached_acknowledgement", start)
+        self.assertIn("cached_farewell_audio_path=cached_farewell", start)
+        self.assertIn(
+            "english_cached_acknowledgement_audio_path=english_cached_acknowledgement",
+            start,
+        )
+        self.assertIn("english_cached_farewell_audio_path=english_cached_farewell", start)
+        self.assertIn('app_language_path=app_support_dir / "preferences-v1.json"', start)
 
 
 if __name__ == "__main__":

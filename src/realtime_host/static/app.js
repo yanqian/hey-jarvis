@@ -12,6 +12,7 @@ let realtimeAcknowledgement=false,acknowledgementStarted=false,acknowledgementRe
 let acknowledgementCaptureLabel=null,acknowledgementCapture=null,acknowledgementTranscript=null,remoteStream=null;
 let cachedAcknowledgementUrl=null,cachedAcknowledgementPending=false,cachedAcknowledgementToken=0;
 let cachedFarewellUrl=null,cachedFarewellPending=false,cachedFarewellToken=0;
+let cachedAcknowledgementUrls={},cachedFarewellUrls={},activeCueLocale=null;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
@@ -67,6 +68,18 @@ async function uploadAcknowledgementCapture(){
 
 async function prepareCachedAcknowledgement(settings){
   if(cachedAcknowledgementUrl){URL.revokeObjectURL(cachedAcknowledgementUrl);cachedAcknowledgementUrl=null;}
+  for(const url of Object.values(cachedAcknowledgementUrls))URL.revokeObjectURL(url);cachedAcknowledgementUrls={};
+  if(settings?.voice_cues){
+    const locales=Object.keys(settings.voice_cues).sort();if(locales.join(",")!=="en,zh-CN")throw new Error("Cached acknowledgement locales are incomplete");
+    for(const locale of locales){
+      const acknowledgement=settings.voice_cues[locale]?.acknowledgement,expectedUrl=`/acknowledgement.wav?locale=${encodeURIComponent(locale)}`;
+      if(acknowledgement?.mode!=="cached"||acknowledgement.url!==expectedUrl||!Number.isInteger(acknowledgement.duration_ms)||acknowledgement.duration_ms<300||acknowledgement.duration_ms>6000||typeof acknowledgement.sha256!=="string"||!/^[a-f0-9]{64}$/.test(acknowledgement.sha256))throw new Error("Cached acknowledgement metadata is invalid");
+      const response=await fetch(acknowledgement.url,{cache:"no-store"});if(!response.ok)throw new Error("Cached acknowledgement is unavailable");
+      const bytes=await response.arrayBuffer();if(bytes.byteLength<44||bytes.byteLength>1500000)throw new Error("Cached acknowledgement size is invalid");
+      cachedAcknowledgementUrls[locale]=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
+    }
+    return;
+  }
   const acknowledgement=settings?.acknowledgement;
   if(acknowledgement?.mode!=="cached")return;
   if(acknowledgement.url!=="/acknowledgement.wav"||!Number.isInteger(acknowledgement.duration_ms)||acknowledgement.duration_ms<500||acknowledgement.duration_ms>6000||typeof acknowledgement.sha256!=="string"||!/^[a-f0-9]{64}$/.test(acknowledgement.sha256))throw new Error("Cached acknowledgement metadata is invalid");
@@ -76,6 +89,18 @@ async function prepareCachedAcknowledgement(settings){
 }
 async function prepareCachedFarewell(settings){
   if(cachedFarewellUrl){URL.revokeObjectURL(cachedFarewellUrl);cachedFarewellUrl=null;}
+  for(const url of Object.values(cachedFarewellUrls))URL.revokeObjectURL(url);cachedFarewellUrls={};
+  if(settings?.voice_cues){
+    const locales=Object.keys(settings.voice_cues).sort();if(locales.join(",")!=="en,zh-CN")throw new Error("Cached farewell locales are incomplete");
+    for(const locale of locales){
+      const farewell=settings.voice_cues[locale]?.farewell,expectedUrl=`/farewell.wav?locale=${encodeURIComponent(locale)}`;
+      if(farewell?.mode!=="cached"||farewell.url!==expectedUrl||!Number.isInteger(farewell.duration_ms)||farewell.duration_ms<150||farewell.duration_ms>3000||typeof farewell.sha256!=="string"||!/^[a-f0-9]{64}$/.test(farewell.sha256))throw new Error("Cached farewell metadata is invalid");
+      const response=await fetch(farewell.url,{cache:"no-store"});if(!response.ok)throw new Error("Cached farewell is unavailable");
+      const bytes=await response.arrayBuffer();if(bytes.byteLength<44||bytes.byteLength>1500000)throw new Error("Cached farewell size is invalid");
+      cachedFarewellUrls[locale]=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
+    }
+    return;
+  }
   const farewell=settings?.farewell;
   if(farewell?.mode!=="cached")return;
   if(farewell.url!=="/farewell.wav"||!Number.isInteger(farewell.duration_ms)||farewell.duration_ms<150||farewell.duration_ms>3000||typeof farewell.sha256!=="string"||!/^[a-f0-9]{64}$/.test(farewell.sha256))throw new Error("Cached farewell metadata is invalid");
@@ -97,9 +122,10 @@ async function attachRemoteAudio(){
   const playAttempt=audio.play();if(playAttempt)await playAttempt;log("remote_audio_track");
 }
 async function startCachedAcknowledgement(command){
-  if(command.acknowledgement_mode!=="cached"||!cachedAcknowledgementUrl)throw new Error("Cached acknowledgement was not prepared");
+  const acknowledgementUrl=cachedAcknowledgementUrls[command.cue_locale]||cachedAcknowledgementUrl;
+  if(command.acknowledgement_mode!=="cached"||!acknowledgementUrl)throw new Error("Cached acknowledgement was not prepared");
   const expectedSession=command.session_id,token=++cachedAcknowledgementToken,audio=$("remoteAudio");cachedAcknowledgementPending=true;
-  audio.pause();audio.srcObject=null;audio.src=cachedAcknowledgementUrl;audio.volume=configuredOutputVolume();audio.currentTime=0;
+  audio.pause();audio.srcObject=null;audio.src=acknowledgementUrl;audio.volume=configuredOutputVolume();audio.currentTime=0;
   const ended=new Promise((resolve,reject)=>{audio.onended=resolve;audio.onerror=()=>reject(new Error("Cached acknowledgement playback failed"));});
   await audio.play();
   if(token!==cachedAcknowledgementToken||sessionId!==expectedSession)return;
@@ -111,9 +137,10 @@ async function startCachedAcknowledgement(command){
   await hostEvent("cached_ack_playback_stopped");
 }
 async function startCachedFarewell(){
-  if(sessionConfig?.farewell?.mode!=="cached"||!cachedFarewellUrl)throw new Error("Cached farewell was not prepared");
+  const farewellUrl=cachedFarewellUrls[activeCueLocale]||cachedFarewellUrl;
+  if(sessionConfig?.farewell?.mode!=="cached"||!farewellUrl)throw new Error("Cached farewell was not prepared");
   const expectedSession=sessionId,token=++cachedFarewellToken,audio=$("remoteAudio");cachedFarewellPending=true;
-  audio.pause();audio.srcObject=null;audio.src=cachedFarewellUrl;audio.volume=configuredOutputVolume();audio.currentTime=0;
+  audio.pause();audio.srcObject=null;audio.src=farewellUrl;audio.volume=configuredOutputVolume();audio.currentTime=0;
   const ended=new Promise((resolve,reject)=>{audio.onended=resolve;audio.onerror=()=>reject(new Error("Cached farewell playback failed"));});
   await audio.play();
   if(token!==cachedFarewellToken||sessionId!==expectedSession)return;
@@ -411,11 +438,12 @@ async function handleServerEvent(event){
 
 async function start(command){
   if(!armed||pc)throw new Error("host is not ready for start");
+  if(!["en","zh-CN"].includes(command.cue_locale))throw new Error("host supplied an invalid cue locale");
   handoffTiming={commandReceived:performance.now()};sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   responseActive=false;turnResponsePending=false;farewellPending=false;farewellStarted=false;farewellCallId=null;farewellResponseActive=false;
   realtimeAcknowledgement=command.acknowledgement_mode==="realtime";acknowledgementStarted=false;acknowledgementResponseActive=false;
   acknowledgementCaptureLabel=typeof command.acknowledgement_capture_label==="string"?command.acknowledgement_capture_label:null;acknowledgementCapture=null;acknowledgementTranscript=null;remoteStream=null;
-  sessionId=command.session_id;setUiState("connecting");showEndControl(true);
+  sessionId=command.session_id;activeCueLocale=command.cue_locale;setUiState("connecting");showEndControl(true);
   if(command.acknowledgement_mode==="cached")startCachedAcknowledgement(command).catch(async()=>{if(sessionId===command.session_id){await hostEvent("error",{reason:"cached_acknowledgement_failed"}).catch(()=>{});await stop("cached_acknowledgement_failed","error");}});
   await hostEvent("microphone_requested");
   if(sessionId!==command.session_id)return;
@@ -485,7 +513,7 @@ async function stop(reason="command",finalState="wake-ready"){
   else{audio.pause();audio.srcObject=null;}
   handoffTiming=null;sessionCreatedAt=null;dataChannelOpenedAt=null;transportReported=false;configurationReportStarted=false;
   responseActive=false;turnResponsePending=false;farewellPending=false;farewellStarted=false;farewellCallId=null;farewellResponseActive=false;assistantSpeaking=false;
-  realtimeAcknowledgement=false;acknowledgementStarted=false;acknowledgementResponseActive=false;acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;
+  realtimeAcknowledgement=false;acknowledgementStarted=false;acknowledgementResponseActive=false;acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;activeCueLocale=null;
   log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
   setUiState(finalState);
@@ -537,6 +565,8 @@ function releasePageMedia(){
   resetCachedFarewellPlayback();
   if(cachedAcknowledgementUrl){URL.revokeObjectURL(cachedAcknowledgementUrl);cachedAcknowledgementUrl=null;}
   if(cachedFarewellUrl){URL.revokeObjectURL(cachedFarewellUrl);cachedFarewellUrl=null;}
+  for(const url of Object.values(cachedAcknowledgementUrls))URL.revokeObjectURL(url);cachedAcknowledgementUrls={};
+  for(const url of Object.values(cachedFarewellUrls))URL.revokeObjectURL(url);cachedFarewellUrls={};activeCueLocale=null;
   acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;
   const activeStream=stream;stream=null;
   if(activeStream)activeStream.getTracks().forEach(track=>track.stop());

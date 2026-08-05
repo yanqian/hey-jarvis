@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "cue": "farewell",
+  "locale": "en",
+  "phrase": "See you.",
+  "prompt_version": "english-farewell-warm-v1",
+  "model": "gpt-4o-mini-tts",
+  "voice": "alloy",
+  "format": "wav_pcm_s16le_mono",
+  "sample_rate": 24000,
+  "duration_ms": 738,
+  "leading_silence_ms": 40,
+  "trailing_silence_ms": 40,
+  "playback_gain": 0.5,
+  "candidate": "candidate-02",
+  "sha256": "1432db3c588f772d5572dce3d6581adf4b2e5d900235b93c7670ac3260303e6f",
+  "selected_by_owner": true
+}

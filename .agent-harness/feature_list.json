@@ -2690,9 +2690,9 @@
         "Selected canonical English files and manifests have locale-explicit names, prepare into the packaged runtime with identical digests, coexist with the Mandarin assets, and fail closed on missing, corrupt, wrong-phrase, wrong-format, or out-of-bound content without paid runtime fallback.",
         "Focused generator/capture/privacy/manifest/hash/format/duration/preparation/package tests, saved owner selection evidence, final `./init.sh`, fast coding evidence, one explicitly authorized target-Mac audition, and separate cold-start evaluator approval pass."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
@@ -2711,9 +2711,9 @@
         "A language change during an active session updates UI only: that session keeps its captured ACK/farewell language, the next wake uses the new preference, and the GPT Realtime prompt continues answering each current user turn in that turn's primary language even when it differs from the fixed-cue language.",
         "Focused locale snapshot/config/server/browser/controller/coordinator/sidecar/package tests, both-language ACK gates and farewell recovery, switch-during-session and missing/corrupt/stale/failure cases, JavaScript syntax, Realtime fake smoke, final `./init.sh`, fast coding evidence, owner-led target-Mac English and Chinese overall flows, and separate cold-start evaluator approval pass."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "cue": "ack",
+  "locale": "en",
+  "phrase": "I'm here. Yes?",
+  "prompt_version": "english-ack-warm-v1",
+  "model": "gpt-4o-mini-tts",
+  "voice": "alloy",
+  "format": "wav_pcm_s16le_mono",
+  "sample_rate": 24000,
+  "duration_ms": 1416,
+  "leading_silence_ms": 40,
+  "trailing_silence_ms": 40,
+  "playback_gain": 0.5,
+  "candidate": "candidate-02",
+  "sha256": "ad30695e0777bfb61d9dc4b4ddb7ca2fb81a11c3197ce34455eb375de995d7dc",
+  "selected_by_owner": true
+}

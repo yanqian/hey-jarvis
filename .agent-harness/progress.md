@@ -4,6 +4,39 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F120 provider-native coding and owner-led bilingual target-Mac acceptance pass.
+Each wake now captures one bounded `en` or `zh-CN` preference and carries it as
+an explicit cue locale; the browser preloads all four validated canonical
+assets before arming, uses the snapshot for both ACK and farewell, and never
+uses UI state, GPT output, transcription, or conversation language to choose a
+fixed cue. Switching Settings affects the UI immediately but fixed cues only on
+the next wake. Existing ACK input gating, cached-farewell no-response behavior,
+exactly-once cleanup, and per-turn Realtime discussion language remain intact.
+The owner confirmed complete English and Chinese wake/discussion/farewell/
+rewake flows on the refreshed Debug app. Focused tests, 470 project tests, 12
+sidecar tests, 30 Rust tests, JavaScript syntax, Realtime fake smoke, and the
+bundled app pass. Coding and live evidence are in
+`.agent-harness/runs/F120-fast-coding.md` and
+`.agent-harness/runs/F120-live-acceptance.md`; separate cold-start approval is
+recorded as `EVAL_PASS: F120` in
+`.agent-harness/runs/20260805T170500Z-F120-evaluation-pass.md`.
+
+F119 provider-native coding, bounded paid generation, and owner selection are
+complete. The owner authorized at most three English ACK and three English
+farewell generations; exactly six successful `gpt-4o-mini-tts` / `alloy`
+calls produced validated candidates, with no retry or extra call. After
+auditioning all candidates on the target Mac, the owner selected warm
+`candidate-02` for both `I'm here. Yes?` (1,416 ms) and `See you.` (738 ms).
+Locale-explicit canonical WAVs and privacy-safe manifests validate at 24 kHz
+mono PCM, gain 0.5, 40 ms leading/trailing silence, and exact SHA-256 digests.
+They prepare byte-identically and are declared beside the unchanged Mandarin
+assets in Tauri and sidecar packaging. Eighteen focused tests and a current
+Debug build pass. Final recovery passes 465 project tests, 11 Mac
+frontend/fake-sidecar tests, 30 Rust tests, and all smoke paths. Separate
+cold-start evaluation passed; evidence is in
+`.agent-harness/runs/F119-fast-coding.md` and
+`.agent-harness/runs/20260805T164338Z-F119-evaluation-pass.md`.
+
 F121 provider-native coding and native visual acceptance are complete. The
 Language setting now presents one heading, one combined timing explanation,
 and the unchanged selector; it aligns as one row at regular widths and stacks

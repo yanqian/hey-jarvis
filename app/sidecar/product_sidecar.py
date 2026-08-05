@@ -42,6 +42,10 @@ CACHED_ACKNOWLEDGEMENT_RESOURCE = Path("assets/realtime_acknowledgement_alloy_zh
 CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE = Path("assets/realtime_acknowledgement_alloy_zh.json")
 CACHED_FAREWELL_RESOURCE = Path("assets/realtime_farewell_alloy_zh.wav")
 CACHED_FAREWELL_MANIFEST_RESOURCE = Path("assets/realtime_farewell_alloy_zh.json")
+ENGLISH_CACHED_ACKNOWLEDGEMENT_RESOURCE = Path("assets/realtime_acknowledgement_alloy_en.wav")
+ENGLISH_CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE = Path("assets/realtime_acknowledgement_alloy_en.json")
+ENGLISH_CACHED_FAREWELL_RESOURCE = Path("assets/realtime_farewell_alloy_en.wav")
+ENGLISH_CACHED_FAREWELL_MANIFEST_RESOURCE = Path("assets/realtime_farewell_alloy_en.json")
 PRIVATE_BOOTSTRAP_MAX_BYTES = 4096
 OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 DIAGNOSTIC_LIMIT_BYTES = 512 * 1024
@@ -231,6 +235,16 @@ class ProductRuntime:
         ).resolve()
         cached_farewell = (resource_dir / CACHED_FAREWELL_RESOURCE).resolve()
         cached_farewell_manifest = (resource_dir / CACHED_FAREWELL_MANIFEST_RESOURCE).resolve()
+        english_cached_acknowledgement = (
+            resource_dir / ENGLISH_CACHED_ACKNOWLEDGEMENT_RESOURCE
+        ).resolve()
+        english_cached_acknowledgement_manifest = (
+            resource_dir / ENGLISH_CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE
+        ).resolve()
+        english_cached_farewell = (resource_dir / ENGLISH_CACHED_FAREWELL_RESOURCE).resolve()
+        english_cached_farewell_manifest = (
+            resource_dir / ENGLISH_CACHED_FAREWELL_MANIFEST_RESOURCE
+        ).resolve()
         settings = replace(
             settings,
             wake_acknowledgement_audio_path=acknowledgement,
@@ -259,6 +273,10 @@ class ProductRuntime:
             cached_acknowledgement_manifest_path=cached_acknowledgement_manifest,
             cached_farewell_audio_path=cached_farewell,
             cached_farewell_manifest_path=cached_farewell_manifest,
+            english_cached_acknowledgement_audio_path=english_cached_acknowledgement,
+            english_cached_acknowledgement_manifest_path=english_cached_acknowledgement_manifest,
+            english_cached_farewell_audio_path=english_cached_farewell,
+            english_cached_farewell_manifest_path=english_cached_farewell_manifest,
             app_language_path=app_support_dir / "preferences-v1.json",
         )
         server_thread = threading.Thread(

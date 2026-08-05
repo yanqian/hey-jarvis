@@ -178,6 +178,7 @@ class HandoffCoordinator:
         tool_provider_config: object | None = None,
         tool_http_client: object | None = None,
         tool_now_provider: Callable[[], datetime] | None = None,
+        app_language_provider: Callable[[], str] = lambda: "en",
     ) -> None:
         if acknowledgement_mode not in ACKNOWLEDGEMENT_MODES:
             raise ValueError("acknowledgement_mode must be 'cached', 'realtime', or 'local'")
@@ -186,6 +187,7 @@ class HandoffCoordinator:
         self._wake_lease = wake_lease
         self._clock = clock
         self._session_ids = session_ids
+        self._app_language_provider = app_language_provider
         self._lock = threading.RLock()
         self._closing = False
         self._closed = False
@@ -193,6 +195,7 @@ class HandoffCoordinator:
         self._host_id: str | None = None
         self._state = HandoffState.WAKE_OWNED
         self._session_id: str | None = None
+        self._active_cue_locale: str | None = None
         self._transport_connected = False
         self._session_created = False
         self._session_configured = False
@@ -434,10 +437,17 @@ class HandoffCoordinator:
             session_id = self._session_ids()
             if not _SAFE_VALUE.fullmatch(session_id):
                 raise HandoffError("Session identity was invalid")
+            try:
+                cue_locale = self._app_language_provider()
+            except Exception:
+                cue_locale = "en"
+            if cue_locale not in {"en", "zh-CN"}:
+                cue_locale = "en"
             if self._wake_lease.is_open:
                 self._wake_lease.close()
                 self._record("wake_microphone_closed", reason="handoff")
             self._session_id = session_id
+            self._active_cue_locale = cue_locale
             self._transport_connected = False
             self._session_created = False
             self._session_configured = False
@@ -461,8 +471,8 @@ class HandoffCoordinator:
             self._state = HandoffState.HOST_STARTING
             input_level_diagnostics = self._input_level_diagnostics_next
             self._input_level_diagnostics_next = False
-            self._record("handoff_queued", session_id=session_id)
-            detail: dict[str, object] = {}
+            self._record("handoff_queued", session_id=session_id, cue_locale=cue_locale)
+            detail: dict[str, object] = {"cue_locale": cue_locale}
             if input_level_diagnostics:
                 detail["input_level_diagnostics"] = True
             if self._active_acknowledgement_mode == "realtime":
@@ -916,6 +926,7 @@ class HandoffCoordinator:
     def _finish_handoff(self, result: str) -> None:
         session_id = self._session_id
         self._session_id = None
+        self._active_cue_locale = None
         self._transport_connected = False
         self._session_created = False
         self._session_configured = False

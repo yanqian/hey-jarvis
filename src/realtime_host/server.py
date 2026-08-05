@@ -21,6 +21,7 @@ from typing import Callable, Mapping
 
 from src.audio_input import open_microphone_stream
 from src.config import ConfigError, DEFAULT_REALTIME_END_PHRASES, load_settings
+from src.english_voice_cues import EnglishVoiceCueError, load_candidate as load_english_voice_cue
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffError, SoundDeviceWakeLease
 from src.realtime_ack_asset import (
     RealtimeAckAssetError,
@@ -65,6 +66,19 @@ class MemoryWakeLease:
 
     def close(self) -> None:
         self.is_open = False
+
+
+def read_app_language(path: Path | None) -> str:
+    if not isinstance(path, Path):
+        return "en"
+    try:
+        raw = path.read_bytes()
+        if len(raw) > 4096:
+            return "en"
+        value = json.loads(raw).get("app_language")
+    except (OSError, ValueError, AttributeError):
+        return "en"
+    return value if value in {"en", "zh-CN"} else "en"
 
 
 def load_host_config(env: Mapping[str, str] | None = None, env_file: str | Path = ".env") -> tuple[str, str, str]:
@@ -320,6 +334,8 @@ class HostHTTPServer(ThreadingHTTPServer):
     cached_acknowledgement_manifest: dict[str, object] | None
     cached_farewell_audio: bytes | None
     cached_farewell_manifest: dict[str, object] | None
+    cached_acknowledgements: dict[str, tuple[bytes, dict[str, object]]]
+    cached_farewells: dict[str, tuple[bytes, dict[str, object]]]
     app_language_path: Path | None
 
 
@@ -341,6 +357,10 @@ def build_server(
     cached_acknowledgement_manifest_path: str | Path | None = None,
     cached_farewell_audio_path: str | Path | None = None,
     cached_farewell_manifest_path: str | Path | None = None,
+    english_cached_acknowledgement_audio_path: str | Path | None = None,
+    english_cached_acknowledgement_manifest_path: str | Path | None = None,
+    english_cached_farewell_audio_path: str | Path | None = None,
+    english_cached_farewell_manifest_path: str | Path | None = None,
     app_language_path: str | Path | None = None,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
@@ -379,6 +399,40 @@ def build_server(
             or cached_farewell_manifest.get("playback_gain") != settings.realtime_output_volume
         ):
             raise HostServerError("Cached Realtime farewell voice or gain does not match settings")
+    english_paths = (
+        english_cached_acknowledgement_audio_path,
+        english_cached_acknowledgement_manifest_path,
+        english_cached_farewell_audio_path,
+        english_cached_farewell_manifest_path,
+    )
+    if any(path is not None for path in english_paths) and not all(path is not None for path in english_paths):
+        raise HostServerError("All English cached voice cue assets must be configured together")
+    english_ack: tuple[bytes, dict[str, object]] | None = None
+    english_farewell: tuple[bytes, dict[str, object]] | None = None
+    if all(path is not None for path in english_paths):
+        english_ack_audio_path = Path(english_cached_acknowledgement_audio_path)
+        english_ack_manifest_path = Path(english_cached_acknowledgement_manifest_path)
+        english_farewell_audio_path = Path(english_cached_farewell_audio_path)
+        english_farewell_manifest_path = Path(english_cached_farewell_manifest_path)
+        if (
+            english_ack_manifest_path != english_ack_audio_path.with_suffix(".json")
+            or english_farewell_manifest_path != english_farewell_audio_path.with_suffix(".json")
+        ):
+            raise HostServerError("English cached voice cue manifests did not match their audio paths")
+        try:
+            english_ack = load_english_voice_cue(english_ack_audio_path, selected_required=True)
+            english_farewell = load_english_voice_cue(english_farewell_audio_path, selected_required=True)
+        except EnglishVoiceCueError as exc:
+            raise HostServerError(str(exc)) from exc
+        if english_ack[1].get("cue") != "ack" or english_farewell[1].get("cue") != "farewell":
+            raise HostServerError("English cached voice cue types were invalid")
+        if settings is not None and any(
+            manifest.get("voice") != settings.realtime_voice
+            or manifest.get("playback_gain") != settings.realtime_output_volume
+            for _, manifest in (english_ack, english_farewell)
+        ):
+            raise HostServerError("English cached voice cue voice or gain does not match settings")
+    language_path = Path(app_language_path) if app_language_path is not None else None
     lease = SoundDeviceWakeLease(open_microphone_stream) if real_microphone else MemoryWakeLease()
     server = HostHTTPServer((host, port), HostRequestHandler)
     server.coordinator = HandoffCoordinator(
@@ -389,6 +443,7 @@ def build_server(
         end_phrases=end_phrases,
         tool_provider_config=tool_provider_config,
         tool_http_client=tool_http_client,
+        app_language_provider=lambda: read_app_language(language_path),
     )
     server.settings = settings
     server.capability_lease = capability_lease
@@ -399,7 +454,16 @@ def build_server(
     server.cached_acknowledgement_manifest = cached_manifest
     server.cached_farewell_audio = cached_farewell_audio
     server.cached_farewell_manifest = cached_farewell_manifest
-    server.app_language_path = Path(app_language_path) if app_language_path is not None else None
+    server.cached_acknowledgements = {}
+    server.cached_farewells = {}
+    if isinstance(cached_audio, bytes) and isinstance(cached_manifest, dict):
+        server.cached_acknowledgements["zh-CN"] = (cached_audio, cached_manifest)
+    if isinstance(cached_farewell_audio, bytes) and isinstance(cached_farewell_manifest, dict):
+        server.cached_farewells["zh-CN"] = (cached_farewell_audio, cached_farewell_manifest)
+    if english_ack is not None and english_farewell is not None:
+        server.cached_acknowledgements["en"] = english_ack
+        server.cached_farewells["en"] = english_farewell
+    server.app_language_path = language_path
     return server
 
 
@@ -450,18 +514,10 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             )
             return
         if parsed.path == "/api/app-language":
-            locale = "en"
-            language_path = getattr(self.server, "app_language_path", None)
-            if isinstance(language_path, Path):
-                try:
-                    raw = language_path.read_bytes()
-                    if len(raw) <= 4096:
-                        value = json.loads(raw).get("app_language")
-                        if value in {"en", "zh-CN"}:
-                            locale = value
-                except (OSError, ValueError, AttributeError):
-                    pass
-            self._json(HTTPStatus.OK, {"app_language": locale})
+            self._json(
+                HTTPStatus.OK,
+                {"app_language": read_app_language(getattr(self.server, "app_language_path", None))},
+            )
             return
         if parsed.path == "/api/realtime-settings":
             try:
@@ -496,9 +552,46 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 }
             else:
                 payload["farewell"] = {"mode": "realtime"}
+            acknowledgement_assets = getattr(host_server, "cached_acknowledgements", {})
+            farewell_assets = getattr(host_server, "cached_farewells", {})
+            if mode == "cached" and farewell_mode == "cached":
+                voice_cues: dict[str, object] = {}
+                for locale in ("en", "zh-CN"):
+                    acknowledgement_asset = acknowledgement_assets.get(locale)
+                    farewell_asset = farewell_assets.get(locale)
+                    if acknowledgement_asset is None or farewell_asset is None:
+                        continue
+                    acknowledgement_locale_manifest = acknowledgement_asset[1]
+                    farewell_locale_manifest = farewell_asset[1]
+                    encoded_locale = urllib.parse.quote(locale, safe="")
+                    voice_cues[locale] = {
+                        "acknowledgement": {
+                            "mode": "cached",
+                            "url": f"/acknowledgement.wav?locale={encoded_locale}",
+                            "duration_ms": acknowledgement_locale_manifest["duration_ms"],
+                            "sha256": acknowledgement_locale_manifest["sha256"],
+                        },
+                        "farewell": {
+                            "mode": "cached",
+                            "url": f"/farewell.wav?locale={encoded_locale}",
+                            "duration_ms": farewell_locale_manifest["duration_ms"],
+                            "sha256": farewell_locale_manifest["sha256"],
+                        },
+                    }
+                if voice_cues:
+                    payload["voice_cues"] = voice_cues
             self._json(HTTPStatus.OK, payload)
             return
         if parsed.path == "/acknowledgement.wav":
+            query = urllib.parse.parse_qs(parsed.query)
+            if "locale" in query:
+                locale = query["locale"][0]
+                asset = getattr(self.server, "cached_acknowledgements", {}).get(locale)
+                if locale not in {"en", "zh-CN"} or asset is None:
+                    self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                    return
+                self._bytes(HTTPStatus.OK, asset[0], "audio/wav")
+                return
             body = getattr(self.server, "cached_acknowledgement_audio", None)
             if not isinstance(body, bytes):
                 self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
@@ -506,6 +599,15 @@ class HostRequestHandler(BaseHTTPRequestHandler):
             self._bytes(HTTPStatus.OK, body, "audio/wav")
             return
         if parsed.path == "/farewell.wav":
+            query = urllib.parse.parse_qs(parsed.query)
+            if "locale" in query:
+                locale = query["locale"][0]
+                asset = getattr(self.server, "cached_farewells", {}).get(locale)
+                if locale not in {"en", "zh-CN"} or asset is None:
+                    self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                    return
+                self._bytes(HTTPStatus.OK, asset[0], "audio/wav")
+                return
             body = getattr(self.server, "cached_farewell_audio", None)
             if not isinstance(body, bytes):
                 self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
