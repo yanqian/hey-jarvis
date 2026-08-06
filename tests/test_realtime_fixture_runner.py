@@ -68,6 +68,10 @@ class FakeHost:
 
 
 class FixtureRunnerTests(unittest.TestCase):
+    def test_runner_uses_one_flat_canonical_fixture_root(self):
+        runner = FixtureAcceptanceRunner(root=Path("artifacts/audio/fixtures"))
+        self.assertEqual(runner._fixture_path("wake"), Path("artifacts/audio/fixtures/wake.wav"))
+
     def run_host(self, host: FakeHost):
         runner = FixtureAcceptanceRunner(play=host.play, request=host.request, sleep=lambda _seconds: None)
         with patch("src.realtime.fixture_runner.load_manifest", return_value={name: object() for name in ("wake", "turn-1", "turn-2", "calculator", "barge-in", "end-phrase")}):

@@ -12,7 +12,8 @@ from typing import Callable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "evals" / "realtime" / "scenario.schema.json"
-DEFAULT_FIXTURE_ROOT = PROJECT_ROOT / "tmp" / "realtime-fixtures"
+DEFAULT_FIXTURE_ROOT = PROJECT_ROOT / "artifacts" / "audio" / "fixtures"
+DEFAULT_EVIDENCE_ROOT = PROJECT_ROOT / "artifacts" / "evaluations" / "realtime"
 HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
         "command_to_token_ms",
@@ -333,5 +334,4 @@ class RealtimeRunnerBase:
 
     @staticmethod
     def default_wake_fixture() -> Path:
-        replay = DEFAULT_FIXTURE_ROOT / "replay" / "wake.wav"
-        return replay if replay.exists() else DEFAULT_FIXTURE_ROOT / "wake.wav"
+        return DEFAULT_FIXTURE_ROOT / "wake.wav"

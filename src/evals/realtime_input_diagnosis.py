@@ -12,11 +12,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from src.evals.realtime_barge_in import DEFAULT_FIXTURE_ROOT
+from src.evals.realtime_common import DEFAULT_EVIDENCE_ROOT, DEFAULT_FIXTURE_ROOT
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_EVIDENCE_PATH = PROJECT_ROOT / "tmp" / "realtime-evals" / "F060-diagnosis.json"
+DEFAULT_EVIDENCE_PATH = DEFAULT_EVIDENCE_ROOT / "F060-diagnosis.json"
 SAFE_EVENT_TYPES = frozenset(
     {
         "host_connected",
@@ -611,8 +611,7 @@ class AssistedInputDiagnosisRunner:
 
     @staticmethod
     def _default_wake_fixture() -> Path:
-        replay = DEFAULT_FIXTURE_ROOT / "replay" / "wake.wav"
-        return replay if replay.exists() else DEFAULT_FIXTURE_ROOT / "wake.wav"
+        return DEFAULT_FIXTURE_ROOT / "wake.wav"
 
     @staticmethod
     def _evidence(

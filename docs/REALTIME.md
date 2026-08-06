@@ -207,8 +207,18 @@ python -m src.realtime.fixtures record barge-in --seconds 4
 python -m src.realtime.fixtures list
 ```
 
-Fixtures live under `tmp/realtime-fixtures/`. The manifest retains duration and
-capture health, not transcript content.
+Fixtures live under `artifacts/audio/fixtures/`. Each scenario has one
+canonical replay WAV; the manifest retains duration, format, and capture
+health, not transcript content. Original recordings used to create a replay
+are private local source material and are not required for evaluation.
+
+To create a canonical replay from a private source directory:
+
+```bash
+python -m src.realtime.fixtures trim turn-1 \
+  --start 0.3 --end 2.8 \
+  --source-root /path/to/private-realtime-recordings
+```
 
 ## Evaluation commands
 
@@ -222,7 +232,7 @@ The candidate workflow is deliberately separate from normal conversations. It
 must be explicitly armed for one wake, digitally records only the remote
 WebRTC stream correlated to `purpose=acknowledgement`, validates the fixed
 Mandarin phrase, and writes a bounded WAV plus manifest under the Git-ignored
-`tmp/realtime-ack-candidates/` directory. It never records the microphone or
+`artifacts/audio/candidates/mandarin-ack/` directory. It never records the microphone or
 automatically retains answers and farewells.
 
 After starting and arming the ordinary Realtime host, one explicitly authorized
@@ -236,7 +246,7 @@ Audition candidates locally. Promote only the exact candidate the owner selects:
 
 ```bash
 python -m src.evals.realtime_ack_capture promote \
-  tmp/realtime-ack-candidates/candidate-01.wav \
+  artifacts/audio/candidates/mandarin-ack/candidate-01.wav \
   --owner-confirmed
 python -m src.evals.realtime_ack_capture prepare
 ```

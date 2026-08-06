@@ -12,9 +12,17 @@ build/
 tmp/*.wav
 tmp/*.mp3
 tmp/*.m4a
+tmp/*.log
 tmp/realtime-fixtures/
 tmp/realtime-ack-candidates/
+tmp/realtime-farewell-candidates/
+tmp/realtime-english-cue-candidates/
+tmp/realtime-evals/
 tmp/input.wav
 tmp/output.mp3
+artifacts/audio/*
+!artifacts/audio/README.md
+artifacts/evaluations/*
+!artifacts/evaluations/README.md
 var/*
 !var/.gitkeep

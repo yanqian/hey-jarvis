@@ -6,7 +6,13 @@ import unittest
 import wave
 from pathlib import Path
 
-from src.realtime.fixtures import FixtureError, load_manifest, record_fixture, trim_replay_fixture
+from src.realtime.fixtures import (
+    DEFAULT_FIXTURE_ROOT,
+    FixtureError,
+    load_manifest,
+    record_fixture,
+    trim_replay_fixture,
+)
 
 
 class FakeSource:
@@ -25,6 +31,9 @@ class FakeSource:
 
 
 class RealtimeFixtureTests(unittest.TestCase):
+    def test_default_fixture_root_is_the_canonical_audio_archive(self):
+        self.assertEqual(DEFAULT_FIXTURE_ROOT.parts[-3:], ("artifacts", "audio", "fixtures"))
+
     def test_records_private_wav_and_metadata_without_transcript(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -54,17 +63,25 @@ class RealtimeFixtureTests(unittest.TestCase):
         self.assertTrue(source.closed)
 
     def test_trim_creates_replay_derivative_without_changing_original(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as output:
+            source_root = Path(tmp)
+            root = Path(output)
             source = FakeSource([b"\x01\x00" * 16000])
-            original = record_fixture(source, name="turn-1", duration_seconds=1.0, root=root)
-            replay = trim_replay_fixture(name="turn-1", start_seconds=0.25, end_seconds=0.75, root=root)
+            original = record_fixture(source, name="turn-1", duration_seconds=1.0, root=source_root)
+            replay = trim_replay_fixture(
+                name="turn-1",
+                start_seconds=0.25,
+                end_seconds=0.75,
+                root=root,
+                source_root=source_root,
+            )
             self.assertEqual(replay.duration_seconds, 0.5)
             self.assertNotEqual(replay.sha256, original.sha256)
-            with wave.open(str(root / "replay" / "turn-1.wav"), "rb") as audio:
-                self.assertEqual(audio.getnframes(), 8000)
             with wave.open(str(root / "turn-1.wav"), "rb") as audio:
+                self.assertEqual(audio.getnframes(), 8000)
+            with wave.open(str(source_root / "turn-1.wav"), "rb") as audio:
                 self.assertEqual(audio.getnframes(), 16000)
+            self.assertEqual(load_manifest(root)["turn-1"].sha256, replay.sha256)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from src.evals.realtime_common import (
+    DEFAULT_EVIDENCE_ROOT,
     PROJECT_ROOT,
     RealtimeRunFailure,
     RealtimeRunnerBase,
@@ -19,7 +20,7 @@ from src.evals.realtime_common import (
 )
 
 
-DEFAULT_EVIDENCE_PATH = PROJECT_ROOT / "tmp" / "realtime-evals" / "ACK-AB-evidence.json"
+DEFAULT_EVIDENCE_PATH = DEFAULT_EVIDENCE_ROOT / "ACK-AB-evidence.json"
 MODES = ("local", "realtime")
 VERDICTS = frozenset({"local", "realtime", "no_difference", "inconclusive"})
 SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")

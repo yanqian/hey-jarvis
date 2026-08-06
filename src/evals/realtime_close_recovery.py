@@ -10,6 +10,7 @@ from pathlib import Path
 
 from src.evals.realtime_common import (
     AUDIO_ANALYSIS_TIMING_FIELDS,
+    DEFAULT_EVIDENCE_ROOT,
     PROJECT_ROOT,
     RealtimeRunFailure,
     RealtimeRunnerBase,
@@ -21,7 +22,7 @@ from src.evals.realtime_common import (
 
 
 DEFAULT_SCENARIO_PATH = PROJECT_ROOT / "evals/realtime/scenarios/RT004.json"
-DEFAULT_EVIDENCE_PATH = PROJECT_ROOT / "tmp/realtime-evals/RT004-evidence.json"
+DEFAULT_EVIDENCE_PATH = DEFAULT_EVIDENCE_ROOT / "RT004-evidence.json"
 CYCLE_TYPES = (
     "wake_microphone_closed",
     "host_microphone_requested",

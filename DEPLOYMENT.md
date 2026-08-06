@@ -188,8 +188,9 @@ rollback. It does not use this source-update procedure or an automatic updater.
 - `var/ack.mp3` — generated wake acknowledgement.
 - `tmp/input.wav` — most recent pipeline question recording.
 - `tmp/output.mp3` — most recent pipeline synthesized answer.
-- `tmp/realtime-fixtures/` — private local Realtime fixtures.
-- `tmp/realtime-evals/` — local sanitized evaluation evidence.
+- `artifacts/audio/fixtures/` — private local Realtime replay fixtures.
+- `artifacts/evaluations/realtime/` — local sanitized evaluation evidence.
+- `tmp/` — disposable runtime recordings, generated audio, and logs.
 
 For symptoms and recovery steps, use
 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).

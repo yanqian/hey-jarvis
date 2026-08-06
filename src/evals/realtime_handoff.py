@@ -10,6 +10,7 @@ from pathlib import Path
 
 from src.evals.realtime_common import (
     AUDIO_ANALYSIS_TIMING_FIELDS,
+    DEFAULT_EVIDENCE_ROOT,
     HANDOFF_TIMING_FIELDS,
     PROJECT_ROOT,
     RealtimeRunFailure,
@@ -22,7 +23,7 @@ from src.evals.realtime_common import (
 
 
 DEFAULT_SCENARIO_PATH = PROJECT_ROOT / "evals" / "realtime" / "scenarios" / "RT001.json"
-DEFAULT_EVIDENCE_PATH = PROJECT_ROOT / "tmp" / "realtime-evals" / "RT001-evidence.json"
+DEFAULT_EVIDENCE_PATH = DEFAULT_EVIDENCE_ROOT / "RT001-evidence.json"
 ORDERED_EVENTS = (
     "wake_confirmed",
     "wake_microphone_closed",

@@ -352,7 +352,7 @@ def build_server(
     tool_http_client: object | None = None,
     settings: object | None = None,
     capability_lease: str | None = None,
-    acknowledgement_candidate_root: str | Path = "tmp/realtime-ack-candidates",
+        acknowledgement_candidate_root: str | Path = "artifacts/audio/candidates/mandarin-ack",
     cached_acknowledgement_audio_path: str | Path | None = None,
     cached_acknowledgement_manifest_path: str | Path | None = None,
     cached_farewell_audio_path: str | Path | None = None,

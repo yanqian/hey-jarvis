@@ -15,6 +15,7 @@ from pathlib import Path
 
 from src.evals.realtime_common import (
     DEFAULT_FIXTURE_ROOT,
+    DEFAULT_EVIDENCE_ROOT,
     PROJECT_ROOT,
     RealtimeRunFailure,
     RealtimeRunnerBase,
@@ -26,7 +27,7 @@ from src.realtime.fixtures import load_manifest
 
 
 DEFAULT_SCENARIO_PATH = PROJECT_ROOT / "evals/realtime/scenarios/RT002.json"
-DEFAULT_EVIDENCE_PATH = PROJECT_ROOT / "tmp/realtime-evals/RT002-evidence.json"
+DEFAULT_EVIDENCE_PATH = DEFAULT_EVIDENCE_ROOT / "RT002-evidence.json"
 TURN_EVENT_TYPES = (
     "host_fixture_submitted",
     "host_response_created",
@@ -143,15 +144,7 @@ def verified_fixture(root: Path, name: str) -> Path:
         raise RealtimeScenarioError(f"RT002 fixture metadata is missing for {name}")
     path = root / f"{name}.wav"
     expected = metadata.sha256
-    replay = root / "replay" / f"{name}.wav"
-    replay_manifest = root / "replay-manifest.json"
-    if replay.exists():
-        try:
-            payload = json.loads(replay_manifest.read_text(encoding="utf-8"))
-            expected = payload["replay"][name]["sha256"]
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            raise RealtimeScenarioError(f"RT002 replay fixture metadata is invalid for {name}") from exc
-        path = replay
+    path = root / f"{name}.wav"
     if not path.exists():
         raise RealtimeScenarioError(f"RT002 fixture file is missing for {name}")
     try:

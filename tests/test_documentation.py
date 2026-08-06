@@ -307,7 +307,8 @@ class DocumentationTests(unittest.TestCase):
             "once per launched Chrome host",
             "Review `.env.example`",
             "tmp/input.wav",
-            "tmp/realtime-evals/",
+            "artifacts/audio/fixtures/",
+            "artifacts/evaluations/realtime/",
         ):
             self.assertIn(phrase, deployment)
 

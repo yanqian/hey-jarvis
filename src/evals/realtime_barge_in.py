@@ -11,12 +11,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from src.evals.realtime_common import DEFAULT_EVIDENCE_ROOT, DEFAULT_FIXTURE_ROOT as COMMON_FIXTURE_ROOT
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENARIO_PATH = PROJECT_ROOT / "evals" / "realtime" / "scenarios" / "RT003.json"
 DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "evals" / "realtime" / "scenario.schema.json"
-DEFAULT_FIXTURE_ROOT = PROJECT_ROOT / "tmp" / "realtime-fixtures"
-DEFAULT_EVIDENCE_PATH = PROJECT_ROOT / "tmp" / "realtime-evals" / "RT003-evidence.json"
+DEFAULT_FIXTURE_ROOT = COMMON_FIXTURE_ROOT
+DEFAULT_EVIDENCE_PATH = DEFAULT_EVIDENCE_ROOT / "RT003-evidence.json"
 SAFE_EVENT_FIELDS = frozenset({"type", "at_ms", "session_id", "reason"})
 SAFE_EVENT_TYPES = frozenset(
     {
@@ -587,8 +589,7 @@ class AssistedBargeInRunner:
 
     @staticmethod
     def _default_wake_fixture() -> Path:
-        replay = DEFAULT_FIXTURE_ROOT / "replay" / "wake.wav"
-        return replay if replay.exists() else DEFAULT_FIXTURE_ROOT / "wake.wav"
+        return DEFAULT_FIXTURE_ROOT / "wake.wav"
 
 
 def write_evidence(path: Path, evidence: dict[str, object]) -> None:

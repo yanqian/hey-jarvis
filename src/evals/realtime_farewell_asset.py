@@ -20,7 +20,7 @@ from src.realtime_farewell_asset import (
 )
 
 
-DEFAULT_CANDIDATE_ROOT = PROJECT_ROOT / "tmp" / "realtime-farewell-candidates"
+DEFAULT_CANDIDATE_ROOT = PROJECT_ROOT / "artifacts" / "audio" / "candidates" / "mandarin-farewell"
 DELIVERY_STYLES = {
     "warm": (
         "mandarin-farewell-v1",

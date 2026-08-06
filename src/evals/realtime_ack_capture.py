@@ -11,7 +11,7 @@ from src.evals.realtime_common import PROJECT_ROOT, RealtimeRunnerBase, Realtime
 from src.realtime_ack_asset import CANDIDATE_LABEL, prepare_selected_asset, promote_candidate
 
 
-DEFAULT_CANDIDATE_ROOT = PROJECT_ROOT / "tmp" / "realtime-ack-candidates"
+DEFAULT_CANDIDATE_ROOT = PROJECT_ROOT / "artifacts" / "audio" / "candidates" / "mandarin-ack"
 
 
 class RealtimeAckCaptureRunner(RealtimeRunnerBase):

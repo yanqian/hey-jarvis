@@ -14,7 +14,8 @@ from typing import Protocol
 from src.audio_input import DEFAULT_BLOCK_FRAMES, open_microphone_stream
 
 
-DEFAULT_FIXTURE_ROOT = Path("tmp/realtime-fixtures")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_FIXTURE_ROOT = PROJECT_ROOT / "artifacts" / "audio" / "fixtures"
 FIXTURE_NAMES = ("wake", "turn-1", "turn-2", "calculator", "barge-in", "end-phrase")
 SAMPLE_RATE = 16_000
 CHANNELS = 1
@@ -126,16 +127,21 @@ def trim_replay_fixture(
     start_seconds: float,
     end_seconds: float,
     root: Path = DEFAULT_FIXTURE_ROOT,
+    source_root: Path | None = None,
 ) -> ReplayMetadata:
-    """Create a local replay derivative while preserving the original fixture."""
+    """Create one canonical fixture from a private source recording."""
 
     if name not in FIXTURE_NAMES:
         raise FixtureError(f"fixture name must be one of: {', '.join(FIXTURE_NAMES)}")
     if start_seconds < 0 or end_seconds <= start_seconds:
         raise FixtureError("replay window must have a non-negative start before its end")
-    source_path = root / f"{name}.wav"
+    source_root = source_root or root
+    source_path = source_root / f"{name}.wav"
     if not source_path.exists():
         raise FixtureError(f"missing fixture: {source_path}")
+    output_path = root / f"{name}.wav"
+    if source_path.resolve() == output_path.resolve():
+        raise FixtureError("source_root must differ from the canonical fixture root")
     try:
         with wave.open(str(source_path), "rb") as source:
             if (source.getnchannels(), source.getsampwidth(), source.getframerate()) != (
@@ -154,9 +160,7 @@ def trim_replay_fixture(
     except wave.Error as exc:
         raise FixtureError(f"fixture WAV is invalid: {exc}") from exc
 
-    replay_root = root / "replay"
-    replay_root.mkdir(parents=True, exist_ok=True)
-    output_path = replay_root / f"{name}.wav"
+    root.mkdir(parents=True, exist_ok=True)
     with wave.open(str(output_path), "wb") as output:
         output.setnchannels(CHANNELS)
         output.setsampwidth(SAMPLE_WIDTH_BYTES)
@@ -164,13 +168,27 @@ def trim_replay_fixture(
         output.writeframes(pcm)
     metadata = ReplayMetadata(
         name=name,
-        filename=f"replay/{name}.wav",
+        filename=output_path.name,
         start_seconds=start_seconds,
         end_seconds=end_seconds,
         duration_seconds=len(pcm) / (SAMPLE_RATE * SAMPLE_WIDTH_BYTES),
         sha256=hashlib.sha256(pcm).hexdigest(),
     )
-    _update_replay_manifest(root, metadata)
+    source_metadata = load_manifest(source_root).get(name)
+    _update_manifest(
+        root,
+        FixtureMetadata(
+            name=name,
+            filename=output_path.name,
+            duration_seconds=metadata.duration_seconds,
+            sample_rate=SAMPLE_RATE,
+            channels=CHANNELS,
+            sample_width_bytes=SAMPLE_WIDTH_BYTES,
+            sha256=metadata.sha256,
+            overflow_chunks=source_metadata.overflow_chunks if source_metadata else 0,
+            recorded_at=source_metadata.recorded_at if source_metadata else datetime.now(timezone.utc).isoformat(),
+        ),
+    )
     return metadata
 
 
@@ -183,14 +201,6 @@ def _update_manifest(root: Path, metadata: FixtureMetadata) -> None:
         "fixtures": {name: asdict(value) for name, value in sorted(fixtures.items())},
     }
     (root / "manifest.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-
-def _update_replay_manifest(root: Path, metadata: ReplayMetadata) -> None:
-    path = root / "replay-manifest.json"
-    payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"schema_version": 1, "replay": {}}
-    payload["privacy"] = "local-only derivatives; never commit"
-    payload["replay"][metadata.name] = asdict(metadata)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -208,6 +218,12 @@ def main(argv: list[str] | None = None) -> int:
     trim.add_argument("name", choices=FIXTURE_NAMES)
     trim.add_argument("--start", type=float, required=True)
     trim.add_argument("--end", type=float, required=True)
+    trim.add_argument(
+        "--source-root",
+        type=Path,
+        required=True,
+        help="private directory containing the source recording",
+    )
     subparsers.add_parser("list", help="list metadata without transcribing or playing fixtures")
     args = parser.parse_args(argv)
 
@@ -218,7 +234,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "trim":
-        metadata = trim_replay_fixture(name=args.name, start_seconds=args.start, end_seconds=args.end)
+        metadata = trim_replay_fixture(
+            name=args.name,
+            start_seconds=args.start,
+            end_seconds=args.end,
+            source_root=args.source_root,
+        )
         print(f"Saved {metadata.filename}: {metadata.duration_seconds:.2f}s sha256={metadata.sha256[:12]}")
         return 0
 

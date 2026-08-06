@@ -167,8 +167,7 @@ class FixtureAcceptanceRunner:
         return self.request(f"{self.base_url}/api/report")
 
     def _fixture_path(self, name: str) -> Path:
-        replay = self.root / "replay" / f"{name}.wav"
-        return replay if replay.exists() else self.root / f"{name}.wav"
+        return self.root / f"{name}.wav"
 
     def _events(self) -> list[dict[str, object]]:
         events = self._report().get("events", [])

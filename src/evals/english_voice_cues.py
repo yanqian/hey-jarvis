@@ -23,7 +23,7 @@ from src.evals.realtime_common import PROJECT_ROOT
 from src.realtime_farewell_asset import finalize_streaming_wav
 
 
-DEFAULT_CANDIDATE_ROOT = PROJECT_ROOT / "tmp" / "realtime-english-cue-candidates"
+DEFAULT_CANDIDATE_ROOT = PROJECT_ROOT / "artifacts" / "audio" / "candidates" / "english-cues"
 STYLES = {
     "ack": {
         "light": "english-ack-light-v1",
