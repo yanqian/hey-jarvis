@@ -41,7 +41,7 @@ python3 -m src.main --text "今天有什么新闻"
 ## Files Changed
 
 - `.agent-harness/runs/F027-evaluation.md`
-- `runs/F027-evaluation.md`
+- `.agent-harness/runs/legacy-root-runs/F027-evaluation.md`
 
 ## Evaluator Result
 
