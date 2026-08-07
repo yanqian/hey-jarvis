@@ -360,6 +360,8 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
   color: #eff8f3;
   padding: 9px 34px 9px 11px;
   font: inherit;
+  font-size: 13px;
+  line-height: 1.25;
 }
 
 .language-setting select:focus-visible {

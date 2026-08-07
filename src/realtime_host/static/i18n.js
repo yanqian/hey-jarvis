@@ -2,7 +2,7 @@
   const zh="zh-CN";
   const staticZh=new Map(Object.entries({
     "Open Settings":"打开设置",Settings:"设置",Ready:"就绪","Meet your voice assistant":"认识你的语音助手",
-    "Enable hands-free audio once, then wake Jarvis with your voice.":"只需启用一次免手持音频，之后即可用语音唤醒 Jarvis。",
+    "Enable hands-free audio once, then wake Jarvis with your voice.":"只需启用一次语音助手，之后即可用语音唤醒 Jarvis。",
     "Voice controls":"语音控制","Enable voice assistant":"启用语音助手","End conversation":"结束对话",
     "Wake phrase detection stays on this Mac. Conversation audio is sent only after wake.":"唤醒词检测始终留在这台 Mac 上。只有唤醒后才会发送对话音频。",
     "Resume voice assistant":"恢复语音助手",
@@ -17,7 +17,7 @@
     "resume-required":{label:"Resume required",title:"Voice assistant paused",detail:"Open Settings or restart Hey Jarvis to restore voice listening."},
     error:{label:"Needs attention",title:"Jarvis couldn’t continue",detail:"Wake listening is safe. Try again or open Settings for recovery."},
   },"zh-CN":{
-    ready:{label:"就绪",title:"认识你的语音助手",detail:"只需启用一次免手持音频，之后即可用语音唤醒 Jarvis。"},
+    ready:{label:"就绪",title:"认识你的语音助手",detail:"只需启用一次语音助手，之后即可用语音唤醒 Jarvis。"},
     "wake-ready":{label:"正在等待唤醒",title:'等待“Hey Jarvis”',detail:"唤醒词检测始终留在这台 Mac 上。"},
     connecting:{label:"正在连接",title:"正在准备",detail:"安全会话就绪前不会发送对话音频。"},
     listening:{label:"正在聆听",title:"我在听",detail:"请自然说话，你可以继续追问或随时打断。"},

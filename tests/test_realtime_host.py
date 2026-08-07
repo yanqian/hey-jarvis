@@ -1212,8 +1212,11 @@ class RealtimeHostTests(unittest.TestCase):
     def test_static_host_is_separate_hands_free_and_secret_free(self):
         html = server.resolve_static("/")[0].decode()
         javascript = server.resolve_static("/app.js")[0].decode()
+        catalog = server.resolve_static("/i18n.js")[0].decode()
         guidance = (server.STATIC_ROOT.parent / "README.md").read_text()
         self.assertIn("Enable voice assistant", html)
+        self.assertIn("只需启用一次语音助手，之后即可用语音唤醒 Jarvis。", catalog)
+        self.assertNotIn("只需启用一次免手持音频，之后即可用语音唤醒 Jarvis。", catalog)
         self.assertIn('data-ui-state="ready"', html)
         self.assertIn('aria-live="polite"', html)
         self.assertIn("End conversation", html)

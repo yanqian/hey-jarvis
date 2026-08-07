@@ -26,7 +26,7 @@ class MacAppShellTests(unittest.TestCase):
 
         window = config["app"]["windows"][0]
         self.assertEqual(window["title"], "Hey Jarvis")
-        self.assertEqual((window["width"], window["height"]), (560, 600))
+        self.assertEqual((window["width"], window["height"]), (820, 640))
         self.assertEqual((window["minWidth"], window["minHeight"]), (480, 520))
 
     def test_product_does_not_import_or_copy_spike_source(self):
@@ -331,6 +331,9 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("<title>Hey Jarvis</title>", home_page)
         self.assertNotIn("Hey Jarvis Settings", settings_page)
         self.assertIn('"Hey Jarvis Settings",\n            "Hey Jarvis 设置"', native)
+        settings_window = native.split("fn open_settings_window", 1)[1].split("fn request_open_settings", 1)[0]
+        self.assertIn(".inner_size(820.0, 640.0)", settings_window)
+        self.assertIn(".min_inner_size(700.0, 520.0)", settings_window)
         self.assertNotIn('class="eyebrow"', settings_page)
         self.assertIn('id="settings-title" class="context-title">Settings</h1>', settings_page)
         self.assertIn('class="app-header returning-header"', settings_page)
@@ -483,6 +486,7 @@ class MacAppShellTests(unittest.TestCase):
         )
         styles = (APP / "src" / "styles.css").read_text(encoding="utf-8")
         self.assertIn(".language-setting {", styles)
+        self.assertIn("font-size: 13px;", styles.split(".language-setting select", 1)[1].split("}", 1)[0])
         language_rule = styles.split(".language-setting {", 1)[1].split("}", 1)[0]
         self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);", language_rule)
         self.assertNotIn(".language-row", styles)
