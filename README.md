@@ -162,6 +162,8 @@ Start with the document matching your task:
 - [Trusted trial evidence](feedback/README.md) — structured feedback and
   release-blocker gate; it never publishes the unsigned DMG.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common failures and audio debug.
+- [Project structure](docs/PROJECT_STRUCTURE.md) — where product code, tests,
+  evaluations, artifacts, and runtime output belong.
 
 Developer references:
 
