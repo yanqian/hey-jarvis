@@ -2740,6 +2740,26 @@
       "depends_on": [
         "F118"
       ]
+    },
+    {
+      "id": "F122",
+      "title": "Add a persisted low-glare day appearance",
+      "description": "Add a Day appearance option using the approved soft paper-white palette while preserving Night as the default, applying the choice immediately across Settings and the main voice page without restarting the voice runtime.",
+      "acceptance": [
+        "New or migrated preferences default to the existing night appearance, accept only `night` and `day`, preserve Smart Speaker and app-language values, and fail closed on invalid or unknown appearance values.",
+        "General presents one accessible Appearance setting with Night and Day choices; changing it persists immediately, updates the open page without restarting the sidecar or disturbing an active conversation, and remains selected after relaunch.",
+        "Day uses the approved soft paper-white treatment with muted green surfaces, readable dark text, restrained borders, and reduced glow/high-contrast shadow so recording reflections are lower than the current night treatment; Night remains visually unchanged.",
+        "The main voice page, Settings page, returning state, and Resume-required state all use the selected appearance, while native menus, credentials, audio cues, microphone behavior, language behavior, and runtime lifecycle remain unchanged.",
+        "Focused preference migration/validation, DOM/catalog/CSS contracts, JavaScript syntax, Rust and Mac shell tests, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credential mutation, microphone request, speaker, or paid API use."
+      ],
+      "passes": false,
+      "status": "in_progress",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1",
+      "depends_on": [
+        "F121"
+      ]
     }
   ]
 }

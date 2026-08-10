@@ -279,12 +279,12 @@ class RealtimeHostTests(unittest.TestCase):
 
             handler.do_GET()
             preferences.write_text(
-                json.dumps({"version": 2, "app_language": "zh-CN"}),
+                json.dumps({"version": 3, "app_language": "zh-CN", "app_theme": "day"}),
                 encoding="utf-8",
             )
             handler.do_GET()
             preferences.write_text(
-                json.dumps({"version": 2, "app_language": "unsupported"}),
+                json.dumps({"version": 3, "app_language": "unsupported", "app_theme": "day"}),
                 encoding="utf-8",
             )
             handler.do_GET()
@@ -292,9 +292,9 @@ class RealtimeHostTests(unittest.TestCase):
             self.assertEqual(
                 responses,
                 [
-                    (HTTPStatus.OK, {"app_language": "en"}),
-                    (HTTPStatus.OK, {"app_language": "zh-CN"}),
-                    (HTTPStatus.OK, {"app_language": "en"}),
+                    (HTTPStatus.OK, {"app_language": "en", "app_theme": "night"}),
+                    (HTTPStatus.OK, {"app_language": "zh-CN", "app_theme": "day"}),
+                    (HTTPStatus.OK, {"app_language": "en", "app_theme": "day"}),
                 ],
             )
 

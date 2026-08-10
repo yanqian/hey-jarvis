@@ -2,9 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const PREFERENCES_VERSION: u8 = 2;
+const PREFERENCES_VERSION: u8 = 3;
 pub const ENGLISH: &str = "en";
 pub const SIMPLIFIED_CHINESE: &str = "zh-CN";
+pub const NIGHT_THEME: &str = "night";
+pub const DAY_THEME: &str = "day";
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -12,6 +14,7 @@ pub struct Preferences {
     pub version: u8,
     pub smart_speaker_mode: bool,
     pub app_language: String,
+    pub app_theme: String,
 }
 
 impl Default for Preferences {
@@ -20,6 +23,7 @@ impl Default for Preferences {
             version: PREFERENCES_VERSION,
             smart_speaker_mode: false,
             app_language: ENGLISH.into(),
+            app_theme: NIGHT_THEME.into(),
         }
     }
 }
@@ -31,11 +35,27 @@ struct PreferencesV1 {
     smart_speaker_mode: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreferencesV2 {
+    version: u8,
+    smart_speaker_mode: bool,
+    app_language: String,
+}
+
 pub fn normalize_language(value: &str) -> Result<&'static str, String> {
     match value {
         ENGLISH => Ok(ENGLISH),
         SIMPLIFIED_CHINESE => Ok(SIMPLIFIED_CHINESE),
         _ => Err("unsupported_app_language".into()),
+    }
+}
+
+pub fn normalize_theme(value: &str) -> Result<&'static str, String> {
+    match value {
+        NIGHT_THEME => Ok(NIGHT_THEME),
+        DAY_THEME => Ok(DAY_THEME),
+        _ => Err("unsupported_app_theme".into()),
     }
 }
 
@@ -94,10 +114,25 @@ pub fn load(path: &Path) -> Result<Preferences, String> {
         save(path, &migrated)?;
         return Ok(migrated);
     }
+    if value.get("version").and_then(serde_json::Value::as_u64) == Some(2) {
+        let legacy: PreferencesV2 =
+            serde_json::from_value(value).map_err(|_| "preferences_corrupt".to_string())?;
+        if legacy.version != 2 || normalize_language(&legacy.app_language).is_err() {
+            return Err("preferences_corrupt".into());
+        }
+        let migrated = Preferences {
+            smart_speaker_mode: legacy.smart_speaker_mode,
+            app_language: legacy.app_language,
+            ..Preferences::default()
+        };
+        save(path, &migrated)?;
+        return Ok(migrated);
+    }
     let preferences: Preferences =
         serde_json::from_value(value).map_err(|_| "preferences_corrupt".to_string())?;
     if preferences.version != PREFERENCES_VERSION
         || normalize_language(&preferences.app_language).is_err()
+        || normalize_theme(&preferences.app_theme).is_err()
     {
         return Err("preferences_corrupt".into());
     }
@@ -106,6 +141,7 @@ pub fn load(path: &Path) -> Result<Preferences, String> {
 
 pub fn save(path: &Path, preferences: &Preferences) -> Result<(), String> {
     normalize_language(&preferences.app_language).map_err(|_| "preferences_corrupt")?;
+    normalize_theme(&preferences.app_theme).map_err(|_| "preferences_corrupt")?;
     let parent = path
         .parent()
         .ok_or_else(|| "preferences_unavailable".to_string())?;
@@ -131,12 +167,16 @@ mod tests {
         let state_path = path(&directory);
         let _ = std::fs::remove_dir_all(&directory);
         let initial = load(&state_path).unwrap();
-        assert!(matches!(initial.app_language.as_str(), ENGLISH | SIMPLIFIED_CHINESE));
+        assert!(matches!(
+            initial.app_language.as_str(),
+            ENGLISH | SIMPLIFIED_CHINESE
+        ));
         assert!(!initial.smart_speaker_mode);
 
         let preferences = Preferences {
             smart_speaker_mode: true,
             app_language: SIMPLIFIED_CHINESE.into(),
+            app_theme: DAY_THEME.into(),
             ..Preferences::default()
         };
         save(&state_path, &preferences).unwrap();
@@ -149,8 +189,14 @@ mod tests {
 
     #[test]
     fn macos_language_mapping_is_bounded_to_two_supported_locales() {
-        assert_eq!(language_from_macos_output("(\n    \"zh-Hans-SG\"\n)"), SIMPLIFIED_CHINESE);
-        assert_eq!(language_from_macos_output("(\n    \"zh_TW\"\n)"), SIMPLIFIED_CHINESE);
+        assert_eq!(
+            language_from_macos_output("(\n    \"zh-Hans-SG\"\n)"),
+            SIMPLIFIED_CHINESE
+        );
+        assert_eq!(
+            language_from_macos_output("(\n    \"zh_TW\"\n)"),
+            SIMPLIFIED_CHINESE
+        );
         assert_eq!(language_from_macos_output("(\n    \"en-US\"\n)"), ENGLISH);
         assert_eq!(language_from_macos_output("garbage"), ENGLISH);
         assert!(normalize_language("fr").is_err());
@@ -164,11 +210,14 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(&state_path, br#"{"version":1,"smart_speaker_mode":true}"#).unwrap();
         let migrated = load(&state_path).unwrap();
-        assert_eq!(migrated.version, 2);
+        assert_eq!(migrated.version, 3);
         assert!(migrated.smart_speaker_mode);
-        assert!(matches!(migrated.app_language.as_str(), ENGLISH | SIMPLIFIED_CHINESE));
+        assert!(matches!(
+            migrated.app_language.as_str(),
+            ENGLISH | SIMPLIFIED_CHINESE
+        ));
         let persisted = std::fs::read_to_string(&state_path).unwrap();
-        assert!(persisted.contains("\"version\":2"));
+        assert!(persisted.contains("\"version\":3"));
         let _ = std::fs::remove_dir_all(&directory);
     }
 
@@ -178,9 +227,11 @@ mod tests {
         let state_path = path(&directory);
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).unwrap();
-        std::fs::write(&state_path, b"{\"version\":2,\"smart_speaker_mode\":true}").unwrap();
+        std::fs::write(&state_path, b"{\"version\":3,\"smart_speaker_mode\":true,\"app_language\":\"en\",\"app_theme\":\"night\",\"unknown\":true}").unwrap();
         assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
-        std::fs::write(&state_path, b"{\"version\":2,\"smart_speaker_mode\":false,\"app_language\":\"fr\"}").unwrap();
+        std::fs::write(&state_path, b"{\"version\":3,\"smart_speaker_mode\":false,\"app_language\":\"fr\",\"app_theme\":\"night\"}").unwrap();
+        assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
+        std::fs::write(&state_path, b"{\"version\":3,\"smart_speaker_mode\":false,\"app_language\":\"en\",\"app_theme\":\"blue\"}").unwrap();
         assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
         let _ = std::fs::remove_dir_all(&directory);
     }

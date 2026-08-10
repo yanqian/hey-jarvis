@@ -433,3 +433,34 @@ body[data-ui-state="error"] {
     transition-duration: 0.001ms !important;
   }
 }
+
+html[data-theme="day"] {
+  color-scheme: light;
+  --accent: #218b68;
+  --accent-rgb: 33 139 104;
+  --muted: #617169;
+  color: #21332b;
+  background: #f3f6f3;
+}
+
+html[data-theme="day"] body {
+  background:
+    radial-gradient(circle at 50% 44%, rgb(91 170 132 / 6%), transparent 34%),
+    #f3f6f3;
+}
+
+html[data-theme="day"] .brand { color: #304139; }
+html[data-theme="day"] .icon-button { border-color: #d5dfd9; background: rgb(255 255 255 / 72%); }
+html[data-theme="day"] .icon-button:hover { border-color: #b8cfc1; background: #fff; }
+html[data-theme="day"] .icon-button svg { fill: #607068; }
+html[data-theme="day"] .orb-halo { border-color: rgb(33 139 104 / 16%); box-shadow: 0 0 42px rgb(33 139 104 / 9%), inset 0 0 34px rgb(33 139 104 / 5%); }
+html[data-theme="day"] .orb { border-color: rgb(33 139 104 / 28%); background: radial-gradient(circle at 36% 30%, rgb(255 255 255 / 78%), transparent 23%), radial-gradient(circle at 62% 65%, rgb(33 139 104 / 16%), transparent 52%), linear-gradient(145deg, rgb(184 227 208 / 92%), rgb(232 246 238 / 96%)); box-shadow: 0 0 22px rgb(33 139 104 / 10%), inset -18px -18px 42px rgb(58 112 84 / 7%), inset 12px 12px 30px rgb(255 255 255 / 58%); }
+html[data-theme="day"] .orb::before { border-color: rgb(33 139 104 / 16%); }
+html[data-theme="day"] .orb::after { border-color: rgb(33 139 104 / 22%); }
+html[data-theme="day"] .orb-core { background: rgb(33 139 104 / 18%); }
+html[data-theme="day"] .orb-sheen { background: conic-gradient(from 180deg, transparent, rgb(255 255 255 / 36%), transparent 38%); }
+html[data-theme="day"] .primary-action { color: #176247; background: #d5eee1; box-shadow: 0 8px 24px rgb(33 139 104 / 10%); }
+html[data-theme="day"] .primary-action:hover { background: #e0f4e9; box-shadow: 0 10px 28px rgb(33 139 104 / 14%); }
+html[data-theme="day"] .end-action { color: #3e554a; border-color: #c6d5cc; background: rgb(255 255 255 / 72%); }
+html[data-theme="day"] .end-action:hover { background: #fff; }
+html[data-theme="day"] .privacy-note { color: #74837b; }

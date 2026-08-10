@@ -16,7 +16,13 @@ let cachedAcknowledgementUrls={},cachedFarewellUrls={},activeCueLocale=null;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
-let appLanguage="en",currentUiState="ready",currentUiDetail=null;
+let appLanguage="en",appTheme="night",currentUiState="ready",currentUiDetail=null;
+
+function applyAppTheme(theme){
+  appTheme=theme==="day"?"day":"night";
+  document.documentElement.dataset.theme=appTheme;
+  document.documentElement.style.colorScheme=appTheme==="day"?"light":"dark";
+}
 
 function setUiState(state,detail=null){
   currentUiState=state;currentUiDetail=detail;
@@ -31,8 +37,8 @@ function setUiState(state,detail=null){
 async function refreshAppLanguage(){
   try{
     const response=await fetch("/api/app-language",{cache:"no-store"}),payload=await response.json();
-    if(!response.ok)return;const next=window.HeyJarvisI18n.locale(payload.app_language);
-    if(next===appLanguage)return;appLanguage=next;window.HeyJarvisI18n.apply(appLanguage);setUiState(currentUiState,currentUiDetail);
+    if(!response.ok)return;const next=window.HeyJarvisI18n.locale(payload.app_language),previousTheme=appTheme;
+    applyAppTheme(payload.app_theme);if(next===appLanguage&&previousTheme===appTheme)return;appLanguage=next;window.HeyJarvisI18n.apply(appLanguage);setUiState(currentUiState,currentUiDetail);
   }catch{}
 }
 function configuredOutputVolume(){return Number.isFinite(sessionConfig?.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;}

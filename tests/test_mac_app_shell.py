@@ -491,6 +491,9 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);", language_rule)
         self.assertNotIn(".language-row", styles)
         self.assertIn('invoke("set_app_language", { locale: elements.appLanguage.value })', frontend)
+        self.assertIn('invoke("set_app_theme", { theme: elements.appTheme.value })', frontend)
+        self.assertIn('id="app-theme"', page)
+        self.assertIn('value="day"', page)
         language_handler = frontend.split("async function setAppLanguage", 1)[1].split(
             "async function", 1
         )[0]
@@ -501,6 +504,9 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('Settings: "设置"', catalog)
         self.assertIn('label:"正在聆听"', host_catalog)
         self.assertIn("fn set_app_language", native)
+        self.assertIn("fn set_app_theme", native)
+        self.assertIn(':root[data-theme="day"] .local-privacy-note::before { background: #d5dfd9; }', styles)
+        self.assertIn(':root[data-theme="day"] .settings-panel h2 { color: #40564c; }', styles)
         self.assertIn("menus.apply(locale, &availability)", native)
         self.assertIn('Command::new("/usr/bin/defaults")', preferences)
         self.assertIn('SIMPLIFIED_CHINESE: &str = "zh-CN"', preferences)

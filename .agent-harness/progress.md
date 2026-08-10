@@ -4,6 +4,16 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F122 provider-native implementation is complete and awaiting independent evaluator
+approval. Settings now offers a persisted Appearance choice with Night as the
+default and a low-glare Day mode based on the approved soft paper-white palette.
+The choice applies immediately to Settings, the main Realtime voice page, and
+returning/resume states without restarting the sidecar or disturbing a live
+conversation. Preferences migrate v1/v2 records to schema v3, reject unknown or
+unsupported themes, and preserve language and Smart Speaker settings. Focused
+frontend, Realtime, and Rust tests pass; the full recovery run passes 472 project
+tests, 12 Mac frontend/fake-sidecar tests, 30 Rust tests, and all smoke paths.
+
 F120 provider-native coding and owner-led bilingual target-Mac acceptance pass.
 Each wake now captures one bounded `en` or `zh-CN` preference and carries it as
 an explicit cue locale; the browser preloads all four validated canonical

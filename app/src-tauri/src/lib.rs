@@ -14,7 +14,8 @@ use credentials::{
 use diagnostics::{Diagnostics, SupportExport};
 use onboarding::{load as load_onboarding, save as save_onboarding, OnboardingRecord};
 use preferences::{
-    load as load_preferences, normalize_language, save as save_preferences, ENGLISH,
+    load as load_preferences, normalize_language, normalize_theme, save as save_preferences,
+    ENGLISH,
 };
 use serde::Serialize;
 use std::path::PathBuf;
@@ -55,11 +56,9 @@ impl NativeMenuItems {
         let _ = self
             .voice_status
             .set_text(native_i18n::availability(locale, availability));
-        let _ = self.application_settings.set_text(native_i18n::text(
-            locale,
-            "Settings…",
-            "设置…",
-        ));
+        let _ = self
+            .application_settings
+            .set_text(native_i18n::text(locale, "Settings…", "设置…"));
         let _ = self.tray_show.set_text(native_i18n::text(
             locale,
             "Show Hey Jarvis",
@@ -126,6 +125,7 @@ struct OnboardingSnapshot {
     smart_speaker_mode: bool,
     smart_speaker_active: bool,
     app_language: String,
+    app_theme: String,
 }
 
 #[tauri::command]
@@ -289,6 +289,18 @@ fn set_app_language(
 }
 
 #[tauri::command]
+fn set_app_theme(
+    theme: String,
+    runtime: State<'_, AppRuntime>,
+) -> Result<OnboardingSnapshot, String> {
+    let theme = normalize_theme(&theme)?;
+    let mut preferences = load_preferences(&runtime.preferences_path)?;
+    preferences.app_theme = theme.into();
+    save_preferences(&runtime.preferences_path, &preferences)?;
+    onboarding_status(runtime)
+}
+
+#[tauri::command]
 fn enter_settings(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
     onboarding_status(runtime)
 }
@@ -417,6 +429,7 @@ fn onboarding_snapshot(
         smart_speaker_mode: preferences.smart_speaker_mode,
         smart_speaker_active: power.active,
         app_language: preferences.app_language,
+        app_theme: preferences.app_theme,
     })
 }
 
@@ -761,7 +774,11 @@ pub fn run() {
             let show = MenuItem::with_id(
                 app,
                 "show",
-                native_i18n::text(&preferences.app_language, "Show Hey Jarvis", "显示 Hey Jarvis"),
+                native_i18n::text(
+                    &preferences.app_language,
+                    "Show Hey Jarvis",
+                    "显示 Hey Jarvis",
+                ),
                 true,
                 None::<&str>,
             )?;
@@ -775,7 +792,11 @@ pub fn run() {
             let quit = MenuItem::with_id(
                 app,
                 "quit",
-                native_i18n::text(&preferences.app_language, "Quit Hey Jarvis", "退出 Hey Jarvis"),
+                native_i18n::text(
+                    &preferences.app_language,
+                    "Quit Hey Jarvis",
+                    "退出 Hey Jarvis",
+                ),
                 true,
                 None::<&str>,
             )?;
@@ -820,6 +841,7 @@ pub fn run() {
             onboarding_status,
             set_smart_speaker_mode,
             set_app_language,
+            set_app_theme,
             enter_settings,
             open_settings,
             close_settings_window,

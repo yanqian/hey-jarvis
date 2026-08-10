@@ -84,10 +84,14 @@ class RealtimeLanguageCueTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "preferences-v1.json"
             self.assertEqual(server.read_app_language(path), "en")
+            self.assertEqual(server.read_app_theme(path), "night")
             path.write_text(json.dumps({"app_language": "zh-CN"}))
             self.assertEqual(server.read_app_language(path), "zh-CN")
+            path.write_text(json.dumps({"app_language": "zh-CN", "app_theme": "day"}))
+            self.assertEqual(server.read_app_theme(path), "day")
             path.write_text(json.dumps({"app_language": "fr"}))
             self.assertEqual(server.read_app_language(path), "en")
+            self.assertEqual(server.read_app_theme(path), "night")
             path.write_bytes(b"{" + b"x" * 5000)
             self.assertEqual(server.read_app_language(path), "en")
 

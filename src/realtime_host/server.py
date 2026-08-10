@@ -81,6 +81,19 @@ def read_app_language(path: Path | None) -> str:
     return value if value in {"en", "zh-CN"} else "en"
 
 
+def read_app_theme(path: Path | None) -> str:
+    if not isinstance(path, Path):
+        return "night"
+    try:
+        raw = path.read_bytes()
+        if len(raw) > 4096:
+            return "night"
+        value = json.loads(raw).get("app_theme")
+    except (OSError, ValueError, AttributeError):
+        return "night"
+    return value if value in {"night", "day"} else "night"
+
+
 def load_host_config(env: Mapping[str, str] | None = None, env_file: str | Path = ".env") -> tuple[str, str, str]:
     values = _read_env_file(Path(env_file))
     values.update(os.environ if env is None else env)
@@ -516,7 +529,10 @@ class HostRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/app-language":
             self._json(
                 HTTPStatus.OK,
-                {"app_language": read_app_language(getattr(self.server, "app_language_path", None))},
+                {
+                    "app_language": read_app_language(getattr(self.server, "app_language_path", None)),
+                    "app_theme": read_app_theme(getattr(self.server, "app_language_path", None)),
+                },
             )
             return
         if parsed.path == "/api/realtime-settings":

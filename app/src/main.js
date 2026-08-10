@@ -35,12 +35,14 @@ const elements = {
   clearDiagnostics: document.querySelector("#clear-diagnostics"),
   diagnosticsMessage: document.querySelector("#diagnostics-message"),
   appLanguage: document.querySelector("#app-language"),
+  appTheme: document.querySelector("#app-theme"),
 };
 
 let setup = null;
 let lastVoiceAvailability = null;
 let runtimeRestartNeeded = false;
 let appLanguage = "en";
+let appTheme = "night";
 const SETTINGS_HASH = "#settings";
 const RESUME_REQUIRED_HASH = "#resume-required";
 
@@ -121,6 +123,13 @@ function setLocale(locale) {
   appLanguage = supportedLocale(locale);
   applyDocumentLocale(appLanguage);
   elements.appLanguage.value = appLanguage;
+}
+
+function setTheme(theme) {
+  appTheme = theme === "day" ? "day" : "night";
+  document.documentElement.dataset.theme = appTheme;
+  document.documentElement.style.colorScheme = appTheme === "day" ? "light" : "dark";
+  if (elements.appTheme) elements.appTheme.value = appTheme;
 }
 
 function isSettingsWindow() {
@@ -208,6 +217,7 @@ function readinessText(snapshot) {
 function renderSetup(snapshot) {
   setup = snapshot;
   setLocale(snapshot.app_language);
+  setTheme(snapshot.app_theme);
   elements.openaiStatus.textContent = snapshot.openai_configured
     ? ui("Stored in macOS Keychain. The value is never displayed.")
     : ui("Not configured. A key is required before listening can start.");
@@ -559,6 +569,20 @@ async function setAppLanguage() {
   }
 }
 
+async function setAppTheme() {
+  const previous = appTheme;
+  elements.appTheme.disabled = true;
+  try {
+    const snapshot = await invoke("set_app_theme", { theme: elements.appTheme.value });
+    renderSetup(snapshot);
+  } catch (error) {
+    setTheme(previous);
+    elements.message.textContent = friendlyError(error);
+  } finally {
+    elements.appTheme.disabled = false;
+  }
+}
+
 for (const item of elements.navItems) {
   item.addEventListener("click", () => activatePanel(item.dataset.panel, true));
 }
@@ -575,6 +599,7 @@ elements.resumeSettings.addEventListener("click", showSettings);
 elements.readinessCheck.addEventListener("click", runReadinessCheck);
 elements.smartSpeakerMode.addEventListener("change", setSmartSpeakerMode);
 elements.appLanguage.addEventListener("change", setAppLanguage);
+elements.appTheme.addEventListener("change", setAppTheme);
 elements.microphoneSettings.addEventListener("click", async () => {
   try {
     await invoke("open_microphone_settings");
