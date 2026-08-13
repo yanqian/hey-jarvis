@@ -13,9 +13,10 @@ The project has two voice backends:
 | **Realtime** (opt-in) | Continuous, lower-latency conversation and barge-in | Wake → WebRTC session with follow-up turns |
 
 Both are working MVP paths. A product-owned Tauri app and an unsigned Apple
-Silicon DMG can now be built for explicitly trusted internal testing. Developer
-ID signing, notarization, launch-at-login, automatic updates, and public binary
-distribution of a distributable `.app` remain deferred.
+Silicon DMG can now be built for internal evaluation and public download. The
+DMG is explicitly not a general-purpose release: Developer ID signing,
+notarization, launch-at-login, automatic updates, and a distributable `.app`
+remain deferred.
 
 ## Project goals
 
@@ -25,6 +26,20 @@ engineering, a job-portfolio case study, and a way to collect feedback from a
 small trusted group. Commercial defensibility is not a success criterion; the
 engineering decisions and evidence remain useful even if a platform later
 ships equivalent wake-word behavior.
+
+## Published milestone
+
+Hey Jarvis has reached its first public product milestone: the Apple Silicon
+macOS voice assistant is published as an internal evaluation release, with the
+engineering story and feature demo available publicly.
+
+- [Project story: Building Hey Jarvis](https://yanqian.github.io/posts/publish/building-hey-jarvis/)
+- [English feature demo](https://www.youtube.com/watch?v=Cpv3dhFmS3M)
+- [GitHub Release: v0.1.0 Internal Unsigned](https://github.com/yanqian/hey-jarvis/releases/tag/v0.1.0-internal)
+
+The release is Apple Silicon-only, requires macOS 14 or later, uses BYOK, and
+is unsigned and not notarized. It is intended for internal evaluation, not as a
+general consumer distribution.
 
 ## Requirements
 
@@ -154,6 +169,9 @@ Start with the document matching your task:
   sidecar protocol, lifecycle, identity, and release freeze points.
 - [Unsigned internal Mac testing](docs/INTERNAL_MAC_APP_TESTING.md) — trusted
   install, privacy/cost, feedback, update, rollback, and uninstall workflow.
+- [User guide](docs/USER_GUIDE.md) — user-facing installation, first-run setup,
+  daily operation, diagnostics, update, rollback, and uninstall instructions.
+  [中文说明](docs/USER_GUIDE_ZH.md) is also available.
 - [Portfolio case study](docs/PORTFOLIO_CASE_STUDY.md) — goals, architecture,
   failures, measured tradeoffs, and completion boundary.
 - [Portfolio demo](docs/PORTFOLIO_DEMO.md) — privacy-safe 3:30 recording plan.
