@@ -19,6 +19,7 @@ const STATIC_ZH = new Map(Object.entries({
   STARTING: "正在启动",
   "Returning to Jarvis": "正在返回 Jarvis",
   "Starting the local voice runtime…": "正在启动本地语音运行环境…",
+  "Voice startup is taking longer than expected. Settings remains available.": "语音启动所需时间超出预期，设置仍可使用。",
   "Apply & Done": "应用并完成",
   "VOICE STATUS": "语音状态",
   Checking: "正在检查",

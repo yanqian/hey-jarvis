@@ -23,6 +23,7 @@ from product_sidecar import (  # noqa: E402
     LifecycleDiagnostics,
     ProductRuntime,
     ProductRuntimeError,
+    StartupDiagnostics,
     apply_app_wake_preferences,
     app_runtime_configuration_env,
     build_app_realtime_wake_options,
@@ -69,6 +70,24 @@ class FakeRuntime:
 
 
 class ProductSidecarTests(unittest.TestCase):
+    def test_startup_diagnostics_are_launch_correlated_and_allowlisted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            diagnostics = StartupDiagnostics(
+                Path(directory),
+                {
+                    "HEY_JARVIS_LAUNCH_ID": "launch-123-456",
+                    "HEY_JARVIS_BUILD_PROFILE": "release",
+                    "HEY_JARVIS_STARTUP_SAMPLE_KIND": "warm",
+                },
+            )
+            diagnostics.record_webview("home_interactive", 321)
+            diagnostics.record_webview("transcript", 400)
+            record = json.loads(diagnostics.path.read_text(encoding="utf-8"))
+            self.assertEqual(record["launch_id"], "launch-123-456")
+            self.assertEqual(record["stage"], "home_interactive")
+            self.assertEqual(record["process_elapsed_ms"], 321)
+            self.assertNotIn("transcript", json.dumps(record))
+
     def test_native_runtime_ignores_cli_only_wake_environment(self):
         values = app_runtime_configuration_env(
             {
@@ -280,11 +299,17 @@ class ProductSidecarTests(unittest.TestCase):
         payloads = [
             json.loads(line)["payload"] for line in output.getvalue().splitlines()
         ]
-        self.assertEqual(payloads[0]["kind"], "ready")
-        self.assertEqual(payloads[0]["control_url"], runtime.control_url)
-        self.assertEqual(payloads[1]["event"], "voice_availability")
-        self.assertEqual(payloads[1]["detail"], "wake_listening")
-        self.assertEqual(payloads[2]["event"], "stopping")
+        timings = [payload for payload in payloads if payload["kind"] == "startup_timing"]
+        self.assertEqual(
+            [payload["stage"] for payload in timings],
+            ["process_started", "imports_ready", "runtime_starting", "runtime_ready"],
+        )
+        ready = next(payload for payload in payloads if payload["kind"] == "ready")
+        self.assertEqual(ready["control_url"], runtime.control_url)
+        lifecycle = [payload for payload in payloads if payload["kind"] == "lifecycle"]
+        self.assertEqual(lifecycle[0]["event"], "voice_availability")
+        self.assertEqual(lifecycle[0]["detail"], "wake_listening")
+        self.assertEqual(lifecycle[1]["event"], "stopping")
         self.assertTrue(runtime.closed)
         self.assertEqual(calls[0]["resource_dir"], Path("/tmp/hey-jarvis-resources"))
         self.assertEqual(calls[0]["app_support_dir"], Path("/tmp/hey-jarvis-support"))

@@ -2454,3 +2454,90 @@ lifecycle together because they form one independently valuable cached-farewell
 behavior with one asset/configuration/browser verification surface. Bilingual
 assets and language selection are independently valuable and explicitly
 deferred.
+
+### Observable And Faster Mac App Startup
+
+Feature mapping: F128 establishes the startup timeline and repeatable baseline;
+F129 uses that evidence to shorten the measured user-facing critical path.
+
+Goal: make Mac app launch performance explainable and materially faster by
+measuring the complete path from native process entry through first visible and
+interactive Home content to independent voice-runtime readiness, then removing
+the largest demonstrated avoidable delay without hiding or weakening runtime
+state.
+
+Included scope: assign one bounded launch identifier; emit privacy-safe,
+structured startup milestones from native Rust, the Home WebView, and the
+packaged Python sidecar; distinguish native process/setup, window/WebView,
+first-render/Home-interactive, sidecar spawn/import/server/model, and voice-ready
+boundaries; correlate child milestones at native receipt time without assuming
+cross-process monotonic clocks are comparable; retain a bounded local startup
+history with an operator-readable summary; collect repeatable Debug and Release
+cold/warm baseline samples on the target Mac; and then optimize the largest
+measured user-facing critical-path contributor while keeping later voice
+readiness truthful and visible.
+
+Excluded scope: public analytics or network telemetry, audio or conversation
+capture, credentials or provider payloads, hiding failures behind a false ready
+state, changing wake recognition tuning, changing voice-session behavior, broad
+frontend redesign, unrelated Python pipeline optimization, or promising a
+framework-independent fixed launch time before the baseline exists.
+
+Core flows: native launch creates the correlation identifier and records process
+and setup milestones; the WebView records script start, DOM readiness, first
+paint, and Home interactivity; sidecar startup reports its own import/config,
+server-bound, wake-model-ready, and listening-ready durations; native receipt
+records correlate child events into one bounded local launch record; an offline
+summary reports per-stage durations and median/p90 across saved runs. The Home
+surface becomes visible and interactive as soon as its own safe prerequisites
+are satisfied, presents an honest preparing state while the voice runtime is
+still loading, and transitions through the existing availability contract when
+voice readiness actually arrives.
+
+Constraints: startup instrumentation must use monotonic elapsed durations within
+each process; only the native receiver may place cross-process events on its own
+timeline; schema fields, stage names, values, record sizes, launch count, and
+rotation are bounded; writes are non-fatal and never delay launch; retained data
+contains no audio, transcript, answer, credential, SDP/ICE, provider body, tool
+argument, or unrestricted path; automated tests require no microphone, speaker,
+network, credentials, or paid API. Performance comparisons use the same built
+artifact, machine, launch method, readiness definitions, and sample protocol,
+and report variance rather than selecting one favorable trial.
+
+Ambiguities or assumptions: “出现首页” means useful Home content is visibly
+painted and its local controls respond, not that the Python wake model and
+microphone lease are already ready. The first implementation will preserve the
+existing UI and show the existing preparing/availability state rather than add a
+new splash design. No absolute millisecond threshold is assumed before target-
+Mac baselining; F129 must demonstrate a repeatable median improvement in the
+selected user-facing milestone and explain any p90 or voice-ready tradeoff.
+
+Required capabilities: existing native lifecycle diagnostics and bounded
+rotation, Tauri setup/window events, browser Performance APIs and animation
+frame timing, packaged sidecar stdout protocol, deterministic fake-sidecar
+fixtures, Debug and Release app builds, a reproducible target-Mac launch sampler,
+JavaScript/Python/Rust tests, final project recovery, provider-native fast coding
+evidence, and a separate cold-start Evaluator Agent. Live sampling must not arm
+the microphone or start a paid Realtime conversation.
+
+Implementation paths: `app/src-tauri/src/`, `app/src/`, `app/sidecar/`,
+project-owned scripts or tests under `scripts/`, `tests/`, and `app/**/tests/`,
+startup documentation under `docs/`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: schema allowlist, value and size bounds, launch correlation,
+monotonic duration semantics, cross-process receipt semantics, non-fatal storage,
+rotation, no-sensitive-content contracts, deterministic Rust/WebView/fake-sidecar
+milestone order, offline summary statistics, JavaScript and Python syntax, Rust
+and Mac shell tests, Debug and Release builds, repeated target-Mac cold/warm
+samples without microphone or network, unchanged availability/failure behavior,
+final `./init.sh`, fast coding evidence, and separate evaluator approval. F129
+additionally compares before/after samples and proves Home interactivity improves
+without regressing correctness or falsely advancing voice readiness.
+
+Decomposition decision: F128 and F129 are separate because trustworthy
+cross-process measurement and evidence-driven optimization are independently
+verifiable capabilities. Instrumentation can pass even if the baseline shows
+the delay is platform-bound, while an optimization can be accepted only after
+F128 identifies a real critical-path contributor and supplies a stable
+before/after protocol.

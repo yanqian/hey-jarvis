@@ -1,6 +1,17 @@
 import { applyDocumentLocale, supportedLocale, text } from "./i18n.js";
 
 const invoke = window.__TAURI__?.core?.invoke;
+const startupNavigationElapsed = () => Math.max(0, Math.min(300000, Math.round(performance.now())));
+
+function recordStartup(stage, elapsed = startupNavigationElapsed()) {
+  if (!invoke) return Promise.resolve();
+  return invoke("record_startup_milestone", {
+    stage,
+    processElapsedMs: elapsed,
+  }).catch(() => {});
+}
+
+recordStartup("script_started");
 
 const elements = {
   resumeView: document.querySelector("#resume-view"),
@@ -10,6 +21,7 @@ const elements = {
   settingsShell: document.querySelector("#settings-shell"),
   returningView: document.querySelector("#returning-view"),
   returningStatus: document.querySelector("#returning-status"),
+  returningSettings: document.querySelector("#returning-settings"),
   panels: [...document.querySelectorAll("[data-settings-panel]")],
   navItems: [...document.querySelectorAll("[data-panel]")],
   openaiStatus: document.querySelector("#openai-status"),
@@ -116,6 +128,9 @@ const DYNAMIC_ZH = new Map(Object.entries({
   "Microphone access is ready. Starting the local voice runtime…": "麦克风访问已就绪。正在启动本地语音运行环境…",
   "Voice listening resumed. Settings can remain open.": "语音监听已恢复，设置窗口可以保持打开。",
   "Starting the local voice runtime…": "正在启动本地语音运行环境…",
+  "Checking local setup…": "正在检查本地设置…",
+  "Checking macOS Keychain…": "正在检查 macOS 钥匙串…",
+  "Voice startup is taking longer than expected. Settings remains available.": "语音启动所需时间超出预期，设置仍可使用。",
   "Restarting local wake listening…": "正在重新启动本地唤醒监听…",
   "Apply & Done": "应用并完成",
   "Applying Settings changes…": "正在应用设置更改…",
@@ -183,6 +198,13 @@ function resetSettingsSurface() {
   elements.settingsShell.hidden = false;
 }
 
+function showStartingRuntime() {
+  elements.resumeView.hidden = true;
+  elements.settingsShell.hidden = true;
+  elements.returningView.hidden = false;
+  elements.returningStatus.textContent = ui("Starting the local voice runtime…");
+}
+
 function recordLifecycle(event, sessionId = null) {
   if (!invoke) return Promise.resolve();
   return invoke("record_webview_lifecycle", { event, sessionId }).catch(() => {});
@@ -232,6 +254,7 @@ function activatePanel(name, focus = false) {
 }
 
 function readinessText(snapshot) {
+  if (snapshot.credential_status_pending) return ui("Checking local setup…");
   if (!snapshot.openai_configured) return ui("OpenAI key required before voice listening can start.");
   if (snapshot.microphone_permission === "denied") return ui("Microphone access needs attention in System Settings.");
   if (snapshot.microphone_permission !== "granted") return ui("OpenAI is configured. Complete the microphone check to start.");
@@ -242,17 +265,23 @@ function renderSetup(snapshot) {
   setup = snapshot;
   setLocale(snapshot.app_language);
   setTheme(snapshot.app_theme);
-  elements.openaiStatus.textContent = snapshot.openai_configured
+  elements.openaiStatus.textContent = snapshot.credential_status_pending
+    ? ui("Checking macOS Keychain…")
+    : snapshot.openai_configured
     ? ui("Stored in macOS Keychain. The value is never displayed.")
     : ui("Not configured. A key is required before listening can start.");
-  elements.finnhubStatus.textContent = snapshot.finnhub_configured
+  elements.finnhubStatus.textContent = snapshot.credential_status_pending
+    ? ui("Checking macOS Keychain…")
+    : snapshot.finnhub_configured
     ? ui("Stored in macOS Keychain. Stock quotes are enabled.")
     : ui("Not configured. Other assistant features still work.");
   elements.saveOpenai.textContent = ui(snapshot.openai_configured ? "Replace key" : "Add key");
   elements.saveFinnhub.textContent = ui(snapshot.finnhub_configured ? "Replace key" : "Add key");
-  elements.deleteOpenai.hidden = !snapshot.openai_configured;
-  elements.deleteFinnhub.hidden = !snapshot.finnhub_configured;
-  elements.start.disabled = !snapshot.openai_configured;
+  elements.saveOpenai.disabled = snapshot.credential_status_pending === true;
+  elements.saveFinnhub.disabled = snapshot.credential_status_pending === true;
+  elements.deleteOpenai.hidden = snapshot.credential_status_pending || !snapshot.openai_configured;
+  elements.deleteFinnhub.hidden = snapshot.credential_status_pending || !snapshot.finnhub_configured;
+  elements.start.disabled = snapshot.credential_status_pending || !snapshot.openai_configured;
   elements.returnAssistant.hidden = isSettingsWindow()
     ? false
     : !snapshot.completed || !snapshot.openai_configured;
@@ -371,12 +400,47 @@ function navigateToAssistant(snapshot, { recovery = false } = {}) {
   window.location.assign(endpoint.href);
 }
 
+async function waitForStartupRuntime() {
+  const deadline = Date.now() + 30000;
+  while (await invoke("startup_runtime_pending")) {
+    if (Date.now() >= deadline) {
+      elements.returningStatus.textContent = ui("Voice startup is taking longer than expected. Settings remains available.");
+      return;
+    }
+    await new Promise(resolve => window.setTimeout(resolve, 100));
+  }
+  const runtime = await invoke("sidecar_status");
+  if (runtime.state === "ready") {
+    navigateToAssistant(runtime);
+    return;
+  }
+
+  const snapshot = await invoke("onboarding_status");
+  renderSetup(snapshot);
+  resetSettingsSurface();
+  if (!snapshot.openai_configured) activatePanel("api-keys");
+  elements.message.textContent = friendlyError(runtime.detail || "sidecar_readiness_timed_out");
+}
+
+async function refreshPendingCredentialStatus() {
+  while (setup?.credential_status_pending) {
+    await new Promise(resolve => window.setTimeout(resolve, 500));
+    try {
+      renderSetup(await invoke("enter_settings"));
+    } catch (_error) {
+      return;
+    }
+  }
+}
+
 async function load() {
   if (!invoke) {
     elements.message.textContent = ui("Open this page through the Hey Jarvis desktop app.");
     return;
   }
   try {
+    recordStartup("dom_ready");
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => recordStartup("first_paint")));
     recordLifecycle("loaded");
     if (isResumeRequired()) {
       renderSetup(await invoke("onboarding_status"));
@@ -387,11 +451,25 @@ async function load() {
     if (settingsMode) {
       resetSettingsSurface();
       await afterCommittedPaint();
+    } else {
+      showStartingRuntime();
+      await afterCommittedPaint();
+      recordStartup("shell_interactive");
+      const route = await invoke("startup_route");
+      setLocale(route.app_language);
+      setTheme(route.app_theme);
+      if (route.completed && route.microphone_permission === "granted") {
+        await waitForStartupRuntime();
+        return;
+      }
+      resetSettingsSurface();
     }
     const snapshot = await invoke(settingsMode ? "enter_settings" : "onboarding_status");
     renderSetup(snapshot);
+    if (settingsMode) recordStartup("shell_interactive");
     if (settingsMode) {
       recordLifecycle("settings_opened");
+      if (snapshot.credential_status_pending) void refreshPendingCredentialStatus();
       await refreshVoiceStatus();
       window.setInterval(refreshVoiceStatus, 1000);
     }
@@ -703,6 +781,7 @@ elements.microphoneCheck.addEventListener("click", checkMicrophoneOnly);
 elements.returnAssistant.addEventListener("click", returnToAssistant);
 elements.resumeVoice.addEventListener("click", resumeVoiceAssistant);
 elements.resumeSettings.addEventListener("click", showSettings);
+elements.returningSettings.addEventListener("click", showSettings);
 elements.readinessCheck.addEventListener("click", runReadinessCheck);
 elements.smartSpeakerMode.addEventListener("change", setSmartSpeakerMode);
 elements.wakeDiagnosticsEnabled.addEventListener("change", setWakeDiagnostics);

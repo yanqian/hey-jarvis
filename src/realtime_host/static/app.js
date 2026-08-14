@@ -1,5 +1,15 @@
 "use strict";
 
+function recordHomeStartup(stage){
+  const elapsed_ms=Math.max(0,Math.min(300000,Math.round(performance.now())));
+  const fallback=()=>fetch("/api/startup-milestone",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stage,elapsed_ms})}).catch(()=>{});
+  const invoke=window.__TAURI__?.core?.invoke;
+  if(invoke)return invoke("record_startup_milestone",{stage,processElapsedMs:elapsed_ms}).catch(fallback);
+  return fallback();
+}
+recordHomeStartup("home_script_started");
+window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>recordHomeStartup("home_first_paint")));
+
 const AUDIO_CONSTRAINTS={echoCancellation:{exact:true},noiseSuppression:true,autoGainControl:true,channelCount:1};
 const REMOTE_AUDIO_VOLUME=0.1;
 const INPUT_LEVEL_SAMPLE_INTERVAL_MS=100,INPUT_LEVEL_WINDOW_SAMPLES=5;
@@ -586,8 +596,9 @@ function releasePageMedia(){
 window.addEventListener("beforeunload",releasePageMedia);
 window.addEventListener("pagehide",releasePageMedia);
 document.addEventListener("freeze",releasePageMedia);
-refreshAppLanguage().finally(()=>{
+refreshAppLanguage().finally(async()=>{
   if(RESUME_FLOW){setUiState("resume-required","Restoring local wake listening after system sleep…");$("arm").querySelector("span").textContent=HeyJarvisI18n.text("Resume voice assistant");$("arm").disabled=true;$("arm").hidden=true;arm();}
-  else refreshAvailability();
+  else await refreshAvailability();
+  window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>recordHomeStartup("home_interactive")));
 });
 setInterval(refreshAvailability,1000);

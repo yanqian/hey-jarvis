@@ -1,6 +1,7 @@
 use crate::credentials::RuntimeCredentials;
 use crate::diagnostics::Diagnostics;
 use crate::protocol::{decode, encode, Envelope, Payload, PROTOCOL_VERSION};
+use crate::startup::StartupTrace;
 use serde::Serialize;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -58,6 +59,7 @@ pub struct SidecarSupervisor {
     diagnostics: Diagnostics,
     desired_running: bool,
     restart_attempts: u8,
+    startup: StartupTrace,
 }
 
 enum SidecarLaunch {
@@ -69,7 +71,12 @@ enum SidecarLaunch {
 }
 
 impl SidecarSupervisor {
-    pub fn new(app_support_dir: PathBuf, resource_dir: PathBuf, script_path: PathBuf) -> Self {
+    pub fn new(
+        app_support_dir: PathBuf,
+        resource_dir: PathBuf,
+        script_path: PathBuf,
+        startup: StartupTrace,
+    ) -> Self {
         let snapshot = Arc::new(Mutex::new(RuntimeSnapshot::stopped(&app_support_dir)));
         let diagnostics = Diagnostics::new(&app_support_dir);
         let launch = if let Some(path) = std::env::var_os("HEY_JARVIS_SIDECAR_EXECUTABLE") {
@@ -95,6 +102,7 @@ impl SidecarSupervisor {
             diagnostics,
             desired_running: false,
             restart_attempts: 0,
+            startup,
         }
     }
 
@@ -105,7 +113,8 @@ impl SidecarSupervisor {
         script_path: PathBuf,
         python_command: String,
     ) -> Self {
-        let mut supervisor = Self::new(app_support_dir, resource_dir, script_path);
+        let startup = StartupTrace::new(&app_support_dir, Instant::now());
+        let mut supervisor = Self::new(app_support_dir, resource_dir, script_path, startup);
         supervisor.launch = SidecarLaunch::PythonDevelopment {
             interpreter: python_command,
             script: match &supervisor.launch {
@@ -165,6 +174,15 @@ impl SidecarSupervisor {
                 command
             }
         };
+        command.env("HEY_JARVIS_LAUNCH_ID", self.startup.launch_id());
+        command.env(
+            "HEY_JARVIS_BUILD_PROFILE",
+            if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            },
+        );
         let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -204,12 +222,11 @@ impl SidecarSupervisor {
         let (sender, receiver) = mpsc::sync_channel(1);
         let session = self.session_id.clone();
         let snapshot = Arc::clone(&self.snapshot);
+        let startup_trace = self.startup.clone();
         let reader = thread::spawn(move || {
-            let mut lines = BufReader::new(stdout).lines();
-            let ready = lines.next().transpose();
-            let _ = sender.send(ready);
-
-            let mut last_sequence = 1;
+            let lines = BufReader::new(stdout).lines();
+            let mut last_sequence = 0;
+            let mut ready_sent = false;
             for line in lines {
                 let result = line
                     .map_err(|error| format!("sidecar output read failed: {error}"))
@@ -217,9 +234,28 @@ impl SidecarSupervisor {
                 match result {
                     Ok(envelope) => {
                         last_sequence = envelope.sequence;
-                        update_from_payload(&snapshot, envelope.payload);
+                        match &envelope.payload {
+                            Payload::StartupTiming { stage, elapsed_ms } => {
+                                startup_trace.record_sidecar(stage, *elapsed_ms);
+                            }
+                            Payload::Ready { .. } if !ready_sent => {
+                                ready_sent = true;
+                                let _ = sender.send(Ok(envelope));
+                            }
+                            payload if ready_sent => {
+                                update_from_payload(&snapshot, payload.clone())
+                            }
+                            _ => {
+                                let _ = sender
+                                    .send(Err("sidecar sent an invalid pre-ready message".into()));
+                                break;
+                            }
+                        }
                     }
                     Err(error) => {
+                        if !ready_sent {
+                            let _ = sender.send(Err(error.clone()));
+                        }
                         set_snapshot(&snapshot, "error", error);
                         set_availability(&snapshot, "resume_required");
                         break;
@@ -235,18 +271,8 @@ impl SidecarSupervisor {
         let ready_result = receiver
             .recv_timeout(START_TIMEOUT)
             .map_err(|_| "sidecar readiness timed out".to_string())
-            .and_then(|result| {
-                result.map_err(|error| format!("sidecar readiness read failed: {error}"))
-            })
-            .and_then(|line| line.ok_or_else(|| "sidecar exited before readiness".to_string()));
-        let ready_line = match ready_result {
-            Ok(line) => line,
-            Err(error) => {
-                let _ = self.stop("startup_failure");
-                return self.fail(error);
-            }
-        };
-        let ready = match decode(&ready_line, Some(&self.session_id), 0) {
+            .and_then(|result| result);
+        let ready = match ready_result {
             Ok(message) => message,
             Err(error) => {
                 let _ = self.stop("startup_failure");
@@ -277,6 +303,7 @@ impl SidecarSupervisor {
             Some(&self.session_id),
             Some("ready"),
         );
+        self.startup.record_native("sidecar_ready");
         Ok(self.snapshot())
     }
 

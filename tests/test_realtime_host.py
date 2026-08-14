@@ -140,10 +140,12 @@ class RealtimeHostTests(unittest.TestCase):
         return coordinator, lease
 
     def test_product_loopback_capability_bootstraps_an_httponly_cookie(self):
+        startup_events = []
         host = server.build_server(
             "127.0.0.1",
             0,
             capability_lease="session-product-1",
+            startup_event=lambda stage, elapsed: startup_events.append((stage, elapsed)),
         )
         thread = threading.Thread(target=host.serve_forever, daemon=True)
         thread.start()
@@ -172,6 +174,22 @@ class RealtimeHostTests(unittest.TestCase):
             response = connection.getresponse()
             self.assertEqual(response.status, HTTPStatus.OK)
             self.assertEqual(json.loads(response.read()), {"status": "ok"})
+
+            body = json.dumps({"stage": "home_interactive", "elapsed_ms": 123})
+            connection.request(
+                "POST",
+                "/api/startup-milestone",
+                body=body,
+                headers={
+                    "Cookie": cookie.split(";", 1)[0],
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(body)),
+                },
+            )
+            startup_response = connection.getresponse()
+            self.assertEqual(startup_response.status, HTTPStatus.OK)
+            startup_response.read()
+            self.assertEqual(startup_events, [("home_interactive", 123)])
         finally:
             connection.close()
             host.shutdown()

@@ -45,10 +45,14 @@ class FakeSidecarTests(unittest.TestCase):
 
         self.assertEqual(run(io.StringIO(incoming), output), 0)
         payloads = [json.loads(line)["payload"] for line in output.getvalue().splitlines()]
-        self.assertEqual([item["kind"] for item in payloads], ["ready", "lifecycle", "lifecycle"])
-        self.assertEqual(payloads[1]["event"], "voice_availability")
-        self.assertEqual(payloads[1]["detail"], "ready")
-        self.assertEqual(payloads[2]["event"], "stopping")
+        self.assertEqual(
+            [item["stage"] for item in payloads[:3]],
+            ["process_started", "imports_ready", "runtime_ready"],
+        )
+        self.assertEqual([item["kind"] for item in payloads[3:]], ["ready", "lifecycle", "lifecycle"])
+        self.assertEqual(payloads[4]["event"], "voice_availability")
+        self.assertEqual(payloads[4]["detail"], "ready")
+        self.assertEqual(payloads[5]["event"], "stopping")
 
     def test_rejects_unknown_version_order_session_and_fields(self):
         cases = [
@@ -93,6 +97,8 @@ class FakeSidecarTests(unittest.TestCase):
         process.stdin.write(message() + "\n")
         process.stdin.flush()
         ready = json.loads(process.stdout.readline())
+        while ready["payload"]["kind"] == "startup_timing":
+            ready = json.loads(process.stdout.readline())
         self.assertEqual(ready["payload"]["kind"], "ready")
 
         process.stdin.close()

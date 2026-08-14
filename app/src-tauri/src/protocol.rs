@@ -22,6 +22,10 @@ pub enum Payload {
         app_support_dir: String,
         resource_dir: String,
     },
+    StartupTiming {
+        stage: String,
+        elapsed_ms: u64,
+    },
     Ready {
         sidecar_version: String,
         capabilities: Vec<String>,
@@ -97,6 +101,7 @@ fn validate_exact_fields(value: &Value) -> Result<(), String> {
         .ok_or_else(|| "protocol payload kind is invalid".to_string())?;
     let expected: &[&str] = match kind {
         "startup" => &["app_support_dir", "app_version", "kind", "resource_dir"],
+        "startup_timing" => &["elapsed_ms", "kind", "stage"],
         "ready" => &["capabilities", "control_url", "kind", "sidecar_version"],
         "settings" => &["kind", "revision"],
         "session" => &["action", "conversation_id", "kind"],
@@ -136,6 +141,22 @@ fn validate(
     if let Some(expected) = expected_session {
         if session != expected {
             return Err("protocol session identity changed".into());
+        }
+    }
+    if let Payload::StartupTiming { stage, elapsed_ms } = &envelope.payload {
+        const STAGES: &[&str] = &[
+            "process_started",
+            "imports_ready",
+            "runtime_starting",
+            "settings_loaded",
+            "credential_validated",
+            "wake_model_ready",
+            "server_bound",
+            "controller_started",
+            "runtime_ready",
+        ];
+        if !STAGES.contains(&stage.as_str()) || *elapsed_ms > 300_000 {
+            return Err("startup timing payload is invalid".into());
         }
     }
     let value = serde_json::to_value(envelope)
@@ -199,6 +220,10 @@ mod tests {
                 app_version: "0.1.0".into(),
                 app_support_dir: "/tmp/app".into(),
                 resource_dir: "/tmp/resources".into(),
+            },
+            Payload::StartupTiming {
+                stage: "imports_ready".into(),
+                elapsed_ms: 42,
             },
             Payload::Ready {
                 sidecar_version: "fake".into(),

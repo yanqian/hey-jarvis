@@ -350,6 +350,7 @@ class HostHTTPServer(ThreadingHTTPServer):
     cached_acknowledgements: dict[str, tuple[bytes, dict[str, object]]]
     cached_farewells: dict[str, tuple[bytes, dict[str, object]]]
     app_language_path: Path | None
+    startup_event: Callable[[str, int], None] | None
 
 
 def build_server(
@@ -375,6 +376,7 @@ def build_server(
     english_cached_farewell_audio_path: str | Path | None = None,
     english_cached_farewell_manifest_path: str | Path | None = None,
     app_language_path: str | Path | None = None,
+    startup_event: Callable[[str, int], None] | None = None,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
@@ -477,6 +479,7 @@ def build_server(
         server.cached_acknowledgements["en"] = english_ack
         server.cached_farewells["en"] = english_farewell
     server.app_language_path = language_path
+    server.startup_event = startup_event
     return server
 
 
@@ -752,6 +755,21 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                     **payload,
                 )
                 self._json(HTTPStatus.OK, {"status": result})
+                return
+            if path == "/api/startup-milestone":
+                payload = self._read_json(max_length=256)
+                stage = payload.get("stage")
+                elapsed_ms = payload.get("elapsed_ms")
+                if (
+                    stage not in {"home_script_started", "home_first_paint", "home_interactive"}
+                    or not isinstance(elapsed_ms, int)
+                    or isinstance(elapsed_ms, bool)
+                    or not 0 <= elapsed_ms <= 300_000
+                ):
+                    raise HandoffError("Startup milestone payload was invalid")
+                if self.server.startup_event is not None:
+                    self.server.startup_event(stage, elapsed_ms)
+                self._json(HTTPStatus.OK, {"status": "recorded"})
                 return
         except (ConfigError, HandoffError, HostServerError, RealtimeAckAssetError) as exc:
             self._json(HTTPStatus.CONFLICT, {"error": "host_control_failed", "message": str(exc)})

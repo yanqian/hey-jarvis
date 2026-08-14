@@ -18,6 +18,9 @@ from typing import Any, Callable, Mapping, TextIO
 from urllib.parse import quote
 
 
+PROCESS_STARTED = time.monotonic()
+
+
 SIDECAR_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SIDECAR_DIR.parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -153,6 +156,57 @@ class LifecycleDiagnostics:
             output.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
 
 
+class StartupDiagnostics:
+    """Launch-correlated browser milestones written off the rendering thread."""
+
+    ALLOWED = {"home_script_started", "home_first_paint", "home_interactive"}
+
+    def __init__(self, app_support_dir: Path, env: Mapping[str, str]) -> None:
+        launch_id = env.get("HEY_JARVIS_LAUNCH_ID", "")
+        profile = env.get("HEY_JARVIS_BUILD_PROFILE", "")
+        sample_kind = env.get("HEY_JARVIS_STARTUP_SAMPLE_KIND", "unspecified")
+        self.launch_id = launch_id if SAFE_DIAGNOSTIC.fullmatch(launch_id) else None
+        self.profile = profile if profile in {"debug", "release"} else None
+        self.sample_kind = sample_kind if sample_kind in {"cold", "warm", "unspecified"} else "unspecified"
+        self.path = app_support_dir / "diagnostics" / "startup-python.jsonl"
+        self._lock = threading.Lock()
+
+    def record_webview(self, stage: str, elapsed_ms: int) -> None:
+        if (
+            self.launch_id is None
+            or self.profile is None
+            or stage not in self.ALLOWED
+            or isinstance(elapsed_ms, bool)
+            or not isinstance(elapsed_ms, int)
+            or not 0 <= elapsed_ms <= 300_000
+        ):
+            return
+        record = {
+            "schema": "hey-jarvis-startup-v1",
+            "launch_id": self.launch_id,
+            "build_profile": self.profile,
+            "sample_kind": self.sample_kind,
+            "component": "webview",
+            "stage": stage,
+            "receipt_elapsed_ms": None,
+            "process_elapsed_ms": elapsed_ms,
+        }
+        try:
+            with self._lock:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                if self.path.exists() and self.path.stat().st_size >= 256 * 1024:
+                    for generation in range(4, 0, -1):
+                        source = self.path.with_suffix(f".jsonl.{generation}")
+                        target = self.path.with_suffix(f".jsonl.{generation + 1}")
+                        if source.exists():
+                            source.replace(target)
+                    self.path.replace(self.path.with_suffix(".jsonl.1"))
+                with self.path.open("a", encoding="utf-8") as output:
+                    output.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
+        except OSError:
+            return
+
+
 def run_packaging_smoke() -> int:
     """Prove the frozen default TFLite and deterministic fake paths offline."""
 
@@ -274,7 +328,10 @@ class ProductRuntime:
         resource_dir: Path,
         app_support_dir: Path,
         env: Mapping[str, str] | None = None,
+        startup_event: Callable[[str], None] | None = None,
     ) -> "ProductRuntime":
+        emit_startup = startup_event or (lambda _stage: None)
+        startup_diagnostics = StartupDiagnostics(app_support_dir, os.environ if env is None else env)
         diagnostics = LifecycleDiagnostics(app_support_dir, session_id)
         diagnostics.record("runtime_starting", "non_listening")
         # Native preferences exclusively own these values for the packaged app.
@@ -287,7 +344,9 @@ class ProductRuntime:
             require_openai_api_key=True,
             backend="realtime",
         )
+        emit_startup("settings_loaded")
         validate_openai_credential(settings.openai_api_key)
+        emit_startup("credential_validated")
         settings, app_wake_preferences = apply_app_wake_preferences(
             settings,
             app_support_dir / "preferences-v1.json",
@@ -322,6 +381,7 @@ class ProductRuntime:
         detector = _build_wake_detector(settings, logger=LOGGER)
         if hasattr(detector, "preload"):
             detector.preload()
+        emit_startup("wake_model_ready")
         wake_options = build_app_realtime_wake_options(
             settings,
             app_wake_preferences,
@@ -347,6 +407,7 @@ class ProductRuntime:
             english_cached_farewell_audio_path=english_cached_farewell,
             english_cached_farewell_manifest_path=english_cached_farewell_manifest,
             app_language_path=app_support_dir / "preferences-v1.json",
+            startup_event=startup_diagnostics.record_webview,
         )
         server_thread = threading.Thread(
             target=server.serve_forever,
@@ -354,6 +415,7 @@ class ProductRuntime:
             daemon=True,
         )
         server_thread.start()
+        emit_startup("server_bound")
 
         player = MacOSPlayer(logger=LOGGER)
         acknowledgement_duration_ms = (
@@ -394,6 +456,7 @@ class ProductRuntime:
             name="hey-jarvis-controller",
         )
         controller_thread.start()
+        emit_startup("controller_started")
         diagnostics.record("runtime_ready", "ready")
         control_url = (
             f"http://127.0.0.1:{server.server_port}/"
@@ -444,6 +507,9 @@ def run(
     runtime: ProductRuntime | None = None
     diagnostics: LifecycleDiagnostics | None = None
 
+    def startup_elapsed_ms() -> int:
+        return min(300_000, max(0, round((time.monotonic() - PROCESS_STARTED) * 1000)))
+
     try:
         bootstrap_line = input_stream.readline()
         if not bootstrap_line:
@@ -477,12 +543,30 @@ def run(
                     Path(payload["app_support_dir"]), session_id
                 )
                 diagnostics.record("protocol_startup", "non_listening")
+                def emit_startup(stage: str) -> None:
+                    nonlocal outbound_sequence
+                    _write(
+                        output_stream,
+                        session_id,
+                        outbound_sequence,
+                        {
+                            "kind": "startup_timing",
+                            "stage": stage,
+                            "elapsed_ms": startup_elapsed_ms(),
+                        },
+                    )
+                    outbound_sequence += 1
+
+                emit_startup("process_started")
+                emit_startup("imports_ready")
+                emit_startup("runtime_starting")
                 try:
                     runtime = runtime_factory(
                         session_id=session_id,
                         resource_dir=Path(payload["resource_dir"]),
                         app_support_dir=Path(payload["app_support_dir"]),
                         env=runtime_env,
+                        startup_event=emit_startup,
                     )
                 except Exception as exc:
                     diagnostics.record("startup_failed", "non_listening")
@@ -503,6 +587,7 @@ def run(
                         },
                     )
                     return 1
+                emit_startup("runtime_ready")
                 _write(
                     output_stream,
                     session_id,

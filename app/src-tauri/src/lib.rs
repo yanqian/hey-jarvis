@@ -5,6 +5,7 @@ mod onboarding;
 mod power;
 mod preferences;
 mod protocol;
+mod startup;
 mod supervisor;
 
 use credentials::{
@@ -18,13 +19,15 @@ use preferences::{
     validate_wake_tuning, ENGLISH,
 };
 use serde::Serialize;
+use startup::StartupTrace;
 use std::path::PathBuf;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
 };
 use std::thread;
 use std::time::Duration;
+use std::time::Instant;
 use supervisor::{RuntimeSnapshot, SidecarSupervisor};
 use tauri::{
     menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem},
@@ -41,6 +44,8 @@ struct AppRuntime {
     sleep_recovery: Mutex<power::SleepRecoveryPolicy>,
     app_support_dir: PathBuf,
     diagnostics: Diagnostics,
+    startup: StartupTrace,
+    startup_runtime_pending: AtomicBool,
 }
 
 struct NativeMenuItems {
@@ -103,6 +108,16 @@ fn record_webview_lifecycle(
 }
 
 #[tauri::command]
+fn record_startup_milestone(
+    stage: String,
+    process_elapsed_ms: u64,
+    runtime: State<'_, AppRuntime>,
+) -> Result<(), String> {
+    runtime.startup.record_webview(&stage, process_elapsed_ms);
+    Ok(())
+}
+
+#[tauri::command]
 fn export_support_bundle(runtime: State<'_, AppRuntime>) -> Result<SupportExport, String> {
     runtime
         .diagnostics
@@ -122,6 +137,7 @@ struct OnboardingSnapshot {
     microphone_permission: String,
     openai_configured: bool,
     finnhub_configured: bool,
+    credential_status_pending: bool,
     smart_speaker_mode: bool,
     smart_speaker_active: bool,
     app_language: String,
@@ -129,6 +145,33 @@ struct OnboardingSnapshot {
     wake_diagnostics_enabled: bool,
     wake_threshold: f64,
     wake_confirmation_frames: u8,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct StartupRoute {
+    completed: bool,
+    microphone_permission: String,
+    app_language: String,
+    app_theme: String,
+    runtime_starting: bool,
+}
+
+#[tauri::command]
+fn startup_route(runtime: State<'_, AppRuntime>) -> Result<StartupRoute, String> {
+    let onboarding = load_onboarding(&runtime.onboarding_path)?;
+    let preferences = load_preferences(&runtime.preferences_path)?;
+    Ok(StartupRoute {
+        completed: onboarding.completed,
+        microphone_permission: onboarding.microphone_permission,
+        app_language: preferences.app_language,
+        app_theme: preferences.app_theme,
+        runtime_starting: runtime.startup_runtime_pending.load(Ordering::Acquire),
+    })
+}
+
+#[tauri::command]
+fn startup_runtime_pending(runtime: State<'_, AppRuntime>) -> bool {
+    runtime.startup_runtime_pending.load(Ordering::Acquire)
 }
 
 #[tauri::command]
@@ -217,6 +260,7 @@ fn update_power_availability(runtime: &AppRuntime, availability: &str) {
         policy.update_availability(availability, &runtime.diagnostics);
     }
     if availability == "wake_listening" {
+        runtime.startup.record_native("voice_ready");
         let completed = runtime
             .sleep_recovery
             .lock()
@@ -338,6 +382,21 @@ fn set_wake_tuning(
 
 #[tauri::command]
 fn enter_settings(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
+    if runtime.startup_runtime_pending.load(Ordering::Acquire) {
+        let first_run = !runtime.onboarding_path.exists();
+        let record = load_onboarding(&runtime.onboarding_path)?;
+        let mut snapshot = onboarding_snapshot(
+            &runtime,
+            first_run,
+            record,
+            CredentialStatus {
+                openai_configured: false,
+                finnhub_configured: false,
+            },
+        )?;
+        snapshot.credential_status_pending = true;
+        return Ok(snapshot);
+    }
     onboarding_status(runtime)
 }
 
@@ -465,6 +524,7 @@ fn onboarding_snapshot(
         microphone_permission: record.microphone_permission,
         openai_configured: credentials.openai_configured,
         finnhub_configured: credentials.finnhub_configured,
+        credential_status_pending: false,
         smart_speaker_mode: preferences.smart_speaker_mode,
         smart_speaker_active: power.active,
         app_language: preferences.app_language,
@@ -671,6 +731,7 @@ fn request_open_settings(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let process_origin = Instant::now();
     let app = tauri::Builder::default()
         .plugin(
             tauri::plugin::Builder::<_, ()>::new("settings-navigation")
@@ -695,29 +756,31 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
-        .setup(|app| {
+        .setup(move |app| {
             let app_support_dir = app.path().app_data_dir()?;
+            let startup = StartupTrace::new(&app_support_dir, process_origin);
+            startup.record_native("setup_started");
             let diagnostics = Diagnostics::new(&app_support_dir);
             diagnostics.record("native", "app_started", None, Some("safe"));
             let resource_dir = std::env::var_os("HEY_JARVIS_RESOURCE_DIR")
                 .map(PathBuf::from)
                 .unwrap_or(app.path().resource_dir()?);
+            startup.record_native("paths_ready");
             let onboarding_path = onboarding::path(&app_support_dir);
             let preferences_path = preferences::path(&app_support_dir);
             let preferences = load_preferences(&preferences_path).unwrap_or_default();
             let _ = save_preferences(&preferences_path, &preferences);
+            startup.record_native("preferences_loaded");
             let credential_store: Arc<dyn CredentialStore> = Arc::new(MacKeychainStore);
-            let mut supervisor = SidecarSupervisor::new(
+            let supervisor = SidecarSupervisor::new(
                 app_support_dir.clone(),
                 resource_dir,
                 development_sidecar_path(),
+                startup.clone(),
             );
             let onboarding = load_onboarding(&onboarding_path).unwrap_or_default();
-            if onboarding.completed && onboarding.microphone_permission == "granted" {
-                if let Ok(credentials) = RuntimeCredentials::load(credential_store.as_ref()) {
-                    let _ = supervisor.start_with_credentials(Some(&credentials));
-                }
-            }
+            let should_start_runtime =
+                onboarding.completed && onboarding.microphone_permission == "granted";
             app.manage(AppRuntime {
                 supervisor: Mutex::new(supervisor),
                 credentials: credential_store,
@@ -729,6 +792,8 @@ pub fn run() {
                 sleep_recovery: Mutex::new(power::SleepRecoveryPolicy::default()),
                 app_support_dir,
                 diagnostics,
+                startup: startup.clone(),
+                startup_runtime_pending: AtomicBool::new(should_start_runtime),
             });
             power::install(app.handle().clone());
             let initial_availability = app
@@ -800,6 +865,40 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
+                startup.record_native("window_shown");
+            }
+            if should_start_runtime {
+                let startup_app = app.handle().clone();
+                thread::spawn(move || {
+                    for _ in 0..200 {
+                        let Some(runtime) = startup_app.try_state::<AppRuntime>() else {
+                            thread::sleep(Duration::from_millis(5));
+                            continue;
+                        };
+                        let result = RuntimeCredentials::load(runtime.credentials.as_ref())
+                            .and_then(|credentials| {
+                                runtime.startup.record_native("sidecar_starting");
+                                runtime
+                                    .supervisor
+                                    .lock()
+                                    .map_err(|_| "sidecar supervisor is unavailable".to_string())?
+                                    .start_with_credentials(Some(&credentials))
+                                    .map(|_| ())
+                            });
+                        if result.is_err() {
+                            runtime.diagnostics.record(
+                                "native",
+                                "startup_runtime_unavailable",
+                                None,
+                                Some("non_listening"),
+                            );
+                        }
+                        runtime
+                            .startup_runtime_pending
+                            .store(false, Ordering::Release);
+                        return;
+                    }
+                });
             }
 
             let application_menu = Menu::default(app.handle())?;
@@ -883,9 +982,12 @@ pub fn run() {
                 _ => {}
             })
             .build(app)?;
+            startup.record_native("setup_completed");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            startup_route,
+            startup_runtime_pending,
             sidecar_status,
             sidecar_health,
             restart_sidecar,
@@ -909,7 +1011,8 @@ pub fn run() {
             open_microphone_settings,
             record_webview_lifecycle,
             export_support_bundle,
-            clear_diagnostics
+            clear_diagnostics,
+            record_startup_milestone
         ])
         .build(tauri::generate_context!())
         .expect("Hey Jarvis Mac app failed to build");

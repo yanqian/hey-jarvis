@@ -4,6 +4,30 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F129 is evaluator-approved. F128 proved that synchronous Keychain and sidecar startup,
+not WebView paint, gated the shown window. F129 now shows a truthful local
+preparing shell first, keeps Settings usable without a second Keychain read, and
+runs credential/sidecar startup behind a bounded pending state. Only a real
+sidecar `ready` snapshot can navigate to Home; timeout, missing credentials,
+permissions, first-run, failure, Settings, and sleep/wake paths stay non-listening
+and fail closed. Six final compatible Release warm samples improve window show
+from 1,446 ms median / 13,209 ms p90 to 167.5 / 189 ms, and local shell
+interactivity from 1,662 / 13,499 ms to 367.5 / 430 ms. The unsigned development
+bundle did not complete Keychain authorization in the after-series, so no new
+voice-ready improvement is claimed; a retained long sample verifies the truthful
+30-second slow-start notice and responsive pending Settings UI. Debug/Release
+builds and final recovery pass 487 project tests, 16 Mac frontend/sidecar tests,
+35 Rust tests, and all smoke paths. Evidence is in
+`.agent-harness/runs/20260814T103339Z-F129-fast-coding.md`.
+Independent approval is recorded in
+`.agent-harness/runs/20260814T104258Z-F129-evaluation-pass.md`.
+
+F128 is evaluator-approved. One `hey-jarvis-startup-v1` launch identifier
+correlates bounded native receipt time with WebView and sidecar monotonic
+durations, while an async writer and offline median/p90 report retain only
+privacy-safe allowlisted lifecycle timing fields. Independent approval is in
+`.agent-harness/runs/20260814T101634Z-F128-evaluation-pass.md`.
+
 F126 is evaluator-approved. Native preferences migrate to schema v5 and preserve the
 existing `0.50` threshold plus two-frame behavior while accepting only the
 bounded `0.50`/`0.60` and `2`/`3` choices. Privacy & Diagnostics keeps one

@@ -28,6 +28,7 @@ PAYLOAD_FIELDS = {
     "session": {"action", "conversation_id"},
     "lifecycle": {"event", "detail"},
     "shutdown": {"reason"},
+    "startup_timing": {"stage", "elapsed_ms"},
 }
 
 
@@ -125,6 +126,14 @@ def run(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) ->
             if message["payload"]["kind"] != "startup":
                 return 2
             session_id = message["session_id"]
+            for stage in ("process_started", "imports_ready", "runtime_ready"):
+                _write(
+                    output_stream,
+                    session_id,
+                    outbound_sequence,
+                    {"kind": "startup_timing", "stage": stage, "elapsed_ms": 1},
+                )
+                outbound_sequence += 1
             _write(
                 output_stream,
                 session_id,

@@ -2862,6 +2862,46 @@
       "depends_on": [
         "F126"
       ]
+    },
+    {
+      "id": "F128",
+      "title": "Instrument and baseline Mac app startup",
+      "description": "Correlate privacy-safe native, WebView, and packaged-sidecar startup milestones and produce repeatable cold/warm launch summaries that distinguish visible Home, interactive Home, and voice readiness.",
+      "acceptance": [
+        "Each launch has one bounded correlation identifier and a documented structured schema covering native process/setup/window, WebView script/DOM/first-paint/Home-interactive, sidecar process/import/server/model, and truthful voice-ready milestones; per-process durations are monotonic and native receipt timestamps are used instead of comparing unrelated process clocks.",
+        "Startup records are non-blocking and non-fatal, retain only allowlisted lifecycle and numeric timing fields in bounded rotated local history, and exclude audio, transcripts, answers, credentials, SDP/ICE, provider bodies, tool arguments, unrestricted paths, and network telemetry.",
+        "A project-owned offline command summarizes individual stage durations plus median and p90 across compatible runs, rejects malformed or mixed-definition evidence, and documents a reproducible Debug/Release cold/warm target-Mac sampling protocol with explicit visible, interactive, and voice-ready definitions.",
+        "Deterministic native, WebView, real/fake-sidecar, correlation, ordering, rotation, privacy, malformed-event, writer-failure, and summary-statistic tests pass without delaying Home rendering or requiring network, credentials, microphone, speaker, or paid API use.",
+        "JavaScript/Python syntax, focused Rust and Mac shell tests, Debug and Release builds, saved target-Mac baseline evidence, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F127"
+      ]
+    },
+    {
+      "id": "F129",
+      "title": "Shorten the measured Home startup critical path",
+      "description": "Use F128 baseline evidence to remove the largest avoidable delay before visible and interactive Home while preserving honest asynchronous voice-runtime readiness.",
+      "acceptance": [
+        "F128 before-data identifies the selected critical-path contributor from repeated compatible Release samples; the implementation documents why that contributor, rather than an unmeasured suspected cost, is the optimization target.",
+        "The Home becomes visible and locally interactive as soon as its safe UI prerequisites complete, does not wait unnecessarily for sidecar model or microphone readiness, and presents the existing truthful preparing/availability state until the voice runtime actually reports ready.",
+        "Repeated same-protocol target-Mac Release samples demonstrate a material median improvement in the selected visible or interactive milestone, report p90 and voice-ready effects honestly, and retain raw bounded evidence rather than selecting one favorable run.",
+        "Sidecar failures, missing credentials, permissions, Settings, sleep/wake, lifecycle diagnostics, runtime availability, and first-run behavior remain fail-closed and truthful; no early ready state, duplicate sidecar, leaked child, network telemetry, microphone arming, or paid conversation is introduced by the optimization.",
+        "Focused regression tests, JavaScript/Python syntax, Rust and Mac shell tests, Debug and Release builds, before/after evidence, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F128"
+      ]
     }
   ]
 }
