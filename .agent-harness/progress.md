@@ -2,6 +2,19 @@
 
 ## Current System Status
 
+F130 is evaluator-approved. The Mac startup shell now keeps the product context and
+Settings escape hatch but replaces the prior STARTING label, Returning heading,
+and detail stack with one atomic polite status line. That line changes in place
+from local setup checking to truthful local voice preparation and the existing
+bounded slow-start explanation; it adds no percentage, checklist, fake phase,
+or navigation delay. English and Simplified Chinese copy, stronger night/day
+orb contrast, focused 20-test DOM/state/CSS coverage, JavaScript syntax, 35 Rust
+tests, Release app build, a real 820 x 640 Chinese Release capture, 488 project
+tests, 16 Mac frontend/sidecar tests, and final recovery pass. Coding evidence
+is in `.agent-harness/runs/20260814T150917Z-F130-fast-coding.md`; independent
+approval is recorded in
+`.agent-harness/runs/20260814T151230Z-F130-evaluation-pass.md`.
+
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
 F129 is evaluator-approved. F128 proved that synchronous Keychain and sidecar startup,

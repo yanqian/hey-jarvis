@@ -2541,3 +2541,74 @@ verifiable capabilities. Instrumentation can pass even if the baseline shows
 the delay is platform-bound, while an optimization can be accepted only after
 F128 identifies a real critical-path contributor and supplies a stable
 before/after protocol.
+
+### Concise Mac Startup Shell
+
+Feature mapping: F130.
+
+Goal: make the brief Mac app startup shell visually clearer and easier to trust
+by presenting exactly one readable, truthful line of changing startup copy
+instead of a label, heading, and detail stack.
+
+Included scope: simplify the returning/startup surface around the existing
+animated orb; replace the current `STARTING` label, `Returning to Jarvis`
+heading, and detail paragraph with one live status element; use that same
+element for the initial local setup check, voice-runtime preparation, and
+bounded slow-start explanation; keep the Settings escape hatch; and provide
+equivalent concise English and Simplified Chinese copy.
+
+Excluded scope: changing native, Keychain, sidecar, model, microphone, or Home
+startup order; adding percentages, a progress bar, a multi-step checklist, or
+multiple simultaneous status lines; redesigning Settings, Resume, or the
+Realtime Home; changing F128 telemetry or claiming a new launch-time gain.
+
+Core flows: the window paints the existing safe local shell immediately with
+one line explaining that local setup is being checked; after the native route
+confirms a completed, microphone-authorized returning launch, the same line is
+replaced with voice-runtime preparation copy; if the bounded wait reaches its
+existing timeout, that same line is replaced with a concise explanation that
+startup is taking longer and Settings remains available. Fast completion still
+navigates directly to Home without an artificial delay.
+
+Constraints: only one user-facing startup status text element may be present or
+visible in the central content; copy must remain a single visual line at the
+configured 820 x 640 window in both locales; transitions must replace text in
+place, remain accessible through one polite live region, and never imply voice
+readiness before the real sidecar ready snapshot. The startup shell must not
+introduce a timer that delays navigation, network access, microphone use,
+credential reads, or paid API activity.
+
+Ambiguities or assumptions: “一行文字” applies to the central startup message;
+the persistent top-left product name and top-right Settings control remain.
+Long-window or extreme accessibility text scaling may wrap naturally rather
+than truncate essential status, while the supported default 820 x 640 window
+and both shipped locales must stay on one line. The animated orb remains the
+primary non-text visual focus and may be strengthened without changing runtime
+behavior.
+
+Required capabilities: the existing F129 asynchronous startup shell and route,
+frontend DOM/CSS tests, bilingual string contracts, JavaScript syntax checking,
+Debug and Release app builds, target-Mac screenshot capture without microphone
+or paid conversation, final project recovery, provider-native fast coding
+evidence, and a separate cold-start Evaluator Agent.
+
+Implementation paths: `app/src/index.html`, `app/src/styles.css`,
+`app/src/main.js`, `app/src/i18n.js`, `tests/test_mac_app_shell.py`, visual
+evidence under project-owned artifacts or `.agent-harness/runs/`,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: DOM inspection proves one central startup live region and
+no startup label/heading/detail stack; state-transition tests prove in-place
+initial, runtime, and timeout copy with unchanged ready navigation and Settings
+availability; English and Chinese copy and default-window single-line CSS are
+covered; JavaScript syntax, focused Mac shell tests, Debug and Release builds,
+an 820 x 640 target-Mac screenshot, final `./init.sh`, fast coding evidence,
+and separate evaluator approval pass without credentials, network, microphone,
+speaker, or paid API use.
+
+Decomposition decision: F130 is intentionally one feature because DOM
+simplification, in-place bilingual state copy, visual styling, and screenshot
+verification form one independently valuable startup-shell behavior with one
+frontend verification surface. Further startup performance work or broader
+application redesign remains separate.

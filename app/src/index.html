@@ -26,7 +26,7 @@
       </div>
     </main>
 
-    <main id="returning-view" class="returning-view" aria-labelledby="returning-title" hidden>
+    <main id="returning-view" class="returning-view" aria-labelledby="returning-status" hidden>
       <header class="app-header returning-header">
         <div class="app-context" aria-label="Hey Jarvis">
           <span class="context-icon"><span class="status-dot" aria-hidden="true"></span></span>
@@ -36,9 +36,7 @@
       </header>
       <div class="returning-content">
         <div class="returning-orb" aria-hidden="true"><span></span></div>
-        <p class="section-label">STARTING</p>
-        <h1 id="returning-title">Returning to Jarvis</h1>
-        <p id="returning-status" role="status" aria-live="polite">Starting the local voice runtime…</p>
+        <p id="returning-status" class="startup-status" role="status" aria-live="polite" aria-atomic="true">Checking local setup…</p>
       </div>
     </main>
 

@@ -2902,6 +2902,26 @@
       "depends_on": [
         "F128"
       ]
+    },
+    {
+      "id": "F130",
+      "title": "Simplify the Mac startup shell to one status line",
+      "description": "Replace the startup label, heading, and detail stack with one truthful bilingual live status line that updates in place without delaying Home.",
+      "acceptance": [
+        "The central startup shell contains exactly one user-facing text status element beside the existing non-text orb; the STARTING label, Returning to Jarvis heading, and separate detail line are removed, while the top product context and Settings escape hatch remain.",
+        "The same polite live region changes in place from local setup checking to voice-runtime preparation and then, only at the existing bounded timeout, a concise slow-start explanation; no percentage, checklist, fake step, extra status line, or artificial navigation delay is introduced.",
+        "English and Simplified Chinese startup strings are concise, truthful, accessible, and remain one visual line at the supported default 820 x 640 window; essential text may wrap rather than truncate under exceptional accessibility scaling.",
+        "A real ready sidecar snapshot remains the only path to Home, while first run, missing credentials, permissions, failure, Settings, Resume, sleep/wake, diagnostics, and asynchronous runtime behavior remain fail-closed and unchanged.",
+        "Focused DOM/state/bilingual/CSS regression tests, JavaScript syntax, Debug and Release builds, an 820 x 640 target-Mac visual capture, final ./init.sh, fast coding evidence, and separate cold-start evaluator approval pass without network, credentials, microphone, speaker, or paid API use."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F129"
+      ]
     }
   ]
 }

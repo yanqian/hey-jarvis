@@ -91,27 +91,38 @@ button { font: inherit; }
 }
 
 .returning-orb {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 126px;
-  height: 126px;
-  margin-bottom: 26px;
-  border: 1px solid rgb(106 218 183 / 18%);
+  width: 144px;
+  height: 144px;
+  margin-bottom: 34px;
+  border: 1px solid rgb(106 218 183 / 28%);
   border-radius: 50%;
-  background: radial-gradient(circle, rgb(68 142 120 / 32%), rgb(14 25 21 / 18%) 54%, transparent 70%);
-  box-shadow: 0 0 54px rgb(67 170 138 / 12%);
+  background: radial-gradient(circle, rgb(80 184 150 / 35%), rgb(14 25 21 / 18%) 48%, transparent 70%);
+  box-shadow: 0 0 72px rgb(67 170 138 / 18%), inset 0 0 28px rgb(99 220 181 / 7%);
   animation: returning-pulse 1.8s ease-in-out infinite;
 }
 
 .returning-orb span {
-  width: 72px;
-  height: 72px;
-  border: 1px solid rgb(130 231 198 / 22%);
+  width: 78px;
+  height: 78px;
+  border: 1px solid rgb(130 231 198 / 34%);
   border-radius: 50%;
+  background: radial-gradient(circle, rgb(111 231 193 / 16%), transparent 62%);
+  box-shadow: 0 0 30px rgb(78 207 166 / 11%);
 }
 
-.returning-view h1 { margin-top: 8px; font-size: 27px; }
-.returning-view #returning-status { margin: 4px 0 0; color: #87938f; font-size: 12px; }
+.startup-status {
+  width: min(680px, calc(100vw - 64px));
+  min-height: 21px;
+  margin: 0;
+  color: #a6b3ae;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: center;
+}
 
 @keyframes returning-pulse {
   50% { opacity: .68; transform: scale(.97); }
@@ -657,7 +668,6 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 :root[data-theme="day"] .about-list div { border-color: #d5dfd9; }
 :root[data-theme="day"] .about-list dt { color: #74837b; }
 :root[data-theme="day"] .about-list dd { color: #405249; }
-:root[data-theme="day"] .returning-view h1,
 :root[data-theme="day"] .settings-panel h2 { color: #40564c; }
 :root[data-theme="day"] .settings-group-heading h3,
 :root[data-theme="day"] .summary-card h4,
@@ -666,6 +676,6 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 :root[data-theme="day"] .setting-row h3,
 :root[data-theme="day"] .disclosure h3 { color: #50665c; }
 :root[data-theme="day"] .resume-detail,
-:root[data-theme="day"] #resume-status,
-:root[data-theme="day"] .returning-view #returning-status { color: #617169; }
-:root[data-theme="day"] .returning-orb { border-color: rgb(75 157 121 / 24%); background: radial-gradient(circle, rgb(112 190 153 / 25%), rgb(238 248 242 / 55%) 54%, transparent 70%); box-shadow: 0 0 45px rgb(75 157 121 / 10%); }
+:root[data-theme="day"] #resume-status { color: #617169; }
+:root[data-theme="day"] .startup-status { color: #52645b; }
+:root[data-theme="day"] .returning-orb { border-color: rgb(75 157 121 / 32%); background: radial-gradient(circle, rgb(112 190 153 / 30%), rgb(238 248 242 / 58%) 50%, transparent 70%); box-shadow: 0 0 58px rgb(75 157 121 / 14%), inset 0 0 28px rgb(75 157 121 / 6%); }

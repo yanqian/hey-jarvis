@@ -160,7 +160,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('await recordLifecycle("runtime_restart_requested")', app_script)
         self.assertIn('id="returning-view"', app_page)
         self.assertIn('id="returning-settings"', app_page)
-        self.assertIn('role="status" aria-live="polite"', app_page)
+        self.assertIn('role="status" aria-live="polite" aria-atomic="true"', app_page)
         self.assertIn('id="voice-status"', app_page)
         voice_status = app_page.split('id="voice-status"', 1)[1].split(
             '<div class="settings-layout">', 1
@@ -215,7 +215,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("showStartingRuntime()", app_script)
         self.assertIn('await invoke("startup_route")', app_script)
         self.assertIn('await invoke("startup_runtime_pending")', app_script)
-        self.assertIn("Voice startup is taking longer than expected. Settings remains available.", app_script)
+        self.assertIn("Voice is taking longer to start — Settings is still available.", app_script)
         self.assertIn("await afterCommittedPaint();\n      recordStartup(\"shell_interactive\")", app_script)
         self.assertIn('tauri::plugin::Builder::<_, ()>::new("settings-navigation")', native)
         self.assertIn('url.scheme() == "hey-jarvis"', native)
@@ -254,6 +254,54 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("WebviewWindowBuilder::new", open_settings)
         self.assertNotIn("stop_sidecar", open_settings)
         self.assertIn("thread::spawn", native)
+
+    def test_startup_shell_has_one_truthful_bilingual_status_line(self):
+        page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        script = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        translations = (APP / "src" / "i18n.js").read_text(encoding="utf-8")
+        styles = (APP / "src" / "styles.css").read_text(encoding="utf-8")
+
+        startup = page.split('id="returning-view"', 1)[1].split("</main>", 1)[0]
+        self.assertEqual(startup.count('role="status"'), 1)
+        self.assertEqual(startup.count('id="returning-status"'), 1)
+        self.assertEqual(startup.count("<p"), 1)
+        self.assertNotIn("<h1", startup)
+        self.assertNotIn("section-label", startup)
+        self.assertNotIn("Returning to Jarvis", startup)
+        self.assertNotIn("STARTING", startup)
+        self.assertIn("Checking local setup…", startup)
+        self.assertIn('aria-labelledby="returning-status"', page)
+
+        route = script.index('await invoke("startup_route")')
+        preparation = script.index("showVoiceRuntimePreparation();", route)
+        timeout_flow = script.split("async function waitForStartupRuntime()", 1)[1].split(
+            "async function refreshPendingCredentialStatus()", 1
+        )[0]
+        self.assertIn('ui("Checking local setup…")', script)
+        self.assertLess(route, preparation)
+        self.assertIn('ui("Preparing local voice…")', script)
+        self.assertIn(
+            'ui("Voice is taking longer to start — Settings is still available.")',
+            timeout_flow,
+        )
+        self.assertNotIn("%", startup)
+
+        for english, chinese in (
+            ("Checking local setup…", "正在检查本地设置…"),
+            ("Preparing local voice…", "正在准备本地语音…"),
+            (
+                "Voice is taking longer to start — Settings is still available.",
+                "语音启动比预期更久，你仍可打开设置。",
+            ),
+        ):
+            self.assertIn(english, script + translations)
+            self.assertIn(chinese, script + translations)
+
+        startup_style = styles.split(".startup-status {", 1)[1].split("}", 1)[0]
+        self.assertIn("width: min(680px, calc(100vw - 64px))", startup_style)
+        self.assertIn("font-size: 14px", startup_style)
+        self.assertNotIn("overflow: hidden", startup_style)
+        self.assertNotIn("text-overflow", startup_style)
 
     def test_system_sleep_has_bounded_recovery_and_a_clickable_fallback(self):
         page = (APP / "src" / "index.html").read_text(encoding="utf-8")

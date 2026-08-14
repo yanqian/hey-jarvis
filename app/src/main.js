@@ -127,10 +127,10 @@ const DYNAMIC_ZH = new Map(Object.entries({
   "Checking the built-in microphone…": "正在检查内置麦克风…",
   "Microphone access is ready. Starting the local voice runtime…": "麦克风访问已就绪。正在启动本地语音运行环境…",
   "Voice listening resumed. Settings can remain open.": "语音监听已恢复，设置窗口可以保持打开。",
-  "Starting the local voice runtime…": "正在启动本地语音运行环境…",
+  "Preparing local voice…": "正在准备本地语音…",
   "Checking local setup…": "正在检查本地设置…",
   "Checking macOS Keychain…": "正在检查 macOS 钥匙串…",
-  "Voice startup is taking longer than expected. Settings remains available.": "语音启动所需时间超出预期，设置仍可使用。",
+  "Voice is taking longer to start — Settings is still available.": "语音启动比预期更久，你仍可打开设置。",
   "Restarting local wake listening…": "正在重新启动本地唤醒监听…",
   "Apply & Done": "应用并完成",
   "Applying Settings changes…": "正在应用设置更改…",
@@ -202,7 +202,11 @@ function showStartingRuntime() {
   elements.resumeView.hidden = true;
   elements.settingsShell.hidden = true;
   elements.returningView.hidden = false;
-  elements.returningStatus.textContent = ui("Starting the local voice runtime…");
+  elements.returningStatus.textContent = ui("Checking local setup…");
+}
+
+function showVoiceRuntimePreparation() {
+  elements.returningStatus.textContent = ui("Preparing local voice…");
 }
 
 function recordLifecycle(event, sessionId = null) {
@@ -404,7 +408,7 @@ async function waitForStartupRuntime() {
   const deadline = Date.now() + 30000;
   while (await invoke("startup_runtime_pending")) {
     if (Date.now() >= deadline) {
-      elements.returningStatus.textContent = ui("Voice startup is taking longer than expected. Settings remains available.");
+      elements.returningStatus.textContent = ui("Voice is taking longer to start — Settings is still available.");
       return;
     }
     await new Promise(resolve => window.setTimeout(resolve, 100));
@@ -459,6 +463,7 @@ async function load() {
       setLocale(route.app_language);
       setTheme(route.app_theme);
       if (route.completed && route.microphone_permission === "granted") {
+        showVoiceRuntimePreparation();
         await waitForStartupRuntime();
         return;
       }
@@ -628,7 +633,7 @@ async function returnToAssistant() {
   }
   elements.settingsShell.hidden = true;
   elements.returningView.hidden = false;
-  elements.returningStatus.textContent = ui("Starting the local voice runtime…");
+  showVoiceRuntimePreparation();
   try {
     await recordLifecycle("runtime_restart_requested");
     navigateToAssistant(await invoke("restart_sidecar"));
