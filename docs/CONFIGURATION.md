@@ -60,6 +60,14 @@ cancellation. Re-run manual acceptance if room, device, or volume changes.
 | `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS` | `0.35` | Legacy fixed drain when guarding is disabled. |
 | `WAKE_CONFIRMATION_FRAMES` | `2` | Consecutive positive wake frames required. |
 
+The packaged Mac App has a separate persisted **Save wake-word tuning
+diagnostics** switch under Privacy & Diagnostics. It defaults off and does not
+use an environment variable. The top-right control is always **Apply & Done**:
+runtime-neutral changes close directly, while a change that stopped an active
+or ready sidecar restores its prior safe state before closing Settings. See
+`docs/MAC_APP_DIAGNOSTICS.md`
+for the bounded JSONL schema, retention, export, clear, and calibration flow.
+
 Acknowledgement guarding and post-playback suppression:
 
 | Setting | Default |

@@ -31,9 +31,9 @@ def trial(trial_id: str, **overrides):
 
 class PortfolioCompletionTests(unittest.TestCase):
     def test_repository_demo_is_bounded_to_two_to_four_minutes(self):
-        self.assertEqual(portfolio.demo_duration_seconds(), 210)
+        self.assertEqual(portfolio.demo_duration_seconds(), 213)
 
-    def test_three_clean_trials_allow_internal_go_but_never_public_binary(self):
+    def test_three_clean_trials_allow_internal_go_with_unsigned_public_release(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             trials = base / "trials"
@@ -48,7 +48,7 @@ class PortfolioCompletionTests(unittest.TestCase):
                 "interruption": True,
                 "semantic_end_and_media_release": True,
                 "diagnostics_and_clean_quit": True,
-                "duration_seconds": 210,
+                "duration_seconds": 213,
                 "sensitive_material_visible": False,
                 "public_binary_linked": False,
                 "public_demo_reference": "https://example.invalid/demo",
@@ -59,7 +59,7 @@ class PortfolioCompletionTests(unittest.TestCase):
                 )
             report = portfolio.completion_report(trials, demo)
             self.assertEqual(report["status"], "GO_INTERNAL")
-            self.assertEqual(report["public_binary_distribution"], "HOLD")
+            self.assertEqual(report["public_binary_distribution"], "INTERNAL_UNSIGNED_PUBLIC")
 
     def test_missing_trials_or_any_blocker_holds_completion(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -126,6 +126,7 @@ struct OnboardingSnapshot {
     smart_speaker_active: bool,
     app_language: String,
     app_theme: String,
+    wake_diagnostics_enabled: bool,
 }
 
 #[tauri::command]
@@ -301,6 +302,20 @@ fn set_app_theme(
 }
 
 #[tauri::command]
+fn set_wake_diagnostics(
+    enabled: bool,
+    runtime: State<'_, AppRuntime>,
+) -> Result<OnboardingSnapshot, String> {
+    let mut preferences = load_preferences(&runtime.preferences_path)?;
+    if preferences.wake_diagnostics_enabled != enabled {
+        preferences.wake_diagnostics_enabled = enabled;
+        save_preferences(&runtime.preferences_path, &preferences)?;
+        stop_sidecar(&runtime, "wake_diagnostics_changed");
+    }
+    onboarding_status(runtime)
+}
+
+#[tauri::command]
 fn enter_settings(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
     onboarding_status(runtime)
 }
@@ -369,7 +384,10 @@ fn record_microphone_granted(runtime: State<'_, AppRuntime>) -> Result<Onboardin
 }
 
 #[tauri::command]
-async fn restart_voice_from_settings(app: tauri::AppHandle) -> Result<RuntimeSnapshot, String> {
+async fn restart_voice_from_settings(
+    app: tauri::AppHandle,
+    resume_listening: bool,
+) -> Result<RuntimeSnapshot, String> {
     let worker_app = app.clone();
     let snapshot = tauri::async_runtime::spawn_blocking(move || {
         let runtime = worker_app.state::<AppRuntime>();
@@ -377,7 +395,7 @@ async fn restart_voice_from_settings(app: tauri::AppHandle) -> Result<RuntimeSna
     })
     .await
     .map_err(|_| "sidecar restart task failed".to_string())??;
-    navigate_main_to_runtime(&app, &snapshot)?;
+    navigate_main_to_runtime(&app, &snapshot, resume_listening)?;
     Ok(snapshot)
 }
 
@@ -430,6 +448,7 @@ fn onboarding_snapshot(
         smart_speaker_active: power.active,
         app_language: preferences.app_language,
         app_theme: preferences.app_theme,
+        wake_diagnostics_enabled: preferences.wake_diagnostics_enabled,
     })
 }
 
@@ -508,6 +527,7 @@ fn navigate_to_recovery_runtime(
 fn navigate_main_to_runtime(
     app: &tauri::AppHandle,
     snapshot: &RuntimeSnapshot,
+    resume_listening: bool,
 ) -> Result<(), String> {
     let control_url = snapshot
         .control_url
@@ -517,7 +537,16 @@ fn navigate_main_to_runtime(
     if url.scheme() != "http" || url.host_str() != Some("127.0.0.1") {
         return Err("invalid_control_url".into());
     }
-    url.set_fragment(Some("smart-speaker-resume"));
+    if resume_listening {
+        url.set_fragment(Some("smart-speaker-resume"));
+    } else {
+        let smart_speaker_mode = app
+            .try_state::<AppRuntime>()
+            .and_then(|runtime| load_preferences(&runtime.preferences_path).ok())
+            .map(|preferences| preferences.smart_speaker_mode)
+            .unwrap_or(false);
+        url.set_fragment(smart_speaker_mode.then_some("smart-speaker-mode"));
+    }
     let main = app
         .get_webview_window("main")
         .ok_or_else(|| "runtime_navigation_failed".to_string())?;
@@ -842,6 +871,7 @@ pub fn run() {
             set_smart_speaker_mode,
             set_app_language,
             set_app_theme,
+            set_wake_diagnostics,
             enter_settings,
             open_settings,
             close_settings_window,

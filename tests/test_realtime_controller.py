@@ -21,6 +21,7 @@ class FakeClock:
 class FakeLease:
     def __init__(self, chunks: list[bytes]) -> None:
         self.is_open = False
+        self.last_overflowed = False
         self.chunks = list(chunks)
         self.calls: list[str] = []
 
@@ -59,6 +60,48 @@ def build_runtime():
 
 
 class RealtimeControllerTests(unittest.TestCase):
+    def test_wake_diagnostics_capture_near_positive_reset_and_confirmed_runs(self):
+        lease = FakeLease([b"near", b"one", b"reset", b"two", b"three"])
+        coordinator = HandoffCoordinator(lease)
+        coordinator.host_event("armed")
+
+        class ScoredDetector:
+            scores = iter([0.4, 0.7, 0.4, 0.8, 0.9])
+
+            def score(self, _chunk: bytes) -> float:
+                return next(self.scores)
+
+            def detect(self, _chunk: bytes) -> bool:
+                raise AssertionError("diagnostic scoring must not run inference twice")
+
+        class Sink:
+            def __init__(self) -> None:
+                self.events = []
+
+            def observe(self, _chunk: bytes, **detail: object) -> None:
+                self.events.append(detail)
+
+        sink = Sink()
+        controller = RealtimeSessionController(
+            coordinator=coordinator,
+            wake_detector=ScoredDetector(),
+            play_acknowledgement=lambda: None,
+            idle_timeout_seconds=1.0,
+            max_duration_seconds=2.0,
+            wake_confirmation_frames=2,
+            wake_threshold=0.6,
+            wake_diagnostics=sink,
+        )
+        controller._wait_for_local_wake()
+
+        self.assertEqual(
+            [event["event"] for event in sink.events],
+            ["near_threshold", "positive", "reset", "positive", "confirmed"],
+        )
+        self.assertEqual(sink.events[2]["consecutive"], 1)
+        self.assertEqual(sink.events[-1]["consecutive"], 2)
+        self.assertTrue(all(event["threshold"] == 0.6 for event in sink.events))
+
     def test_shutdown_during_failed_wake_read_never_reopens_microphone(self):
         shutdown = threading.Event()
 

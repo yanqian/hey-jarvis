@@ -39,6 +39,8 @@ class RealtimeSessionController:
         close_timeout_seconds: float = 5.0,
         farewell_timeout_seconds: float = 8.0,
         wake_confirmation_frames: int = 2,
+        wake_threshold: float | None = None,
+        wake_diagnostics: object | None = None,
         shutdown_requested: Callable[[], bool] = lambda: False,
     ) -> None:
         self.coordinator = coordinator
@@ -58,6 +60,10 @@ class RealtimeSessionController:
             raise ValueError("farewell_timeout_seconds must be greater than zero")
         self.farewell_timeout_seconds = farewell_timeout_seconds
         self.wake_confirmation_frames = max(1, wake_confirmation_frames)
+        if wake_threshold is not None and not 0.0 <= wake_threshold <= 1.0:
+            raise ValueError("wake_threshold must be between 0 and 1")
+        self.wake_threshold = wake_threshold
+        self.wake_diagnostics = wake_diagnostics
         self.shutdown_requested = shutdown_requested
 
     def run_once(self) -> RealtimeSessionResult:
@@ -145,12 +151,64 @@ class RealtimeSessionController:
             self._raise_if_shutting_down()
             pcm_chunk = self.coordinator.read_wake_chunk()
             self._raise_if_shutting_down()
-            if self.wake_detector.detect(pcm_chunk):
+            score_method = getattr(self.wake_detector, "score", None)
+            if self.wake_diagnostics is not None and self.wake_threshold is not None and score_method is not None:
+                score = float(score_method(pcm_chunk))
+                detected = score >= self.wake_threshold
+            else:
+                detected = self.wake_detector.detect(pcm_chunk)
+                score = 1.0 if detected else 0.0
+            overflowed = self.coordinator.wake_microphone_overflowed
+            if overflowed and detected:
+                self._record_wake_diagnostic(
+                    pcm_chunk, "overflow", score, consecutive_detections, overflowed
+                )
+            if detected:
                 consecutive_detections += 1
                 if consecutive_detections >= self.wake_confirmation_frames:
+                    self._record_wake_diagnostic(
+                        pcm_chunk, "confirmed", score, consecutive_detections, overflowed
+                    )
                     return
+                self._record_wake_diagnostic(
+                    pcm_chunk, "positive", score, consecutive_detections, overflowed
+                )
             else:
+                event = "reset" if consecutive_detections else (
+                    "overflow" if overflowed else "near_threshold"
+                )
+                if consecutive_detections or overflowed or (
+                    self.wake_threshold is not None
+                    and score >= max(0.05, self.wake_threshold - 0.25)
+                ):
+                    self._record_wake_diagnostic(
+                        pcm_chunk, event, score, consecutive_detections, overflowed
+                    )
                 consecutive_detections = 0
+
+    def _record_wake_diagnostic(
+        self,
+        pcm_chunk: bytes,
+        event: str,
+        score: float,
+        consecutive: int,
+        overflowed: bool,
+    ) -> None:
+        observe = getattr(self.wake_diagnostics, "observe", None)
+        if observe is None or self.wake_threshold is None:
+            return
+        try:
+            observe(
+                pcm_chunk,
+                event=event,
+                score=score,
+                threshold=self.wake_threshold,
+                consecutive=min(consecutive, self.wake_confirmation_frames),
+                required=self.wake_confirmation_frames,
+                overflowed=overflowed,
+            )
+        except Exception:
+            return
 
     def _wait_until_not(self, state: HandoffState, timeout: float) -> bool:
         deadline = self.clock() + timeout

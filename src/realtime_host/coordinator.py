@@ -260,6 +260,10 @@ class HandoffCoordinator:
         return self._wake_lease.is_open
 
     @property
+    def wake_microphone_overflowed(self) -> bool:
+        return bool(getattr(self._wake_lease, "last_overflowed", False))
+
+    @property
     def closing(self) -> bool:
         with self._lock:
             return self._closing

@@ -34,6 +34,7 @@ from src.player import MacOSPlayer  # noqa: E402
 from src.realtime.controller import RealtimeSessionController  # noqa: E402
 from src.realtime_host.server import build_server  # noqa: E402
 from src.tools.providers import provider_config_from_settings  # noqa: E402
+from src.wake_diagnostics import WakeDiagnostics, wake_diagnostics_enabled  # noqa: E402
 
 
 LOGGER = logging.getLogger("hey_jarvis.mac_sidecar")
@@ -258,6 +259,11 @@ class ProductRuntime:
         detector = _build_wake_detector(settings, logger=LOGGER)
         if hasattr(detector, "preload"):
             detector.preload()
+        wake_diagnostics = (
+            WakeDiagnostics(app_support_dir)
+            if wake_diagnostics_enabled(app_support_dir / "preferences-v1.json")
+            else None
+        )
         server = build_server(
             "127.0.0.1",
             0,
@@ -306,6 +312,8 @@ class ProductRuntime:
             idle_timeout_seconds=settings.realtime_idle_timeout_seconds,
             max_duration_seconds=settings.realtime_max_duration_seconds,
             wake_confirmation_frames=settings.wake_confirmation_frames,
+            wake_threshold=settings.wake_threshold,
+            wake_diagnostics=wake_diagnostics,
             shutdown_requested=stop_event.is_set,
         )
 

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const PREFERENCES_VERSION: u8 = 3;
+const PREFERENCES_VERSION: u8 = 4;
 pub const ENGLISH: &str = "en";
 pub const SIMPLIFIED_CHINESE: &str = "zh-CN";
 pub const NIGHT_THEME: &str = "night";
@@ -15,6 +15,7 @@ pub struct Preferences {
     pub smart_speaker_mode: bool,
     pub app_language: String,
     pub app_theme: String,
+    pub wake_diagnostics_enabled: bool,
 }
 
 impl Default for Preferences {
@@ -24,6 +25,7 @@ impl Default for Preferences {
             smart_speaker_mode: false,
             app_language: ENGLISH.into(),
             app_theme: NIGHT_THEME.into(),
+            wake_diagnostics_enabled: false,
         }
     }
 }
@@ -41,6 +43,15 @@ struct PreferencesV2 {
     version: u8,
     smart_speaker_mode: bool,
     app_language: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreferencesV3 {
+    version: u8,
+    smart_speaker_mode: bool,
+    app_language: String,
+    app_theme: String,
 }
 
 pub fn normalize_language(value: &str) -> Result<&'static str, String> {
@@ -128,6 +139,24 @@ pub fn load(path: &Path) -> Result<Preferences, String> {
         save(path, &migrated)?;
         return Ok(migrated);
     }
+    if value.get("version").and_then(serde_json::Value::as_u64) == Some(3) {
+        let legacy: PreferencesV3 =
+            serde_json::from_value(value).map_err(|_| "preferences_corrupt".to_string())?;
+        if legacy.version != 3
+            || normalize_language(&legacy.app_language).is_err()
+            || normalize_theme(&legacy.app_theme).is_err()
+        {
+            return Err("preferences_corrupt".into());
+        }
+        let migrated = Preferences {
+            smart_speaker_mode: legacy.smart_speaker_mode,
+            app_language: legacy.app_language,
+            app_theme: legacy.app_theme,
+            ..Preferences::default()
+        };
+        save(path, &migrated)?;
+        return Ok(migrated);
+    }
     let preferences: Preferences =
         serde_json::from_value(value).map_err(|_| "preferences_corrupt".to_string())?;
     if preferences.version != PREFERENCES_VERSION
@@ -172,11 +201,13 @@ mod tests {
             ENGLISH | SIMPLIFIED_CHINESE
         ));
         assert!(!initial.smart_speaker_mode);
+        assert!(!initial.wake_diagnostics_enabled);
 
         let preferences = Preferences {
             smart_speaker_mode: true,
             app_language: SIMPLIFIED_CHINESE.into(),
             app_theme: DAY_THEME.into(),
+            wake_diagnostics_enabled: true,
             ..Preferences::default()
         };
         save(&state_path, &preferences).unwrap();
@@ -210,14 +241,31 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(&state_path, br#"{"version":1,"smart_speaker_mode":true}"#).unwrap();
         let migrated = load(&state_path).unwrap();
-        assert_eq!(migrated.version, 3);
+        assert_eq!(migrated.version, 4);
         assert!(migrated.smart_speaker_mode);
         assert!(matches!(
             migrated.app_language.as_str(),
             ENGLISH | SIMPLIFIED_CHINESE
         ));
         let persisted = std::fs::read_to_string(&state_path).unwrap();
-        assert!(persisted.contains("\"version\":3"));
+        assert!(persisted.contains("\"version\":4"));
+        assert!(persisted.contains("\"wake_diagnostics_enabled\":false"));
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn version_three_migrates_theme_and_defaults_wake_diagnostics_off() {
+        let directory = fixture("v3-migration");
+        let state_path = path(&directory);
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(&state_path, b"{\"version\":3,\"smart_speaker_mode\":true,\"app_language\":\"zh-CN\",\"app_theme\":\"day\"}").unwrap();
+        let migrated = load(&state_path).unwrap();
+        assert_eq!(migrated.version, 4);
+        assert!(migrated.smart_speaker_mode);
+        assert_eq!(migrated.app_language, SIMPLIFIED_CHINESE);
+        assert_eq!(migrated.app_theme, DAY_THEME);
+        assert!(!migrated.wake_diagnostics_enabled);
         let _ = std::fs::remove_dir_all(&directory);
     }
 
@@ -227,11 +275,13 @@ mod tests {
         let state_path = path(&directory);
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).unwrap();
-        std::fs::write(&state_path, b"{\"version\":3,\"smart_speaker_mode\":true,\"app_language\":\"en\",\"app_theme\":\"night\",\"unknown\":true}").unwrap();
+        std::fs::write(&state_path, b"{\"version\":4,\"smart_speaker_mode\":true,\"app_language\":\"en\",\"app_theme\":\"night\",\"wake_diagnostics_enabled\":false,\"unknown\":true}").unwrap();
         assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
-        std::fs::write(&state_path, b"{\"version\":3,\"smart_speaker_mode\":false,\"app_language\":\"fr\",\"app_theme\":\"night\"}").unwrap();
+        std::fs::write(&state_path, b"{\"version\":4,\"smart_speaker_mode\":false,\"app_language\":\"fr\",\"app_theme\":\"night\",\"wake_diagnostics_enabled\":false}").unwrap();
         assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
-        std::fs::write(&state_path, b"{\"version\":3,\"smart_speaker_mode\":false,\"app_language\":\"en\",\"app_theme\":\"blue\"}").unwrap();
+        std::fs::write(&state_path, b"{\"version\":4,\"smart_speaker_mode\":false,\"app_language\":\"en\",\"app_theme\":\"blue\",\"wake_diagnostics_enabled\":false}").unwrap();
+        assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
+        std::fs::write(&state_path, b"{\"version\":4,\"smart_speaker_mode\":false,\"app_language\":\"en\",\"app_theme\":\"night\",\"wake_diagnostics_enabled\":\"yes\"}").unwrap();
         assert_eq!(load(&state_path).unwrap_err(), "preferences_corrupt");
         let _ = std::fs::remove_dir_all(&directory);
     }

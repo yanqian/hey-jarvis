@@ -152,6 +152,9 @@ button.danger {
   transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
 }
 
+.diagnostic-setting { align-items: flex-start; }
+.diagnostic-path { margin-top: 6px !important; font-size: 11px !important; overflow-wrap: anywhere; }
+
 .done-button {
   min-height: var(--header-control-size);
   padding-inline: 13px;

@@ -323,6 +323,13 @@ class ProductSidecarTests(unittest.TestCase):
         self.assertIn("english_cached_farewell_audio_path=english_cached_farewell", start)
         self.assertIn('app_language_path=app_support_dir / "preferences-v1.json"', start)
 
+    def test_product_runtime_enables_only_persisted_wake_diagnostics(self):
+        source = (SIDECAR_DIR / "product_sidecar.py").read_text(encoding="utf-8")
+        self.assertIn('wake_diagnostics_enabled(app_support_dir / "preferences-v1.json")', source)
+        self.assertIn("WakeDiagnostics(app_support_dir)", source)
+        self.assertIn("wake_threshold=settings.wake_threshold", source)
+        self.assertIn("wake_diagnostics=wake_diagnostics", source)
+
 
 if __name__ == "__main__":
     unittest.main()

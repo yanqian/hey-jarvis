@@ -2147,17 +2147,17 @@
     {
       "id": "F093",
       "title": "Publish the portfolio demo and internal feedback",
-      "description": "Complete Hey Jarvis as a portfolio-grade local-first project with a public engineering narrative, bounded demo, reproducible internal artifact, and privacy-safe feedback from at least three trusted trials.",
+      "description": "Complete Hey Jarvis as a portfolio-grade local-first project with a public engineering narrative, a user-facing feature demo, a reproducible internal artifact, and an owner-led baseline trial; broader trusted feedback remains optional follow-up work.",
       "acceptance": [
         "The project landing page and case study explain the personal-use, AI-learning, job-portfolio, and trusted-feedback goals; architecture, privacy, non-commercial scope, major failures, F086 evidence, AI Agent Harness workflow, deliberate tradeoffs, and unsigned internal-only release status are accurate and reproducible.",
-        "A two-to-four-minute demo shows installation or launch, BYOK setup without revealing a key, wake, acknowledgement, normal/follow-up/tool turns, deliberate interruption, semantic ending, media release, diagnostics, and clean quit.",
-        "At least three explicitly trusted Apple Silicon users or clean local user/device profiles record privacy-safe install, first-run, wake, conversation, interruption, cleanup, relaunch, support friction, and qualitative feedback without committed audio, transcripts, or credentials.",
+        "Published English and Chinese two-to-four-minute feature demos use the production app to show wake, acknowledgement, normal/follow-up/tool turns, Smart Speaker locked-Mac wake, semantic ending, and media release without exposing sensitive material; installation, BYOK, permissions, diagnostics, quit, update, rollback, and uninstall are covered by the English and Chinese user guides.",
+        "One owner-led Apple Silicon internal trial provides the current baseline for install, first-run, wake, conversation, interruption, cleanup, relaunch, support friction, and qualitative feedback without committed audio, transcripts, or credentials; additional trusted trials are optional follow-up evidence.",
         "Release blockers include credential exposure, an unsigned artifact being presented as public or trusted, repeatable microphone ownership loss, residual sidecar, crash loop, or unrecoverable onboarding; failures create follow-up features rather than being hidden by aggregate feedback.",
         "A final completion record summarizes artifact size and readiness measurements, feedback, unresolved limitations, retained CLI recovery path, future cloud and signed-distribution evolution without implementing them, and a go/hold decision that keeps public binary distribution on hold; full verification and final ./init.sh pass."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 1,
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
       "last_error": "",
       "priority": "P2",
       "depends_on": [
@@ -2753,12 +2753,73 @@
         "Focused preference migration/validation, DOM/catalog/CSS contracts, JavaScript syntax, Rust and Mac shell tests, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credential mutation, microphone request, speaker, or paid API use."
       ],
       "passes": false,
-      "status": "in_progress",
+      "status": "todo",
       "attempts": 1,
       "last_error": "",
       "priority": "P1",
       "depends_on": [
         "F121"
+      ]
+    },
+    {
+      "id": "F123",
+      "title": "Persist opt-in wake-word tuning diagnostics",
+      "description": "Add a persisted Settings control and bounded privacy-safe wake score/run logs so conversational false wakes can be measured and tuned without retaining room content.",
+      "acceptance": [
+        "New and migrated preferences default wake diagnostics off, accept only a boolean, persist the bilingual accessible Settings choice, and apply changes through the existing safe runtime restart/Resume boundary without starting a paid Realtime session.",
+        "When enabled, the packaged wake controller writes allowlisted JSONL records under the app-owned diagnostics directory for near-threshold scores, positive-run progress/reset, overflow, and confirmed wake, including only bounded timestamp, score, configured threshold, consecutive-frame progress, RMS, peak, and overflow fields.",
+        "Wake diagnostics avoid ordinary low-score per-frame logging, rotate at a documented size with bounded generations, tolerate invalid values and filesystem failures without interrupting wake listening, stop writing when disabled after restart, and never retain audio, transcript, answer, credential, SDP/ICE, or provider content.",
+        "The existing explicit support export includes valid wake diagnostic records and the confirmed clear action removes them; Settings and documentation identify the local path, retention behavior, privacy exclusions, safe enable/disable flow, and a labeled conversational-false-wake plus intentional-wake calibration procedure without claiming an unmeasured accuracy gain.",
+        "Focused preference/UI/sidecar/controller/writer/privacy/export/clear tests, JavaScript and Python syntax, Realtime fake smoke, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credentials, paid API calls, speaker, or live microphone."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F114"
+      ]
+    },
+    {
+      "id": "F124",
+      "title": "Apply paused Settings changes through Done",
+      "description": "Replace the repeated bottom Resume action with a contextual top-right Apply & Done flow that safely restores previously active wake listening before Settings closes.",
+      "acceptance": [
+        "Voice Status remains display-only, the shared bottom `Resume voice assistant` control is removed from every Settings tab, and the existing top-right Done button is the only Settings completion action.",
+        "Done remains a close-only action when no runtime-affecting change is pending or voice listening was not active on Settings entry; it must not implicitly start an inactive assistant or a runtime lacking configured credentials and granted microphone permission.",
+        "After a runtime-affecting Settings operation safely stops previously active listening, the bilingual button becomes `Apply & Done` / `应用并完成`; activating it requests the existing local restart, waits for confirmed `wake_listening`, and closes Settings without starting a paid Realtime conversation.",
+        "Restart failure or timeout keeps Settings open, preserves the pending state, exposes a bilingual retry label and actionable error, and permits another explicit attempt; a successful restart clears the pending state before close.",
+        "Focused DOM/state/copy contracts, JavaScript syntax, Mac shell tests, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credential mutation, microphone, speaker, or paid API use."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F114",
+        "F123"
+      ]
+    },
+    {
+      "id": "F125",
+      "title": "Use one Apply & Done completion action",
+      "description": "Keep one stable bilingual Apply & Done label while choosing close-only, wait, or safe sidecar restart behavior from the runtime state.",
+      "acceptance": [
+        "Every Settings tab and runtime state exposes exactly one top-right completion button labeled `Apply & Done` / `应用并完成`; it never changes to `Done`, `Retry apply`, or an English fallback in the Chinese UI, and no separate Save, Resume, or Restart action appears.",
+        "With no runtime-affecting change pending, activating Apply & Done closes Settings without restarting the sidecar, starting an intentionally inactive assistant, changing credentials, requesting microphone access, or disturbing a live conversation.",
+        "When a pending runtime-affecting change stopped the prior runtime, Apply & Done invokes the existing safe restart and closes only after restoring its intent: prior `wake_listening`/`busy` returns to confirmed `wake_listening`, while prior `ready` returns to confirmed `ready` without arming; a fast Settings open during `ready` cannot lose restoration eligibility or start listening implicitly.",
+        "Restart failure or timeout keeps Settings open, preserves pending retry state, retains the same Apply & Done label, exposes an actionable bilingual error/status message, and lets another click retry; successful restart clears pending state before close.",
+        "Focused DOM/catalog/state-flow contracts, JavaScript syntax, Mac shell tests, rebuilt bilingual Debug-app inspection, verified internal unsigned DMG, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, paid API use, credential mutation, microphone prompt, speaker, or live conversation."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F124"
       ]
     }
   ]

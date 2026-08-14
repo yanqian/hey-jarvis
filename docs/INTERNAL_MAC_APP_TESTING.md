@@ -1,10 +1,9 @@
 # Unsigned internal Mac app testing
 
 Hey Jarvis `0.1.0` is available as an Apple Silicon, macOS 14+ **internal test
-build**. It has no Apple Developer ID distribution signature and is not
-notarized. Give it only to people who know you personally, understand that
-warning, and receive the artifact and checksum directly from you.
-Do not put this DMG on a public download page.
+build**. Its GitHub Release asset is publicly downloadable, but the build has
+no Apple Developer ID distribution signature and is not notarized. Treat it as
+an internal evaluation build, not a general consumer release.
 
 An ad-hoc signature may be present because macOS tooling uses it to seal local
 code. It provides no developer identity, notarization, or public distribution
@@ -57,9 +56,11 @@ shasum -a 256 Hey-Jarvis-0.1.0-INTERNAL-UNSIGNED-arm64.dmg
 7. Open or focus the same dedicated Settings window from the conversation-window
    gear, the menu-bar **Settings…** item, and `⌘,`. Confirm wake listening and
    the sidecar stay active while inspecting General, API
-   Keys, Microphone, Privacy & Diagnostics, and About. Use **Done** to close
-   only Settings. An explicit microphone check should safely pause voice and
-   expose **Resume voice assistant**.
+   Keys, Microphone, Privacy & Diagnostics, and About. Confirm the action always
+   reads **Apply & Done**. With no runtime-affecting change it closes only
+   Settings. An explicit microphone check should safely pause previously active
+   voice; applying must restore real wake listening before Settings closes. If
+   voice was inactive on entry, the same action must close without starting it.
 8. In Privacy & Diagnostics, use **Export support bundle** if reporting a
    problem. The bundle excludes keys, raw audio, and transcripts. Quit from
    the tray and confirm listening and the sidecar stop; relaunch once.
@@ -97,5 +98,5 @@ Application Support data at
 `~/Library/Application Support/com.heyjarvis.desktop` may be removed manually
 only if logs and onboarding state are no longer needed.
 
-Public binary distribution remains blocked until a separately planned
+Publicly trusted binary distribution remains blocked until a separately planned
 Developer ID signing and notarization feature passes clean Gatekeeper testing.

@@ -73,10 +73,12 @@ assistant and avoids a separately installed runtime or model download.
 
 The DMG is explicitly `INTERNAL-UNSIGNED`. It has no Developer ID distribution
 identity, notarization ticket, Gatekeeper-readiness claim, automatic update, or
-public download. Trusted testers receive the artifact and SHA-256 directly and
-may use macOS **Open Anyway** after reviewing the source. Public binary
-distribution stays on hold unless a future, separate signing/notarization
-feature is planned and accepted.
+general consumer download. The GitHub Release exposes the artifact publicly for
+internal evaluation; users must verify the SHA-256 and may use macOS **Open
+Anyway** after reviewing the source. Publicly trusted binary distribution stays
+Public binary distribution stays on hold in the sense that no publicly trusted or general-consumer binary is
+claimed; a future, separate signing/notarization feature is still required for
+trusted distribution.
 
 ## AI Agent Harness workflow
 

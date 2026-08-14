@@ -7,8 +7,8 @@
   "interruption": true,
   "semantic_end_and_media_release": true,
   "diagnostics_and_clean_quit": true,
-  "duration_seconds": 210,
+  "duration_seconds": 213,
   "sensitive_material_visible": false,
   "public_binary_linked": false,
-  "public_demo_reference": "replace-with-public-video-or-repository-demo-reference"
+  "public_demo_reference": "artifacts/video/hey-jarvis-f093-flow-final-v5.mp4"
 }

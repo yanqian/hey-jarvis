@@ -121,28 +121,25 @@ class DocumentationTests(unittest.TestCase):
         ):
             self.assertIn(phrase, normalized_case_study)
         for phrase in (
-            "DEMO_DURATION_SECONDS: 210",
-            "Check microphone & start",
-            "Enable voice assistant",
+            "DEMO_DURATION_SECONDS: 213",
+            "final Chinese feature-demo recording",
             "follow-up",
-            "Interrupt",
-            "再见",
-            "Export support bundle",
-            "Quit from the tray",
+            "Smart Speaker Mode",
+            "USER_GUIDE.md",
+            "INTERNAL_MAC_APP_TESTING.md",
         ):
             self.assertIn(phrase, demo)
         for phrase in (
-            "at least three",
+            "owner-led Apple Silicon trial",
             "trial-template.json",
             "verify_portfolio_completion.py",
-            "public binary distribution remains `HOLD`",
+            "publicly trusted binary distribution remains blocked",
         ):
             self.assertIn(phrase, feedback)
         for phrase in (
-            "Current decision: HOLD",
+            "Current decision: GO_INTERNAL",
             "45,439,075 bytes",
             "83 arm64 Mach-O",
-            "two more",
             "Public binary distribution",
             "Python CLI",
             "hosted control plane",
@@ -254,7 +251,10 @@ class DocumentationTests(unittest.TestCase):
         )
         self.assertIn("standard `⌘,` shortcut", diagnostics)
         self.assertIn("without navigating the conversation window", normalized_diagnostics)
-        self.assertIn("**Done** closes only that window", normalized_diagnostics)
+        self.assertIn(
+            "stable **Apply & Done** action closes only that window",
+            normalized_diagnostics,
+        )
 
     def test_all_env_keys_are_owned_by_configuration_reference(self):
         configuration = read(CONFIGURATION)
@@ -498,7 +498,7 @@ class DocumentationTests(unittest.TestCase):
             "INTERNAL-UNSIGNED",
             "Open Anyway",
             "Do not disable Gatekeeper",
-            "Do not put this DMG on a public download page",
+            "publicly downloadable",
             "manual install/update/rollback",
             "Developer ID signing and notarization",
         ):

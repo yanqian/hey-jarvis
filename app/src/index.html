@@ -51,7 +51,7 @@
           </span>
           <h1 id="settings-title" class="context-title">Settings</h1>
         </div>
-        <button id="return-assistant" class="done-button" type="button" hidden>Done</button>
+        <button id="return-assistant" class="done-button" type="button" hidden>Apply &amp; Done</button>
       </header>
 
       <div id="voice-status" class="voice-status-card" role="status" aria-live="polite" aria-atomic="true">
@@ -219,13 +219,26 @@
             <div class="panel-heading">
               <p class="section-label">PRIVACY &amp; DIAGNOSTICS</p>
               <h2 id="privacy-title" tabindex="-1">Local support data</h2>
-              <p>Diagnostics contain bounded lifecycle events only—never keys, raw audio, transcripts, answers, tool arguments, SDP, ICE, or provider bodies.</p>
+              <p>Diagnostics contain bounded lifecycle events and, only when enabled below, numeric wake evidence—never keys, raw audio, transcripts, answers, tool arguments, SDP, ICE, or provider bodies.</p>
             </div>
 
             <div class="disclosure privacy-grid">
               <div><span class="check" aria-hidden="true">✓</span><p>Wake detection stays local.</p></div>
               <div><span class="check" aria-hidden="true">✓</span><p>Credentials stay in Keychain.</p></div>
               <div><span class="check" aria-hidden="true">✓</span><p>No audio or transcripts in support exports.</p></div>
+            </div>
+
+            <div class="smart-speaker-card diagnostic-setting">
+              <div>
+                <h3>Save wake-word tuning diagnostics</h3>
+                <p id="wake-diagnostics-status">Off. No wake scores are saved.</p>
+                <p class="diagnostic-path">When enabled, bounded numeric JSONL is stored in Application Support/com.heyjarvis.desktop/diagnostics. If the local voice runtime was ready or listening, Apply &amp; Done restores that state safely with the change.</p>
+              </div>
+              <label class="switch-control">
+                <input id="wake-diagnostics-enabled" type="checkbox" aria-describedby="wake-diagnostics-status" />
+                <span aria-hidden="true"></span>
+                <span class="visually-hidden">Save wake-word tuning diagnostics</span>
+              </label>
             </div>
 
             <p class="boundary-note">Quitting the tray app stops listening. Support exports remain on this Mac until you choose to share them.</p>
@@ -254,7 +267,6 @@
           </section>
 
           <p id="setup-message" class="message global-message" role="status"></p>
-          <button id="restart-voice" class="primary" type="button" hidden>Resume voice assistant</button>
         </div>
       </div>
     </main>

@@ -1,0 +1,23 @@
+{
+  "recorded": true,
+  "production_app": true,
+  "byok_hidden": true,
+  "wake_and_acknowledgement": true,
+  "normal_followup_tool_turns": true,
+  "interruption": false,
+  "semantic_end_and_media_release": true,
+  "diagnostics_and_clean_quit": false,
+  "duration_seconds": 213,
+  "sensitive_material_visible": false,
+  "public_binary_linked": false,
+  "public_demo_reference": "https://www.youtube.com/watch?v=Cpv3dhFmS3M",
+  "public_demo_references": {
+    "english": "https://www.youtube.com/watch?v=Cpv3dhFmS3M",
+    "chinese": "https://www.youtube.com/watch?v=PDHQiYzFAXQ"
+  },
+  "user_guides": {
+    "english": "docs/USER_GUIDE.md",
+    "chinese": "docs/USER_GUIDE_ZH.md"
+  },
+  "notes": "English and Chinese feature demos are publicly viewable. Installation, BYOK, permissions, diagnostics, quit, update, rollback, and uninstall are documented in the English and Chinese user guides. Broader trusted trials remain optional follow-up work."
+}

@@ -222,6 +222,36 @@ mod tests {
     }
 
     #[test]
+    fn export_includes_content_free_wake_diagnostics() {
+        let root = temp_root();
+        let diagnostics = Diagnostics::new(&root);
+        fs::create_dir_all(root.join("diagnostics")).expect("directory");
+        let wake = json!({
+            "schema": "hey-jarvis-wake-v1",
+            "at_ms": 1234,
+            "event": "confirmed",
+            "score": 0.7,
+            "threshold": 0.5,
+            "consecutive": 2,
+            "required": 2,
+            "rms": 412.0,
+            "peak": 800,
+            "overflow": false
+        });
+        fs::write(
+            root.join("diagnostics/wake.jsonl"),
+            format!("{}\n", serde_json::to_string(&wake).expect("wake record")),
+        )
+        .expect("wake log");
+        let export = diagnostics.export(&root).expect("export");
+        let text = fs::read_to_string(export.path).expect("bundle");
+        assert!(text.contains("hey-jarvis-wake-v1"));
+        assert!(text.contains("confirmed"));
+        assert!(!text.contains("transcript"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn rotation_and_export_size_limit_are_enforced() {
         let root = temp_root();
         let diagnostics = Diagnostics::new(&root);

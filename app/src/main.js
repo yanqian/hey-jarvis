@@ -28,7 +28,6 @@ const elements = {
   smartSpeakerMode: document.querySelector("#smart-speaker-mode"),
   smartSpeakerStatus: document.querySelector("#smart-speaker-status"),
   returnAssistant: document.querySelector("#return-assistant"),
-  restartVoice: document.querySelector("#restart-voice"),
   voiceStatusLabel: document.querySelector("#voice-status-label"),
   voiceStatusDetail: document.querySelector("#voice-status-detail"),
   exportSupport: document.querySelector("#export-support"),
@@ -36,11 +35,16 @@ const elements = {
   diagnosticsMessage: document.querySelector("#diagnostics-message"),
   appLanguage: document.querySelector("#app-language"),
   appTheme: document.querySelector("#app-theme"),
+  wakeDiagnosticsEnabled: document.querySelector("#wake-diagnostics-enabled"),
+  wakeDiagnosticsStatus: document.querySelector("#wake-diagnostics-status"),
 };
 
 let setup = null;
 let lastVoiceAvailability = null;
 let runtimeRestartNeeded = false;
+let settingsEntryAvailabilityCaptured = false;
+let settingsEntryRuntimeIntent = "inactive";
+let applyRetryNeeded = false;
 let appLanguage = "en";
 let appTheme = "night";
 const SETTINGS_HASH = "#settings";
@@ -56,6 +60,10 @@ const DYNAMIC_ZH = new Map(Object.entries({
   "Hey Jarvis cannot write its Application Support settings. Check disk access and available space.": "Hey Jarvis 无法写入应用支持设置。请检查磁盘访问权限和可用空间。",
   "Smart Speaker preferences are damaged. The mode remains inactive until the settings file is repaired.": "智能音箱偏好设置已损坏。修复设置文件前，该模式将保持关闭。",
   "Hey Jarvis cannot save Smart Speaker preferences. Check disk access and available space.": "Hey Jarvis 无法保存智能音箱偏好设置。请检查磁盘访问权限和可用空间。",
+  "Wake diagnostics enabled. It will apply when voice listening starts.": "唤醒调试日志已开启，将在语音监听启动时应用。",
+  "Wake diagnostics disabled. It will apply when voice listening starts.": "唤醒调试日志已关闭，将在语音监听启动时应用。",
+  "On. Bounded numeric wake evidence is saved locally.": "已开启，有限的数值型唤醒证据会保存在本地。",
+  "Off. No wake scores are saved.": "已关闭，不保存唤醒分数。",
   "Finish the key and microphone checks before starting the voice runtime.": "启动语音运行环境前，请完成密钥和麦克风检查。",
   "OpenAI rejected this key. Replace it with an active project key, then rerun the readiness check.": "OpenAI 拒绝了此密钥。请换成有效的项目密钥，然后重新运行就绪检查。",
   "OpenAI is temporarily unavailable. Listening remains off; retry the readiness check later.": "OpenAI 暂时不可用。监听保持关闭；请稍后重试就绪检查。",
@@ -90,7 +98,7 @@ const DYNAMIC_ZH = new Map(Object.entries({
   "Voice listening is off until you resume.": "恢复前，语音监听保持关闭。",
   "Open this page through the Hey Jarvis desktop app.": "请通过 Hey Jarvis 桌面应用打开此页面。",
   "A native secure entry window is open.": "原生安全输入窗口已打开。",
-  "Saved in macOS Keychain. Resume voice listening when you are ready.": "已保存到 macOS 钥匙串。准备好后恢复语音监听。",
+  "Saved in macOS Keychain. The change applies when voice listening starts.": "已保存到 macOS 钥匙串，将在语音监听启动时应用。",
   "No changes were made.": "未进行任何更改。",
   "Removed from macOS Keychain. Voice listening remains off until setup is ready again.": "已从 macOS 钥匙串移除。设置重新就绪前，语音监听保持关闭。",
   "Microphone access is required, but listening remains off. Enable it in System Settings and retry.": "需要麦克风访问权限，但监听仍保持关闭。请在系统设置中启用后重试。",
@@ -98,13 +106,15 @@ const DYNAMIC_ZH = new Map(Object.entries({
   "The microphone check failed and listening remains off. Check the input device and retry.": "麦克风检查失败，监听保持关闭。请检查输入设备后重试。",
   "Access granted; the temporary check stream was released.": "访问已允许；临时检查音频流已释放。",
   "Checking the microphone…": "正在检查麦克风…",
-  "Microphone access is ready. Resume voice listening when you are ready.": "麦克风访问已就绪。准备好后恢复语音监听。",
+  "Microphone access is ready. Pending changes apply when voice listening starts.": "麦克风访问已就绪，待处理的更改将在语音监听启动时应用。",
   "Add an OpenAI key before starting Hey Jarvis.": "启动 Hey Jarvis 前请先添加 OpenAI 密钥。",
   "Checking the built-in microphone…": "正在检查内置麦克风…",
   "Microphone access is ready. Starting the local voice runtime…": "麦克风访问已就绪。正在启动本地语音运行环境…",
   "Voice listening resumed. Settings can remain open.": "语音监听已恢复，设置窗口可以保持打开。",
   "Starting the local voice runtime…": "正在启动本地语音运行环境…",
   "Restarting local wake listening…": "正在重新启动本地唤醒监听…",
+  "Apply & Done": "应用并完成",
+  "Applying Settings changes…": "正在应用设置更改…",
   "Local setup is ready. Existing voice listening is unchanged.": "本地设置已就绪，现有语音监听不受影响。",
   "Setup needs attention. Review API Keys and Microphone before starting.": "设置需要处理。启动前请检查 API 密钥和麦克风。",
   "Smart Speaker Mode enabled. It will activate only during confirmed wake listening.": "智能音箱模式已启用，只会在确认唤醒监听时生效。",
@@ -237,6 +247,10 @@ function renderSetup(snapshot) {
   elements.smartSpeakerStatus.textContent = snapshot.smart_speaker_mode
     ? ui("Enabled. It activates only after you return and Wake listening is confirmed.")
     : ui("Off. Hey Jarvis follows normal Mac sleep behavior.");
+  elements.wakeDiagnosticsEnabled.checked = snapshot.wake_diagnostics_enabled === true;
+  elements.wakeDiagnosticsStatus.textContent = snapshot.wake_diagnostics_enabled
+    ? ui("On. Bounded numeric wake evidence is saved locally.")
+    : ui("Off. No wake scores are saved.");
   if (snapshot.microphone_permission === "denied") {
     elements.microphoneStatus.textContent = ui("Access was denied. Enable Hey Jarvis in Privacy & Security → Microphone, then retry.");
     elements.microphoneSettings.hidden = false;
@@ -247,6 +261,26 @@ function renderSetup(snapshot) {
     elements.microphoneStatus.textContent = ui("Permission has not been checked yet.");
     elements.microphoneSettings.hidden = true;
   }
+  renderCompletionAction();
+}
+
+function canApplyPendingRuntimeChange() {
+  return isSettingsWindow()
+    && runtimeRestartNeeded
+    && settingsEntryRuntimeIntent !== "inactive"
+    && setup?.openai_configured === true
+    && setup?.microphone_permission === "granted";
+}
+
+function renderCompletionAction() {
+  if (!elements.returnAssistant || !isSettingsWindow()) return;
+  elements.returnAssistant.textContent = ui("Apply & Done");
+}
+
+function requireRuntimeRestart() {
+  runtimeRestartNeeded = true;
+  applyRetryNeeded = false;
+  renderCompletionAction();
 }
 
 async function showSettings() {
@@ -259,10 +293,16 @@ async function showSettings() {
 
 function renderVoiceStatus(snapshot) {
   const availability = snapshot?.availability || "resume_required";
-  if (availability === "resume_required" && setup?.completed && setup?.openai_configured) {
-    runtimeRestartNeeded = true;
+  if (isSettingsWindow() && !settingsEntryAvailabilityCaptured) {
+    settingsEntryAvailabilityCaptured = true;
+    settingsEntryRuntimeIntent = availability === "wake_listening" || availability === "busy"
+      ? "listening"
+      : availability === "ready" ? "ready" : "inactive";
+  } else if (isSettingsWindow()
+    && settingsEntryRuntimeIntent === "ready"
+    && (availability === "wake_listening" || availability === "busy")) {
+    settingsEntryRuntimeIntent = "listening";
   }
-  elements.restartVoice.hidden = !runtimeRestartNeeded || availability === "wake_listening" || !setup?.openai_configured;
   if (availability === lastVoiceAvailability) return;
   lastVoiceAvailability = availability;
   const labels = {
@@ -285,16 +325,20 @@ async function refreshVoiceStatus() {
   }
 }
 
-async function waitForWakeListening() {
+async function waitForAppliedRuntime(expectedAvailability = settingsEntryRuntimeIntent === "listening"
+  ? "wake_listening"
+  : "ready") {
   const deadline = Date.now() + 15000;
   let snapshot;
   do {
     await new Promise(resolve => window.setTimeout(resolve, 500));
     snapshot = await invoke("sidecar_status");
     renderVoiceStatus(snapshot);
-  } while (snapshot.availability !== "wake_listening" && Date.now() < deadline);
-  if (snapshot.availability !== "wake_listening") throw new Error("sidecar_readiness_timed_out");
+  } while (snapshot.availability !== expectedAvailability && Date.now() < deadline);
+  if (snapshot.availability !== expectedAvailability) throw new Error("sidecar_readiness_timed_out");
   runtimeRestartNeeded = false;
+  applyRetryNeeded = false;
+  renderCompletionAction();
   renderVoiceStatus(snapshot);
 }
 
@@ -350,10 +394,10 @@ async function saveCredential(kind) {
   elements.message.textContent = ui("A native secure entry window is open.");
   try {
     await invoke("prompt_save_credential", { kind });
-    runtimeRestartNeeded = true;
+    requireRuntimeRestart();
     renderSetup(await invoke("onboarding_status"));
     await refreshVoiceStatus();
-    elements.message.textContent = ui("Saved in macOS Keychain. Resume voice listening when you are ready.");
+    elements.message.textContent = ui("Saved in macOS Keychain. The change applies when voice listening starts.");
   } catch (error) {
     elements.message.textContent = String(error).includes("credential_prompt_cancelled")
       ? ui("No changes were made.")
@@ -369,7 +413,7 @@ async function deleteCredential(kind) {
   if (!window.confirm(confirmation)) return;
   try {
     await invoke("delete_credential", { kind });
-    runtimeRestartNeeded = true;
+    requireRuntimeRestart();
     renderSetup(await invoke("onboarding_status"));
     await refreshVoiceStatus();
     elements.message.textContent = ui("Removed from macOS Keychain. Voice listening remains off until setup is ready again.");
@@ -383,7 +427,7 @@ async function acquireMicrophone() {
   let stream;
   try {
     await invoke("prepare_microphone_check");
-    runtimeRestartNeeded = true;
+    requireRuntimeRestart();
     await refreshVoiceStatus();
     let timedOut = false;
     let timeoutId;
@@ -434,7 +478,7 @@ async function checkMicrophoneOnly() {
   if (!await acquireMicrophone()) return;
   renderSetup(await invoke("record_microphone_granted"));
   await refreshVoiceStatus();
-  elements.message.textContent = ui("Microphone access is ready. Resume voice listening when you are ready.");
+  elements.message.textContent = ui("Microphone access is ready. Pending changes apply when voice listening starts.");
 }
 
 async function checkMicrophoneAndStart() {
@@ -449,8 +493,8 @@ async function checkMicrophoneAndStart() {
   try {
     if (isSettingsWindow()) {
       renderSetup(await invoke("record_microphone_granted"));
-      await invoke("restart_voice_from_settings");
-      await waitForWakeListening();
+      await invoke("restart_voice_from_settings", { resumeListening: true });
+      await waitForAppliedRuntime("wake_listening");
       elements.message.textContent = ui("Voice listening resumed. Settings can remain open.");
     } else {
       navigateToAssistant(await invoke("complete_onboarding"));
@@ -462,6 +506,26 @@ async function checkMicrophoneAndStart() {
 
 async function returnToAssistant() {
   if (isSettingsWindow()) {
+    if (canApplyPendingRuntimeChange()) {
+      elements.returnAssistant.disabled = true;
+      elements.message.textContent = ui("Applying Settings changes…");
+      try {
+        await recordLifecycle("runtime_restart_requested");
+        await invoke("restart_voice_from_settings", {
+          resumeListening: settingsEntryRuntimeIntent === "listening",
+        });
+        await waitForAppliedRuntime();
+        await invoke("close_settings_window");
+      } catch (error) {
+        applyRetryNeeded = true;
+        elements.message.textContent = friendlyError(error);
+        renderCompletionAction();
+        elements.returnAssistant.focus();
+      } finally {
+        elements.returnAssistant.disabled = false;
+      }
+      return;
+    }
     try {
       await invoke("close_settings_window");
     } catch (error) {
@@ -480,21 +544,6 @@ async function returnToAssistant() {
     elements.settingsShell.hidden = false;
     elements.message.textContent = friendlyError(error);
     elements.returnAssistant.focus();
-  }
-}
-
-async function restartVoiceFromSettings() {
-  elements.restartVoice.disabled = true;
-  elements.message.textContent = ui("Restarting local wake listening…");
-  try {
-    await recordLifecycle("runtime_restart_requested");
-    await invoke("restart_voice_from_settings");
-    await waitForWakeListening();
-    elements.message.textContent = ui("Voice listening resumed. Settings can remain open.");
-  } catch (error) {
-    elements.message.textContent = friendlyError(error);
-  } finally {
-    elements.restartVoice.disabled = false;
   }
 }
 
@@ -536,6 +585,25 @@ async function setSmartSpeakerMode() {
     elements.message.textContent = friendlyError(error);
   } finally {
     elements.smartSpeakerMode.disabled = false;
+  }
+}
+
+async function setWakeDiagnostics() {
+  const enabled = elements.wakeDiagnosticsEnabled.checked;
+  elements.wakeDiagnosticsEnabled.disabled = true;
+  try {
+    const snapshot = await invoke("set_wake_diagnostics", { enabled });
+    requireRuntimeRestart();
+    renderSetup(snapshot);
+    await refreshVoiceStatus();
+    elements.message.textContent = ui(enabled
+      ? "Wake diagnostics enabled. It will apply when voice listening starts."
+      : "Wake diagnostics disabled. It will apply when voice listening starts.");
+  } catch (error) {
+    elements.wakeDiagnosticsEnabled.checked = !enabled;
+    elements.message.textContent = friendlyError(error);
+  } finally {
+    elements.wakeDiagnosticsEnabled.disabled = false;
   }
 }
 
@@ -593,11 +661,11 @@ elements.deleteFinnhub.addEventListener("click", () => deleteCredential("finnhub
 elements.start.addEventListener("click", checkMicrophoneAndStart);
 elements.microphoneCheck.addEventListener("click", checkMicrophoneOnly);
 elements.returnAssistant.addEventListener("click", returnToAssistant);
-elements.restartVoice.addEventListener("click", restartVoiceFromSettings);
 elements.resumeVoice.addEventListener("click", resumeVoiceAssistant);
 elements.resumeSettings.addEventListener("click", showSettings);
 elements.readinessCheck.addEventListener("click", runReadinessCheck);
 elements.smartSpeakerMode.addEventListener("change", setSmartSpeakerMode);
+elements.wakeDiagnosticsEnabled.addEventListener("change", setWakeDiagnostics);
 elements.appLanguage.addEventListener("change", setAppLanguage);
 elements.appTheme.addEventListener("change", setAppTheme);
 elements.microphoneSettings.addEventListener("click", async () => {

@@ -150,15 +150,55 @@ class MacAppShellTests(unittest.TestCase):
         self.assertNotIn('window.location.href.split("#", 1)[0]', app_script)
         self.assertIn('invoke(settingsMode ? "enter_settings"', app_script)
         self.assertIn('if (!settingsMode && snapshot.completed', app_script)
-        self.assertIn('await invoke("restart_voice_from_settings")', app_script)
-        self.assertIn('snapshot.availability !== "wake_listening"', app_script)
+        self.assertIn('await invoke("restart_voice_from_settings", {', app_script)
+        self.assertIn('resumeListening: settingsEntryRuntimeIntent === "listening"', app_script)
+        self.assertIn('expectedAvailability = settingsEntryRuntimeIntent === "listening"', app_script)
+        self.assertIn('? "wake_listening"', app_script)
+        self.assertIn(': "ready"', app_script)
         self.assertIn("runtimeRestartNeeded = false", app_script)
         self.assertIn('await invoke("close_settings_window")', app_script)
         self.assertIn('await recordLifecycle("runtime_restart_requested")', app_script)
         self.assertIn('id="returning-view"', app_page)
         self.assertIn('role="status" aria-live="polite"', app_page)
         self.assertIn('id="voice-status"', app_page)
-        self.assertIn('id="restart-voice"', app_page)
+        voice_status = app_page.split('id="voice-status"', 1)[1].split(
+            '<div class="settings-layout">', 1
+        )[0]
+        self.assertNotIn("<button", voice_status)
+        self.assertNotIn('id="restart-voice"', app_page)
+        self.assertNotIn("elements.restartVoice", app_script)
+        self.assertEqual(app_page.count('id="return-assistant"'), 1)
+        self.assertIn('>Apply &amp; Done</button>', app_page)
+        self.assertIn('"Apply & Done": "应用并完成"', app_script)
+        self.assertNotIn('"Retry apply": "重试应用"', app_script)
+        self.assertNotIn('textContent = ui("Done")', app_script)
+        self.assertNotIn('textContent = ui("Applying…")', app_script)
+        self.assertIn('elements.returnAssistant.textContent = ui("Apply & Done")', app_script)
+        self.assertIn("function canApplyPendingRuntimeChange()", app_script)
+        self.assertIn("function requireRuntimeRestart()", app_script)
+        self.assertIn(
+            'settingsEntryRuntimeIntent = availability === "wake_listening" || availability === "busy"',
+            app_script,
+        )
+        self.assertIn('availability === "ready" ? "ready" : "inactive"', app_script)
+        self.assertIn('settingsEntryRuntimeIntent === "ready"', app_script)
+        self.assertIn('settingsEntryRuntimeIntent = "listening"', app_script)
+        self.assertIn('&& settingsEntryRuntimeIntent !== "inactive"', app_script)
+        self.assertIn('setup?.microphone_permission === "granted"', app_script)
+        apply_start = app_script.index("async function returnToAssistant()")
+        apply_end = app_script.index("async function resumeVoiceAssistant()", apply_start)
+        apply_flow = app_script[apply_start:apply_end]
+        self.assertIn("if (canApplyPendingRuntimeChange())", apply_flow)
+        self.assertNotIn("elements.returnAssistant.textContent", apply_flow)
+        self.assertIn('await invoke("restart_voice_from_settings", {', apply_flow)
+        self.assertIn("await waitForAppliedRuntime()", apply_flow)
+        self.assertIn('await invoke("close_settings_window")', apply_flow)
+        self.assertLess(
+            apply_flow.index('await invoke("restart_voice_from_settings", {'),
+            apply_flow.index('await invoke("close_settings_window")'),
+        )
+        self.assertIn("applyRetryNeeded = true", apply_flow)
+        self.assertIn("elements.returnAssistant.focus()", apply_flow)
         self.assertIn("fn enter_settings", native)
         self.assertIn('tauri::plugin::Builder::<_, ()>::new("settings-navigation")', native)
         self.assertIn('url.scheme() == "hey-jarvis"', native)
@@ -172,6 +212,10 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("async fn restart_sidecar(app: tauri::AppHandle)", native)
         self.assertIn("tauri::async_runtime::spawn_blocking", native)
         self.assertIn("restart_sidecar_runtime(&runtime)", native)
+        self.assertIn("resume_listening: bool", native)
+        self.assertIn("navigate_main_to_runtime(&app, &snapshot, resume_listening)", native)
+        self.assertIn('url.set_fragment(Some("smart-speaker-resume"))', native)
+        self.assertIn('url.set_fragment(smart_speaker_mode.then_some("smart-speaker-mode"))', native)
         self.assertNotIn('stop_sidecar(&runtime, "open_settings")', native)
         self.assertIn("fn settings_url", native)
         self.assertIn("static SETTINGS_REQUEST_ID: AtomicU64", native)
@@ -610,6 +654,44 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("NSWorkspaceDidWakeNotification", power)
         self.assertIn('stop_sidecar(&runtime, "system_will_sleep")', power)
         self.assertIn("never creates paid Realtime activity", docs)
+
+    def test_wake_diagnostics_are_opt_in_persisted_and_runtime_applied(self):
+        page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        frontend = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        catalog = (APP / "src" / "i18n.js").read_text(encoding="utf-8")
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
+        preferences = (APP / "src-tauri" / "src" / "preferences.rs").read_text(
+            encoding="utf-8"
+        )
+        sidecar = (APP / "sidecar" / "product_sidecar.py").read_text(encoding="utf-8")
+        controller = (ROOT / "src" / "realtime" / "controller.py").read_text(
+            encoding="utf-8"
+        )
+        diagnostics = (ROOT / "src" / "wake_diagnostics.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('id="wake-diagnostics-enabled" type="checkbox"', page)
+        self.assertIn('aria-describedby="wake-diagnostics-status"', page)
+        self.assertIn("Save wake-word tuning diagnostics", page)
+        self.assertIn("Application Support/com.heyjarvis.desktop/diagnostics", page)
+        self.assertIn('invoke("set_wake_diagnostics", { enabled })', frontend)
+        self.assertIn("runtimeRestartNeeded = true", frontend)
+        self.assertIn("fn set_wake_diagnostics", native)
+        self.assertIn('stop_sidecar(&runtime, "wake_diagnostics_changed")', native)
+        self.assertIn("wake_diagnostics_enabled: false", preferences)
+        self.assertIn("PREFERENCES_VERSION: u8 = 4", preferences)
+        self.assertIn("WakeDiagnostics(app_support_dir)", sidecar)
+        self.assertIn("wake_threshold=settings.wake_threshold", sidecar)
+        self.assertIn('"near_threshold"', diagnostics)
+        self.assertIn('"confirmed"', diagnostics)
+        self.assertIn("WAKE_DIAGNOSTIC_LIMIT_BYTES", diagnostics)
+        self.assertIn("WAKE_DIAGNOSTIC_GENERATIONS", diagnostics)
+        self.assertIn("pcm_rms_and_peak", diagnostics)
+        self.assertIn("_record_wake_diagnostic", controller)
+        for forbidden in ("transcription", "answer", "credential", "provider_body", "sdp"):
+            self.assertNotIn(f'"{forbidden}"', diagnostics)
+        self.assertIn('"Save wake-word tuning diagnostics": "保存唤醒词调试日志"', catalog)
 
 
 if __name__ == "__main__":

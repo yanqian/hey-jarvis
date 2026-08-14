@@ -4,6 +4,73 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+F125 is evaluator-approved. Owner feedback replaces contextual
+`Done` / `Apply & Done` / `Retry apply` labels with one stable bilingual
+`Apply & Done` completion action. Runtime-neutral and intentionally inactive
+flows close only. A pending change restores the captured runtime intent:
+`ready` restarts and returns to `ready` without arming, while active listening
+restarts through the existing Resume navigation and waits for confirmed
+`wake_listening`. A `ready` entry can promote to listening if that transition
+arrives while Settings is open. Failure keeps Settings open with the same
+button name and actionable adjacent copy. Focused 35-test documentation/Mac
+shell checks, 13 sidecar tests, 32 Rust tests, JavaScript syntax, Debug build,
+and live Chinese Debug flows pass for no-change close, ready restore, active
+listening restore, first-attempt failure retention, same-button retry, and
+successful recovery. The test-created wake diagnostic preference was restored
+off and wake listening was restored after the live trial. Final recovery passes
+478 project tests, 13 Mac frontend/sidecar tests, 32 Rust tests, and all smoke
+paths. The verified internal unsigned arm64 DMG is 45,751,109 bytes with SHA-256
+`fe399ccfe2a3b4064fe2ec1a9117280011bd9ffc8df61d06b844ad5c401c6a08`.
+Coding evidence is in
+`.agent-harness/runs/20260814T074230Z-F125-fast-coding.md`; independent approval
+is recorded in
+`.agent-harness/runs/20260814T160500Z-F125-evaluation-pass.md`.
+
+F124 is evaluator-approved. Settings Voice Status remains display-only and the repeated bottom
+Resume button is removed. The existing top-right Done action now becomes
+`Apply & Done` only when voice was active on Settings entry, a subsequent
+runtime-affecting operation requires restart, and credential/microphone
+prerequisites remain ready. It restarts through the existing safe local path,
+waits for confirmed `wake_listening`, and closes only on success; failure keeps
+Settings open with `Retry apply`. Runtime-neutral and initially inactive flows
+remain close-only and never start the assistant implicitly. Bilingual UI and
+operator documentation are updated. Focused 35-test documentation/Mac-shell,
+13 sidecar, 32 Rust, JavaScript syntax, and Debug app build checks pass.
+Final recovery passes 478 project tests and all smoke paths; independent approval
+is recorded in `.agent-harness/runs/20260814T071647Z-F124-evaluation-pass.md`.
+
+The owner reported two conversational false wakes on 2026-08-13 and authorized
+an opt-in persisted diagnostic configuration. The retained production logs prove
+the app was listening but cannot reconstruct either trigger: lifecycle-only
+diagnostics omit wake scores and sidecar stderr is discarded, while one-second
+health records rotate Python history in roughly three hours. The requirement is
+normalized as F123. It defaults off, records only bounded numeric wake score/run
+evidence under the app-owned diagnostics directory, retains no audio or
+conversation content, and leaves actual threshold/model tuning for a later
+labeled evidence-driven feature.
+
+F123 provider-native implementation is complete and awaiting separate evaluator
+approval. Preferences migrate to schema v4 with wake diagnostics off by default;
+the bilingual Privacy & Diagnostics toggle persists one boolean and uses the
+accepted safe sidecar stop/Resume boundary. When enabled, the packaged Realtime
+wake controller reuses the detector's existing score call and writes only
+allowlisted numeric near-threshold, positive, reset, overflow, and confirmed
+records to rotating `diagnostics/wake.jsonl`; ordinary low scores, audio,
+transcripts, answers, credentials, SDP/ICE, and provider content are excluded.
+The existing support export and confirmed clear action include/remove the new
+files. Focused tests, 478 project tests, 13 sidecar/frontend tests, 32 Rust tests,
+JavaScript/Python syntax, Realtime fake smoke, and final recovery pass.
+
+F093 is complete at the owner-approved portfolio boundary. English and Chinese
+feature demos are published at `https://www.youtube.com/watch?v=Cpv3dhFmS3M` and
+`https://www.youtube.com/watch?v=PDHQiYzFAXQ`; English and Chinese installation
+and usage guides are in `docs/USER_GUIDE.md` and `docs/USER_GUIDE_ZH.md`. One
+owner Apple Silicon trial remains the baseline; broader trusted trials are
+optional follow-up work. The verifier reports `GO_INTERNAL`; the unsigned
+Apple Silicon DMG is published as a public GitHub prerelease for internal
+evaluation, while publicly trusted binary distribution remains deferred. The
+final recovery run passes.
+
 F122 provider-native implementation is complete and awaiting independent evaluator
 approval. Settings now offers a persisted Appearance choice with Night as the
 default and a low-glare Day mode based on the approved soft paper-white palette.
