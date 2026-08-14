@@ -8,7 +8,11 @@ events cross a native allowlist; arbitrary JavaScript strings cannot be logged.
 
 Wake-word tuning diagnostics are a separate, explicitly opt-in JSONL stream at
 `~/Library/Application Support/com.heyjarvis.desktop/diagnostics/wake.jsonl`.
-The Settings toggle defaults off. Changing it safely pauses the sidecar. The
+The Settings toggle defaults off. The same card exposes two bounded experiments:
+score threshold `0.50` or `0.60`, and confirmation count `2` or `3` consecutive
+frames. New and migrated installs retain the existing `0.50` / `2` behavior,
+and Settings always displays the effective pair. Changing the toggle or either
+tuning value safely pauses the sidecar. The
 top-right action is always **Apply & Done**. If wake listening was active when
 Settings opened, it restarts local listening with the new value and closes only
 after `wake_listening` is confirmed. If the sidecar was ready but not listening,
@@ -17,7 +21,9 @@ already inactive, it closes Settings without starting it. When enabled, the stre
 records only bounded numeric evidence for near-threshold frames, positive runs,
 run resets, overflows, and confirmed wakes: score, configured threshold,
 consecutive/required frame counts, RMS, and peak. It uses the same 512 KiB and
-three-generation retention boundary. Low-score background frames are omitted,
+three-generation retention boundary. Each record includes the effective
+threshold and required-frame count, so exported evidence identifies the exact
+experiment. Low-score background frames are omitted,
 and write failures never interrupt wake listening.
 
 Records contain only schema version, timestamp, component, event, bounded

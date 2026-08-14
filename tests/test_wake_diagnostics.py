@@ -6,7 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.wake_diagnostics import WakeDiagnostics, wake_diagnostics_enabled
+from src.wake_diagnostics import (
+    WakeDiagnostics,
+    load_app_wake_preferences,
+    wake_diagnostics_enabled,
+)
 
 
 def pcm(*samples: int) -> bytes:
@@ -14,6 +18,27 @@ def pcm(*samples: int) -> bytes:
 
 
 class WakeDiagnosticsTests(unittest.TestCase):
+    def test_app_and_cli_storage_modes_emit_equivalent_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = WakeDiagnostics(root / "app-support", clock_ms=lambda: 42)
+            cli = WakeDiagnostics(diagnostics_dir=root / "cli-output", clock_ms=lambda: 42)
+            for diagnostics in (app, cli):
+                diagnostics.observe(
+                    pcm(100, -100),
+                    event="confirmed",
+                    score=0.61,
+                    threshold=0.6,
+                    consecutive=3,
+                    required=3,
+                    overflowed=False,
+                )
+            app_record = json.loads(app.path.read_text(encoding="utf-8"))
+            cli_record = json.loads(cli.path.read_text(encoding="utf-8"))
+            self.assertEqual(app_record, cli_record)
+            self.assertEqual(app.path.name, "wake.jsonl")
+            self.assertEqual(cli.path.name, "wake.jsonl")
+
     def test_writer_records_only_bounded_numeric_allowlisted_fields(self):
         with tempfile.TemporaryDirectory() as directory:
             diagnostics = WakeDiagnostics(Path(directory), clock_ms=lambda: 1234)
@@ -101,21 +126,48 @@ class WakeDiagnosticsTests(unittest.TestCase):
             for value in (
                 {"version": 3, "wake_diagnostics_enabled": True},
                 {"version": 4, "wake_diagnostics_enabled": "true"},
-                {"version": 4, "wake_diagnostics_enabled": False},
+                {"version": 5, "wake_diagnostics_enabled": False},
             ):
                 path.write_text(json.dumps(value), encoding="utf-8")
                 self.assertFalse(wake_diagnostics_enabled(path))
             path.write_text(
                 json.dumps({
-                    "version": 4,
+                    "version": 5,
                     "smart_speaker_mode": False,
                     "app_language": "en",
                     "app_theme": "night",
                     "wake_diagnostics_enabled": True,
+                    "wake_threshold": 0.6,
+                    "wake_confirmation_frames": 3,
                 }),
                 encoding="utf-8",
             )
             self.assertTrue(wake_diagnostics_enabled(path))
+            preferences = load_app_wake_preferences(path)
+            self.assertEqual(preferences.threshold, 0.6)
+            self.assertEqual(preferences.confirmation_frames, 3)
+            for field, invalid in (
+                ("wake_threshold", True),
+                ("wake_threshold", "0.6"),
+                ("wake_threshold", 0.55),
+                ("wake_confirmation_frames", True),
+                ("wake_confirmation_frames", "3"),
+                ("wake_confirmation_frames", 4),
+            ):
+                value = {
+                    "version": 5,
+                    "smart_speaker_mode": False,
+                    "app_language": "en",
+                    "app_theme": "night",
+                    "wake_diagnostics_enabled": True,
+                    "wake_threshold": 0.6,
+                    "wake_confirmation_frames": 3,
+                }
+                value[field] = invalid
+                path.write_text(json.dumps(value), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "preferences_corrupt"):
+                    load_app_wake_preferences(path)
+                self.assertFalse(wake_diagnostics_enabled(path))
 
 
 if __name__ == "__main__":

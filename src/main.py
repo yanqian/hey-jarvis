@@ -29,6 +29,7 @@ from .realtime_farewell_asset import CANONICAL_FAREWELL_ASSET, CANONICAL_FAREWEL
 from .state_machine import AssistantState, VoiceAssistantStateMachine
 from .tools.providers import provider_config_from_settings
 from .tools.router import format_text_debug
+from .wake_diagnostics import WakeDiagnostics
 from .wake_word import (
     OPENWAKEWORD_FRAME_SAMPLES,
     WakeWordDetector,
@@ -484,6 +485,19 @@ def run_realtime_forever(settings: Settings) -> int:
         if settings.realtime_acknowledgement_mode == "local":
             player.play_acknowledgement(settings.wake_acknowledgement_audio_path)
 
+    wake_options = build_realtime_wake_options(settings)
+    wake_diagnostics = wake_options["wake_diagnostics"]
+    diagnostic_state = (
+        f"enabled directory={settings.wake_diagnostics_dir}"
+        if wake_diagnostics is not None
+        else "disabled"
+    )
+    logger.info(
+        "Realtime wake tuning threshold=%.2f confirmation_frames=%d diagnostics=%s",
+        settings.wake_threshold,
+        settings.wake_confirmation_frames,
+        diagnostic_state,
+    )
     controller = RealtimeSessionController(
         coordinator=server.coordinator,
         wake_detector=detector,
@@ -491,7 +505,7 @@ def run_realtime_forever(settings: Settings) -> int:
         acknowledgement_duration_ms=acknowledgement_duration_ms,
         idle_timeout_seconds=settings.realtime_idle_timeout_seconds,
         max_duration_seconds=settings.realtime_max_duration_seconds,
-        wake_confirmation_frames=settings.wake_confirmation_frames,
+        **wake_options,
     )
     logger.info("Realtime host launched at %s; arm it once, then say %s", url, settings.wake_phrase)
     try:
@@ -517,8 +531,30 @@ def run_realtime_forever(settings: Settings) -> int:
             close()
 
 
+def build_realtime_wake_options(settings: Settings) -> dict[str, object]:
+    """Build the shared, inspectable CLI wake tuning and diagnostic inputs."""
+
+    wake_diagnostics = (
+        WakeDiagnostics(diagnostics_dir=settings.wake_diagnostics_dir)
+        if settings.wake_diagnostics_enabled and settings.wake_diagnostics_dir is not None
+        else None
+    )
+    return {
+        "wake_threshold": settings.wake_threshold,
+        "wake_confirmation_frames": settings.wake_confirmation_frames,
+        "wake_diagnostics": wake_diagnostics,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m src.main")
+    parser = argparse.ArgumentParser(
+        prog="python -m src.main",
+        epilog=(
+            "Realtime wake tuning is persisted in .env with WAKE_THRESHOLD=0.50|0.60 "
+            "and WAKE_CONFIRMATION_FRAMES=2|3. Optional content-free wake evidence "
+            "requires both WAKE_DIAGNOSTICS_ENABLED=1 and a local WAKE_DIAGNOSTICS_DIR."
+        ),
+    )
     parser.add_argument(
         "--backend",
         choices=SUPPORTED_BACKENDS,

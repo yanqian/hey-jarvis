@@ -60,6 +60,44 @@ def build_runtime():
 
 
 class RealtimeControllerTests(unittest.TestCase):
+    def test_selected_threshold_and_three_frames_govern_confirmation_evidence(self):
+        lease = FakeLease([b"low", b"one", b"two", b"three"])
+        coordinator = HandoffCoordinator(lease)
+        coordinator.host_event("armed")
+
+        class ScoredDetector:
+            scores = iter([0.59, 0.6, 0.61, 0.9])
+
+            def score(self, _chunk: bytes) -> float:
+                return next(self.scores)
+
+        class Sink:
+            def __init__(self) -> None:
+                self.events = []
+
+            def observe(self, _chunk: bytes, **detail: object) -> None:
+                self.events.append(detail)
+
+        sink = Sink()
+        RealtimeSessionController(
+            coordinator=coordinator,
+            wake_detector=ScoredDetector(),
+            play_acknowledgement=lambda: None,
+            idle_timeout_seconds=1.0,
+            max_duration_seconds=2.0,
+            wake_confirmation_frames=3,
+            wake_threshold=0.6,
+            wake_diagnostics=sink,
+        )._wait_for_local_wake()
+
+        self.assertEqual(
+            [event["event"] for event in sink.events],
+            ["near_threshold", "positive", "positive", "confirmed"],
+        )
+        self.assertTrue(all(event["threshold"] == 0.6 for event in sink.events))
+        self.assertTrue(all(event["required"] == 3 for event in sink.events))
+        self.assertEqual(sink.events[-1]["consecutive"], 3)
+
     def test_wake_diagnostics_capture_near_positive_reset_and_confirmed_runs(self):
         lease = FakeLease([b"near", b"one", b"reset", b"two", b"three"])
         coordinator = HandoffCoordinator(lease)

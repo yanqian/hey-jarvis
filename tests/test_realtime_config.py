@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
 from contextlib import redirect_stderr
 from dataclasses import replace
 from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 from src.config import ConfigError, collect_diagnostics, load_settings
-from src.main import build_parser, main
+from src.main import build_parser, build_realtime_wake_options, main
 
 
 class RealtimeConfigTests(unittest.TestCase):
@@ -75,6 +77,80 @@ class RealtimeConfigTests(unittest.TestCase):
         self.assertTrue(settings.realtime_debug)
         self.assertEqual(settings.realtime_end_phrases, ("结束", "goodbye"))
         self.assertEqual(settings.realtime_bridge_port, 9876)
+
+    def test_realtime_wake_tuning_and_diagnostics_are_bounded_and_persistent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env_file = root / ".env"
+            output = root / "wake-evidence"
+            env_file.write_text(
+                "\n".join(
+                    (
+                        "BACKEND=realtime",
+                        "WAKE_THRESHOLD=0.60",
+                        "WAKE_CONFIRMATION_FRAMES=3",
+                        "WAKE_DIAGNOSTICS_ENABLED=1",
+                        f"WAKE_DIAGNOSTICS_DIR={output}",
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            settings = load_settings(env={}, env_file=env_file)
+            options = build_realtime_wake_options(settings)
+
+            self.assertEqual(options["wake_threshold"], 0.6)
+            self.assertEqual(options["wake_confirmation_frames"], 3)
+            writer = options["wake_diagnostics"]
+            self.assertIsNotNone(writer)
+            self.assertEqual(writer.path, output / "wake.jsonl")
+            self.assertFalse(output.exists())
+
+    def test_realtime_wake_diagnostics_default_off_and_invalid_values_fail_closed(self):
+        settings = load_settings(env={"BACKEND": "realtime"}, env_file=None)
+        self.assertIsNone(build_realtime_wake_options(settings)["wake_diagnostics"])
+
+        invalid_cases = (
+            (
+                {"BACKEND": "realtime", "WAKE_THRESHOLD": "0.55"},
+                "WAKE_THRESHOLD must be one of 0.50 or 0.60",
+            ),
+            (
+                {"BACKEND": "realtime", "WAKE_CONFIRMATION_FRAMES": "4"},
+                "WAKE_CONFIRMATION_FRAMES must be one of 2 or 3",
+            ),
+            (
+                {"BACKEND": "realtime", "WAKE_DIAGNOSTICS_ENABLED": "1"},
+                "WAKE_DIAGNOSTICS_DIR is required",
+            ),
+            (
+                {
+                    "BACKEND": "realtime",
+                    "WAKE_DIAGNOSTICS_ENABLED": "1",
+                    "WAKE_DIAGNOSTICS_DIR": "https://example.invalid/logs",
+                },
+                "must be a local filesystem directory",
+            ),
+        )
+        for env, expected in invalid_cases:
+            with self.subTest(env=env):
+                with self.assertRaisesRegex(ConfigError, expected):
+                    load_settings(env=env, env_file=None)
+
+        pipeline = load_settings(
+            env={
+                "BACKEND": "pipeline",
+                "WAKE_THRESHOLD": "0.55",
+                "WAKE_CONFIRMATION_FRAMES": "4",
+                "WAKE_DIAGNOSTICS_ENABLED": "not-a-boolean",
+                "WAKE_DIAGNOSTICS_DIR": "https://inactive.invalid/logs",
+            },
+            env_file=None,
+        )
+        self.assertEqual(pipeline.wake_threshold, 0.55)
+        self.assertEqual(pipeline.wake_confirmation_frames, 4)
+        self.assertFalse(pipeline.wake_diagnostics_enabled)
+        self.assertIsNone(pipeline.wake_diagnostics_dir)
 
     def test_selected_realtime_rejects_unsafe_or_inconsistent_values(self):
         with self.assertRaises(ConfigError) as caught:
@@ -145,6 +221,9 @@ class RealtimeConfigTests(unittest.TestCase):
             self.assertEqual(checks[name].status, "ok")
         self.assertIn("server_vad_threshold=0.8", checks["realtime:model-voice"].message)
         self.assertIn("input_noise_reduction=far_field", checks["realtime:model-voice"].message)
+        self.assertIn("threshold=0.50", checks["realtime:wake-tuning"].message)
+        self.assertIn("confirmation_frames=2", checks["realtime:wake-tuning"].message)
+        self.assertIn("disabled", checks["realtime:wake-diagnostics"].message)
         self.assertNotIn("sk-private", "\n".join(check.message for check in realtime.checks))
 
 

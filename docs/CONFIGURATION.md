@@ -48,7 +48,7 @@ cancellation. Re-run manual acceptance if room, device, or volume changes.
 | `WAKE_MODEL` | `hey_jarvis` | Built-in model name. |
 | `WAKE_INFERENCE_FRAMEWORK` | `tflite` | Inference runtime; preferred on macOS ARM64. |
 | `WAKE_PHRASE` | `hey jarvis` | Displayed accepted phrase. |
-| `WAKE_THRESHOLD` | `0.5` | Wake detection score threshold. |
+| `WAKE_THRESHOLD` | `0.5` | Wake detection score threshold; Realtime accepts the bounded `0.50` or `0.60` experiment choices. |
 | `WAKE_VAD_THRESHOLD` | empty | Optional openWakeWord VAD threshold. |
 | `VAD_BACKEND` | `disabled` | Optional local VAD; `webrtc` when installed. |
 | `VAD_MODE` | `2` | WebRTC VAD aggressiveness, `0` through `3`. |
@@ -58,15 +58,28 @@ cancellation. Re-run manual acceptance if room, device, or volume changes.
 | `WAKE_ACKNOWLEDGEMENT_AUDIO_PATH` | `var/ack.mp3` | Prepared local file. |
 | `WAKE_ACKNOWLEDGEMENT_MAX_DURATION_SECONDS` | `0.8` | Maximum accepted prepared cue duration. |
 | `WAKE_ACKNOWLEDGEMENT_DRAIN_SECONDS` | `0.35` | Legacy fixed drain when guarding is disabled. |
-| `WAKE_CONFIRMATION_FRAMES` | `2` | Consecutive positive wake frames required. |
+| `WAKE_CONFIRMATION_FRAMES` | `2` | Consecutive positive wake frames required; Realtime accepts `2` or `3`. |
+| `WAKE_DIAGNOSTICS_ENABLED` | `0` | CLI Realtime-only explicit opt-in for bounded, content-free wake evidence. |
+| `WAKE_DIAGNOSTICS_DIR` | empty | Required local output directory when CLI wake diagnostics are enabled; contains `wake.jsonl` and rotations. |
 
 The packaged Mac App has a separate persisted **Save wake-word tuning
-diagnostics** switch under Privacy & Diagnostics. It defaults off and does not
+diagnostics** switch under Privacy & Diagnostics. The same card persists the
+Mac app's bounded wake experiment (`0.50` or `0.60`; `2` or `3` consecutive
+frames) and displays the effective pair. It defaults off and does not
 use an environment variable. The top-right control is always **Apply & Done**:
 runtime-neutral changes close directly, while a change that stopped an active
 or ready sidecar restores its prior safe state before closing Settings. See
 `docs/MAC_APP_DIAGNOSTICS.md`
 for the bounded JSONL schema, retention, export, clear, and calibration flow.
+
+CLI Realtime reads its tuning from the persistent `.env` file and reports the
+effective threshold/frame pair at startup. To collect the same numeric evidence
+outside the Mac app, set `WAKE_DIAGNOSTICS_ENABLED=1` and provide an explicit
+local `WAKE_DIAGNOSTICS_DIR`. No file or directory is created while the switch
+is off. Invalid Realtime tuning, enablement, or destination values fail before
+microphone capture starts. The CLI writer uses the same schema, event allowlist,
+near-threshold policy, 512 KiB limit, and three rotated generations as the app;
+it never stores audio, transcripts, answers, credentials, or provider content.
 
 Acknowledgement guarding and post-playback suppression:
 

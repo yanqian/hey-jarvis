@@ -680,9 +680,10 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("fn set_wake_diagnostics", native)
         self.assertIn('stop_sidecar(&runtime, "wake_diagnostics_changed")', native)
         self.assertIn("wake_diagnostics_enabled: false", preferences)
-        self.assertIn("PREFERENCES_VERSION: u8 = 4", preferences)
+        self.assertIn("PREFERENCES_VERSION: u8 = 5", preferences)
         self.assertIn("WakeDiagnostics(app_support_dir)", sidecar)
-        self.assertIn("wake_threshold=settings.wake_threshold", sidecar)
+        self.assertIn('"wake_threshold": settings.wake_threshold', sidecar)
+        self.assertIn("**wake_options", sidecar)
         self.assertIn('"near_threshold"', diagnostics)
         self.assertIn('"confirmed"', diagnostics)
         self.assertIn("WAKE_DIAGNOSTIC_LIMIT_BYTES", diagnostics)
@@ -692,6 +693,39 @@ class MacAppShellTests(unittest.TestCase):
         for forbidden in ("transcription", "answer", "credential", "provider_body", "sdp"):
             self.assertNotIn(f'"{forbidden}"', diagnostics)
         self.assertIn('"Save wake-word tuning diagnostics": "保存唤醒词调试日志"', catalog)
+
+    def test_wake_tuning_choices_are_persisted_visible_and_runtime_applied(self):
+        page = (APP / "src" / "index.html").read_text(encoding="utf-8")
+        frontend = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        catalog = (APP / "src" / "i18n.js").read_text(encoding="utf-8")
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
+        preferences = (APP / "src-tauri" / "src" / "preferences.rs").read_text(
+            encoding="utf-8"
+        )
+        sidecar = (APP / "sidecar" / "product_sidecar.py").read_text(encoding="utf-8")
+
+        self.assertIn('id="wake-threshold"', page)
+        self.assertIn('<option value="0.5">0.50</option>', page)
+        self.assertIn('<option value="0.6">0.60</option>', page)
+        self.assertIn('id="wake-confirmation-frames"', page)
+        self.assertIn('<option value="2">2</option>', page)
+        self.assertIn('<option value="3">3</option>', page)
+        self.assertIn('id="wake-tuning-effective"', page)
+        self.assertIn('invoke("set_wake_tuning", {', frontend)
+        self.assertIn("wakeThreshold", frontend)
+        self.assertIn("wakeConfirmationFrames", frontend)
+        self.assertIn("requireRuntimeRestart()", frontend)
+        self.assertIn("fn set_wake_tuning", native)
+        self.assertIn('stop_sidecar(&runtime, "wake_tuning_changed")', native)
+        self.assertIn("DEFAULT_WAKE_THRESHOLD: f64 = 0.5", preferences)
+        self.assertIn("DEFAULT_WAKE_CONFIRMATION_FRAMES: u8 = 2", preferences)
+        self.assertIn("validate_wake_tuning", preferences)
+        self.assertIn("wake_threshold=app_preferences.threshold", sidecar)
+        self.assertIn(
+            "wake_confirmation_frames=app_preferences.confirmation_frames",
+            sidecar,
+        )
+        self.assertIn('"Wake detection experiment": "唤醒检测实验"', catalog)
 
 
 if __name__ == "__main__":

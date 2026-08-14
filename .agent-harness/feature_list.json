@@ -2833,9 +2833,9 @@
         "When diagnostics are enabled, deterministic score sequences prove the selected threshold and required-frame count govern confirmation and are written into the existing bounded `hey-jarvis-wake-v1` records; logging stays off by default and retains no audio or conversation content.",
         "Focused Rust preference/Tauri, bilingual DOM/state, sidecar configuration, detector/controller, migration/privacy, JavaScript/Python syntax, Debug-app inspection, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credential mutation, live microphone, speaker, or paid API use."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
@@ -2854,9 +2854,9 @@
         "CLI Realtime diagnostics never retain PCM/audio files, transcripts, conversation text, answers, credentials, SDP/ICE, provider bodies, or tool arguments; invalid enablement/path/value configuration fails closed with an actionable bounded error and does not silently fall back to content-bearing logs.",
         "Focused settings/main/controller/writer tests, real parser help and `.env` invocation checks, Realtime fake smoke, documentation and privacy contracts, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credentials, paid API use, speaker, or live microphone."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0",
       "depends_on": [

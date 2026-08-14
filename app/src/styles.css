@@ -530,6 +530,30 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 .privacy-grid p { margin: 0; }
 .check { color: #77dfbd; font-size: 14px; }
 
+.wake-tuning-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 10px 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #26312d;
+}
+.wake-tuning-controls > strong,
+.wake-tuning-controls > p { grid-column: 1 / -1; }
+.wake-tuning-controls > strong { color: #d8e3df; font-size: 12px; }
+.wake-tuning-controls label { display: grid; gap: 6px; color: #87938f; font-size: 11px; }
+.wake-tuning-controls select {
+  width: 100%;
+  border: 1px solid #40504a;
+  border-radius: 9px;
+  background: #111a17;
+  color: #eff8f3;
+  padding: 8px 28px 8px 10px;
+  font: inherit;
+}
+.wake-tuning-controls select:focus-visible { outline: 2px solid #79d7ad; outline-offset: 2px; }
+.wake-tuning-controls > p { margin: 0; color: #77dfbd; font-size: 11px; }
+
 .message {
   min-height: 18px;
   margin: 14px 0 0;
@@ -555,6 +579,9 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
   .setting-row { align-items: flex-start; flex-direction: column; }
   .row-actions { justify-content: flex-start; width: 100%; }
   .row-actions button { flex: 1 1 108px; }
+  .wake-tuning-controls { grid-template-columns: 1fr; }
+  .wake-tuning-controls > strong,
+  .wake-tuning-controls > p { grid-column: auto; }
 }
 
 @media (min-width: 1100px) {
@@ -616,6 +643,11 @@ button:focus-visible { outline: 2px solid #9af4d5; outline-offset: 2px; }
 :root[data-theme="day"] .global-message { border-color: #d5dfd9; }
 :root[data-theme="day"] .local-privacy-note::before { background: #d5dfd9; }
 :root[data-theme="day"] .language-setting select { border-color: #c6d5cc; background: #fff; color: #21332b; }
+:root[data-theme="day"] .wake-tuning-controls { border-color: #d7e3dc; }
+:root[data-theme="day"] .wake-tuning-controls > strong { color: #304139; }
+:root[data-theme="day"] .wake-tuning-controls label { color: #617169; }
+:root[data-theme="day"] .wake-tuning-controls select { border-color: #c6d5cc; background: #fff; color: #21332b; }
+:root[data-theme="day"] .wake-tuning-controls > p { color: #247d61; }
 :root[data-theme="day"] .setting-disclosure summary { color: #3e554a; }
 :root[data-theme="day"] .local-privacy-note { border-left-color: #4b9d79; color: #617169; background: rgb(232 241 236 / 72%); }
 :root[data-theme="day"] .local-privacy-note strong { color: #3e6654; }

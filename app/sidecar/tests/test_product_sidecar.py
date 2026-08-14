@@ -23,10 +23,15 @@ from product_sidecar import (  # noqa: E402
     LifecycleDiagnostics,
     ProductRuntime,
     ProductRuntimeError,
+    apply_app_wake_preferences,
+    app_runtime_configuration_env,
+    build_app_realtime_wake_options,
     parse_private_credentials,
     run,
     validate_openai_credential,
 )
+from src.config import load_settings  # noqa: E402
+from src.main import build_realtime_wake_options  # noqa: E402
 
 
 def message(sequence, payload):
@@ -64,6 +69,78 @@ class FakeRuntime:
 
 
 class ProductSidecarTests(unittest.TestCase):
+    def test_native_runtime_ignores_cli_only_wake_environment(self):
+        values = app_runtime_configuration_env(
+            {
+                "OPENAI_API_KEY": "sk-test",
+                "WAKE_MODEL": "hey_jarvis",
+                "WAKE_THRESHOLD": "0.99",
+                "WAKE_CONFIRMATION_FRAMES": "99",
+                "WAKE_DIAGNOSTICS_ENABLED": "1",
+                "WAKE_DIAGNOSTICS_DIR": "https://not-local.invalid",
+            }
+        )
+        self.assertEqual(values["OPENAI_API_KEY"], "sk-test")
+        self.assertEqual(values["WAKE_MODEL"], "hey_jarvis")
+        self.assertNotIn("WAKE_THRESHOLD", values)
+        self.assertNotIn("WAKE_CONFIRMATION_FRAMES", values)
+        self.assertNotIn("WAKE_DIAGNOSTICS_ENABLED", values)
+        self.assertNotIn("WAKE_DIAGNOSTICS_DIR", values)
+
+    def test_native_wake_preferences_override_environment_before_runtime_construction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "preferences-v1.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 5,
+                        "smart_speaker_mode": False,
+                        "app_language": "en",
+                        "app_theme": "night",
+                        "wake_diagnostics_enabled": True,
+                        "wake_threshold": 0.6,
+                        "wake_confirmation_frames": 3,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = load_settings(
+                env={"WAKE_THRESHOLD": "0.5", "WAKE_CONFIRMATION_FRAMES": "2"},
+                env_file=None,
+            )
+            effective, preferences = apply_app_wake_preferences(settings, path)
+            self.assertEqual(effective.wake_threshold, 0.6)
+            self.assertEqual(effective.wake_confirmation_frames, 3)
+            self.assertTrue(preferences.diagnostics_enabled)
+
+            app_options = build_app_realtime_wake_options(
+                effective, preferences, Path(directory) / "app-support"
+            )
+            cli_settings = load_settings(
+                env={
+                    "BACKEND": "realtime",
+                    "WAKE_THRESHOLD": "0.60",
+                    "WAKE_CONFIRMATION_FRAMES": "3",
+                    "WAKE_DIAGNOSTICS_ENABLED": "1",
+                    "WAKE_DIAGNOSTICS_DIR": str(Path(directory) / "cli-diagnostics"),
+                },
+                env_file=None,
+            )
+            cli_options = build_realtime_wake_options(cli_settings)
+            self.assertEqual(app_options["wake_threshold"], cli_options["wake_threshold"])
+            self.assertEqual(
+                app_options["wake_confirmation_frames"],
+                cli_options["wake_confirmation_frames"],
+            )
+            self.assertEqual(
+                app_options["wake_diagnostics"].path.name,
+                cli_options["wake_diagnostics"].path.name,
+            )
+
+            path.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(ProductRuntimeError, "preferences_corrupt"):
+                apply_app_wake_preferences(settings, path)
+
     def test_runtime_close_joins_controller_before_tearing_down_dependencies(self):
         calls = []
 
@@ -325,10 +402,19 @@ class ProductSidecarTests(unittest.TestCase):
 
     def test_product_runtime_enables_only_persisted_wake_diagnostics(self):
         source = (SIDECAR_DIR / "product_sidecar.py").read_text(encoding="utf-8")
-        self.assertIn('wake_diagnostics_enabled(app_support_dir / "preferences-v1.json")', source)
+        self.assertIn("load_app_wake_preferences", source)
+        self.assertIn("wake_threshold=app_preferences.threshold", source)
+        self.assertIn(
+            "wake_confirmation_frames=app_preferences.confirmation_frames",
+            source,
+        )
+        self.assertIn("if app_wake_preferences.diagnostics_enabled", source)
         self.assertIn("WakeDiagnostics(app_support_dir)", source)
-        self.assertIn("wake_threshold=settings.wake_threshold", source)
-        self.assertIn("wake_diagnostics=wake_diagnostics", source)
+        self.assertIn('"wake_threshold": settings.wake_threshold', source)
+        self.assertIn('"wake_diagnostics": (', source)
+        self.assertIn("**wake_options", source)
+        self.assertIn('"WAKE_DIAGNOSTICS_DIR"', source)
+        self.assertIn("app_runtime_configuration_env", source)
 
 
 if __name__ == "__main__":

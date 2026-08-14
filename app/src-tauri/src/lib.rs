@@ -15,7 +15,7 @@ use diagnostics::{Diagnostics, SupportExport};
 use onboarding::{load as load_onboarding, save as save_onboarding, OnboardingRecord};
 use preferences::{
     load as load_preferences, normalize_language, normalize_theme, save as save_preferences,
-    ENGLISH,
+    validate_wake_tuning, ENGLISH,
 };
 use serde::Serialize;
 use std::path::PathBuf;
@@ -127,6 +127,8 @@ struct OnboardingSnapshot {
     app_language: String,
     app_theme: String,
     wake_diagnostics_enabled: bool,
+    wake_threshold: f64,
+    wake_confirmation_frames: u8,
 }
 
 #[tauri::command]
@@ -316,6 +318,25 @@ fn set_wake_diagnostics(
 }
 
 #[tauri::command]
+fn set_wake_tuning(
+    wake_threshold: f64,
+    wake_confirmation_frames: u8,
+    runtime: State<'_, AppRuntime>,
+) -> Result<OnboardingSnapshot, String> {
+    validate_wake_tuning(wake_threshold, wake_confirmation_frames)?;
+    let mut preferences = load_preferences(&runtime.preferences_path)?;
+    if preferences.wake_threshold != wake_threshold
+        || preferences.wake_confirmation_frames != wake_confirmation_frames
+    {
+        preferences.wake_threshold = wake_threshold;
+        preferences.wake_confirmation_frames = wake_confirmation_frames;
+        save_preferences(&runtime.preferences_path, &preferences)?;
+        stop_sidecar(&runtime, "wake_tuning_changed");
+    }
+    onboarding_status(runtime)
+}
+
+#[tauri::command]
 fn enter_settings(runtime: State<'_, AppRuntime>) -> Result<OnboardingSnapshot, String> {
     onboarding_status(runtime)
 }
@@ -449,6 +470,8 @@ fn onboarding_snapshot(
         app_language: preferences.app_language,
         app_theme: preferences.app_theme,
         wake_diagnostics_enabled: preferences.wake_diagnostics_enabled,
+        wake_threshold: preferences.wake_threshold,
+        wake_confirmation_frames: preferences.wake_confirmation_frames,
     })
 }
 
@@ -872,6 +895,7 @@ pub fn run() {
             set_app_language,
             set_app_theme,
             set_wake_diagnostics,
+            set_wake_tuning,
             enter_settings,
             open_settings,
             close_settings_window,

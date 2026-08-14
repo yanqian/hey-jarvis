@@ -174,6 +174,10 @@ class MainRuntimeTests(unittest.TestCase):
         self.assertIn("--benchmark-acknowledgement", help_text)
         self.assertIn("--benchmark-iterations", help_text)
         self.assertIn("--text", help_text)
+        self.assertIn("WAKE_THRESHOLD=0.50|0.60", help_text)
+        self.assertIn("WAKE_CONFIRMATION_FRAMES=2|3", help_text)
+        self.assertIn("WAKE_DIAGNOSTICS_ENABLED=1", help_text)
+        self.assertIn("WAKE_DIAGNOSTICS_DIR", help_text)
 
     def test_acknowledgement_benchmark_output_is_bounded_and_privacy_safe(self):
         class Trial:

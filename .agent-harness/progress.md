@@ -4,18 +4,37 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
-The owner-approved wake tuning follow-up is normalized as F126-F127. Current
-inspection confirms the gap: the Mac app persists only the diagnostic on/off
-boolean and still uses environment/default `0.50` threshold plus two
-confirmation frames; CLI Realtime loads threshold/frame values from `.env` but
-does not pass the threshold into its controller's numeric diagnostic path and
-does not construct the F123 bounded wake JSONL writer. F126 will add explicit
-persisted Mac choices `0.50`/`0.60` and `2`/`3`, visible effective values, and
-safe Apply & Done application to the packaged sidecar. F127 will then make CLI
-Realtime use the same bounded semantics and exact `hey-jarvis-wake-v1` JSONL
-schema, retention, and privacy contract through explicit local opt-in. No
-5–10-point recognition improvement is claimed until labeled false/intentional
-wake evidence measures it.
+F126 is evaluator-approved. Native preferences migrate to schema v5 and preserve the
+existing `0.50` threshold plus two-frame behavior while accepting only the
+bounded `0.50`/`0.60` and `2`/`3` choices. Privacy & Diagnostics keeps one
+Apply & Done completion action, displays both effective values in English and
+Chinese, and reuses F125's prior-runtime-intent restoration after a tuning
+change. The packaged sidecar reads the native record before detector/controller
+construction, overrides environment values, and supplies the same threshold and
+required-frame count to the existing bounded `hey-jarvis-wake-v1` evidence.
+Focused preference, UI, sidecar, controller, writer, migration, privacy, syntax,
+Debug-app, and full recovery verification pass without microphone, speaker,
+network, credentials, or paid API use. Independent approval is recorded in
+`.agent-harness/runs/20260814T084029Z-F126-evaluation-pass.md`.
+
+F127 is evaluator-approved. CLI Realtime retains persistent `.env` loading while
+accepting only the same `0.50`/`0.60` threshold and `2`/`3` frame choices,
+passes the effective pair explicitly to the shared controller, and reports it
+without credentials. Separate `WAKE_DIAGNOSTICS_ENABLED` and
+`WAKE_DIAGNOSTICS_DIR` settings default to no writer and no filesystem output;
+an enabled CLI uses the same content-free `hey-jarvis-wake-v1` writer, event
+policy, 512 KiB bound, three rotations, and non-fatal I/O behavior as the app.
+Invalid Realtime values or destinations fail before listening starts, while the
+classic pipeline retains its historical wider tuning range. Independent
+approval is recorded in
+`.agent-harness/runs/20260814T092401Z-F127-evaluation-pass.md`.
+
+The owner-approved wake tuning follow-up is complete as F126-F127. The Mac app
+persists bounded tuning and explicit diagnostic opt-in, while CLI Realtime uses
+the same choices, controller inputs, schema, retention, and privacy contract
+through its separate `.env` opt-in and local destination. No 5–10-point
+recognition improvement is claimed until labeled false/intentional wake evidence
+measures it.
 
 F125 is evaluator-approved. Owner feedback replaces contextual
 `Done` / `Apply & Done` / `Retry apply` labels with one stable bilingual
@@ -769,19 +788,15 @@ voice-availability contract before adding a native idle-sleep assertion and a
 separate bounded sleep/wake recovery path.
 
 F093 remains evaluator-approved and complete at the owner-approved portfolio
-boundary. F126 and F127 are planned (`status=todo`) as the next wake tuning and
-App/CLI diagnostics work; neither changes F093's completed video or portfolio
-acceptance.
+boundary. F126 and F127 are evaluator-approved; neither changes F093's
+completed video or portfolio acceptance.
 
 ## Next Feature
 
-Implement and evaluate F126 first: persisted bounded Mac wake threshold/frame
-controls, effective-value display, and packaged-sidecar application through the
-existing Apply & Done lifecycle. Then implement and evaluate dependent F127:
-CLI Realtime `.env` persistence and exact App/CLI diagnostic-schema parity.
-Both features remain evidence instrumentation/configuration work; any default
-tuning change or claimed recognition-rate gain requires a later labeled
-calibration decision.
+No P0 feature is currently in progress. F112 and F122 remain deferred P1 work.
+F126-F127 remain evidence instrumentation/configuration work; any default tuning
+change or claimed recognition-rate gain requires a later labeled calibration
+decision.
 
 For the owner-prioritized interactive F118-F120 sequence, F112 is temporarily
 set to P1 so the priority-and-order-only orchestrator selects F118 first. Restore

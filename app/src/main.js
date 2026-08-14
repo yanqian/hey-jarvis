@@ -37,6 +37,9 @@ const elements = {
   appTheme: document.querySelector("#app-theme"),
   wakeDiagnosticsEnabled: document.querySelector("#wake-diagnostics-enabled"),
   wakeDiagnosticsStatus: document.querySelector("#wake-diagnostics-status"),
+  wakeThreshold: document.querySelector("#wake-threshold"),
+  wakeConfirmationFrames: document.querySelector("#wake-confirmation-frames"),
+  wakeTuningEffective: document.querySelector("#wake-tuning-effective"),
 };
 
 let setup = null;
@@ -62,6 +65,7 @@ const DYNAMIC_ZH = new Map(Object.entries({
   "Hey Jarvis cannot save Smart Speaker preferences. Check disk access and available space.": "Hey Jarvis 无法保存智能音箱偏好设置。请检查磁盘访问权限和可用空间。",
   "Wake diagnostics enabled. It will apply when voice listening starts.": "唤醒调试日志已开启，将在语音监听启动时应用。",
   "Wake diagnostics disabled. It will apply when voice listening starts.": "唤醒调试日志已关闭，将在语音监听启动时应用。",
+  "Wake tuning saved. It will apply when voice listening starts.": "唤醒参数已保存，将在语音监听启动时应用。",
   "On. Bounded numeric wake evidence is saved locally.": "已开启，有限的数值型唤醒证据会保存在本地。",
   "Off. No wake scores are saved.": "已关闭，不保存唤醒分数。",
   "Finish the key and microphone checks before starting the voice runtime.": "启动语音运行环境前，请完成密钥和麦克风检查。",
@@ -140,6 +144,16 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = appTheme;
   document.documentElement.style.colorScheme = appTheme === "day" ? "light" : "dark";
   if (elements.appTheme) elements.appTheme.value = appTheme;
+}
+
+function renderWakeTuning(snapshot) {
+  const threshold = snapshot.wake_threshold === 0.6 ? 0.6 : 0.5;
+  const frames = snapshot.wake_confirmation_frames === 3 ? 3 : 2;
+  elements.wakeThreshold.value = threshold.toFixed(1);
+  elements.wakeConfirmationFrames.value = String(frames);
+  elements.wakeTuningEffective.textContent = appLanguage === "zh-CN"
+    ? `当前生效：阈值 ${threshold.toFixed(2)} · 连续 ${frames} 帧。`
+    : `Effective: threshold ${threshold.toFixed(2)} · ${frames} consecutive frames.`;
 }
 
 function isSettingsWindow() {
@@ -251,6 +265,7 @@ function renderSetup(snapshot) {
   elements.wakeDiagnosticsStatus.textContent = snapshot.wake_diagnostics_enabled
     ? ui("On. Bounded numeric wake evidence is saved locally.")
     : ui("Off. No wake scores are saved.");
+  renderWakeTuning(snapshot);
   if (snapshot.microphone_permission === "denied") {
     elements.microphoneStatus.textContent = ui("Access was denied. Enable Hey Jarvis in Privacy & Security → Microphone, then retry.");
     elements.microphoneSettings.hidden = false;
@@ -607,6 +622,31 @@ async function setWakeDiagnostics() {
   }
 }
 
+async function setWakeTuning() {
+  const wakeThreshold = Number(elements.wakeThreshold.value);
+  const wakeConfirmationFrames = Number(elements.wakeConfirmationFrames.value);
+  const changed = setup?.wake_threshold !== wakeThreshold
+    || setup?.wake_confirmation_frames !== wakeConfirmationFrames;
+  elements.wakeThreshold.disabled = true;
+  elements.wakeConfirmationFrames.disabled = true;
+  try {
+    const snapshot = await invoke("set_wake_tuning", {
+      wakeThreshold,
+      wakeConfirmationFrames,
+    });
+    if (changed) requireRuntimeRestart();
+    renderSetup(snapshot);
+    await refreshVoiceStatus();
+    elements.message.textContent = ui("Wake tuning saved. It will apply when voice listening starts.");
+  } catch (error) {
+    if (setup) renderWakeTuning(setup);
+    elements.message.textContent = friendlyError(error);
+  } finally {
+    elements.wakeThreshold.disabled = false;
+    elements.wakeConfirmationFrames.disabled = false;
+  }
+}
+
 async function exportSupport() {
   try {
     const result = await invoke("export_support_bundle");
@@ -666,6 +706,8 @@ elements.resumeSettings.addEventListener("click", showSettings);
 elements.readinessCheck.addEventListener("click", runReadinessCheck);
 elements.smartSpeakerMode.addEventListener("change", setSmartSpeakerMode);
 elements.wakeDiagnosticsEnabled.addEventListener("change", setWakeDiagnostics);
+elements.wakeThreshold.addEventListener("change", setWakeTuning);
+elements.wakeConfirmationFrames.addEventListener("change", setWakeTuning);
 elements.appLanguage.addEventListener("change", setAppLanguage);
 elements.appTheme.addEventListener("change", setAppTheme);
 elements.microphoneSettings.addEventListener("click", async () => {

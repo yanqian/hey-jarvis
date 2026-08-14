@@ -28,13 +28,17 @@ if str(SIDECAR_DIR) not in sys.path:
     sys.path.insert(0, str(SIDECAR_DIR))
 
 from fake_sidecar import PROTOCOL_VERSION, ProtocolError, _write, parse_message  # noqa: E402
-from src.config import load_settings, wake_acknowledgement_missing_message  # noqa: E402
+from src.config import Settings, load_settings, wake_acknowledgement_missing_message  # noqa: E402
 from src.main import _build_wake_detector  # noqa: E402
 from src.player import MacOSPlayer  # noqa: E402
 from src.realtime.controller import RealtimeSessionController  # noqa: E402
 from src.realtime_host.server import build_server  # noqa: E402
 from src.tools.providers import provider_config_from_settings  # noqa: E402
-from src.wake_diagnostics import WakeDiagnostics, wake_diagnostics_enabled  # noqa: E402
+from src.wake_diagnostics import (  # noqa: E402
+    AppWakePreferences,
+    WakeDiagnostics,
+    load_app_wake_preferences,
+)
 
 
 LOGGER = logging.getLogger("hey_jarvis.mac_sidecar")
@@ -60,6 +64,58 @@ class ProductRuntimeError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+def apply_app_wake_preferences(
+    settings: Settings,
+    preferences_path: Path,
+) -> tuple[Settings, AppWakePreferences]:
+    """Apply the native bounded wake experiment before detector/controller construction."""
+
+    try:
+        app_preferences = load_app_wake_preferences(preferences_path)
+    except ValueError as exc:
+        raise ProductRuntimeError("preferences_corrupt") from exc
+    return (
+        replace(
+            settings,
+            wake_threshold=app_preferences.threshold,
+            wake_confirmation_frames=app_preferences.confirmation_frames,
+        ),
+        app_preferences,
+    )
+
+
+def build_app_realtime_wake_options(
+    settings: Settings,
+    app_wake_preferences: AppWakePreferences,
+    app_support_dir: Path,
+) -> dict[str, object]:
+    """Build the app-side controller inputs using the shared wake writer."""
+
+    return {
+        "wake_threshold": settings.wake_threshold,
+        "wake_confirmation_frames": settings.wake_confirmation_frames,
+        "wake_diagnostics": (
+            WakeDiagnostics(app_support_dir)
+            if app_wake_preferences.diagnostics_enabled
+            else None
+        ),
+    }
+
+
+def app_runtime_configuration_env(env: Mapping[str, str]) -> dict[str, str]:
+    """Keep CLI-only wake controls from overriding native app preferences."""
+
+    values = dict(env)
+    for cli_only_key in (
+        "WAKE_THRESHOLD",
+        "WAKE_CONFIRMATION_FRAMES",
+        "WAKE_DIAGNOSTICS_ENABLED",
+        "WAKE_DIAGNOSTICS_DIR",
+    ):
+        values.pop(cli_only_key, None)
+    return values
 
 
 class LifecycleDiagnostics:
@@ -221,7 +277,10 @@ class ProductRuntime:
     ) -> "ProductRuntime":
         diagnostics = LifecycleDiagnostics(app_support_dir, session_id)
         diagnostics.record("runtime_starting", "non_listening")
-        values = os.environ if env is None else env
+        # Native preferences exclusively own these values for the packaged app.
+        # CLI-only tuning/diagnostic environment variables must not reject or
+        # redirect an app-side runtime before the native record is applied.
+        values = app_runtime_configuration_env(os.environ if env is None else env)
         settings = load_settings(
             env=values,
             env_file=None,
@@ -229,6 +288,10 @@ class ProductRuntime:
             backend="realtime",
         )
         validate_openai_credential(settings.openai_api_key)
+        settings, app_wake_preferences = apply_app_wake_preferences(
+            settings,
+            app_support_dir / "preferences-v1.json",
+        )
         acknowledgement = (resource_dir / ACKNOWLEDGEMENT_RESOURCE).resolve()
         cached_acknowledgement = (resource_dir / CACHED_ACKNOWLEDGEMENT_RESOURCE).resolve()
         cached_acknowledgement_manifest = (
@@ -259,10 +322,10 @@ class ProductRuntime:
         detector = _build_wake_detector(settings, logger=LOGGER)
         if hasattr(detector, "preload"):
             detector.preload()
-        wake_diagnostics = (
-            WakeDiagnostics(app_support_dir)
-            if wake_diagnostics_enabled(app_support_dir / "preferences-v1.json")
-            else None
+        wake_options = build_app_realtime_wake_options(
+            settings,
+            app_wake_preferences,
+            app_support_dir,
         )
         server = build_server(
             "127.0.0.1",
@@ -311,9 +374,7 @@ class ProductRuntime:
             acknowledgement_duration_ms=acknowledgement_duration_ms,
             idle_timeout_seconds=settings.realtime_idle_timeout_seconds,
             max_duration_seconds=settings.realtime_max_duration_seconds,
-            wake_confirmation_frames=settings.wake_confirmation_frames,
-            wake_threshold=settings.wake_threshold,
-            wake_diagnostics=wake_diagnostics,
+            **wake_options,
             shutdown_requested=stop_event.is_set,
         )
 

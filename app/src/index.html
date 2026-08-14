@@ -233,6 +233,24 @@
                 <h3>Save wake-word tuning diagnostics</h3>
                 <p id="wake-diagnostics-status">Off. No wake scores are saved.</p>
                 <p class="diagnostic-path">When enabled, bounded numeric JSONL is stored in Application Support/com.heyjarvis.desktop/diagnostics. If the local voice runtime was ready or listening, Apply &amp; Done restores that state safely with the change.</p>
+                <div class="wake-tuning-controls" aria-labelledby="wake-tuning-title">
+                  <strong id="wake-tuning-title">Wake detection experiment</strong>
+                  <label>
+                    <span>Score threshold</span>
+                    <select id="wake-threshold" aria-describedby="wake-tuning-effective">
+                      <option value="0.5">0.50</option>
+                      <option value="0.6">0.60</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Consecutive frames</span>
+                    <select id="wake-confirmation-frames" aria-describedby="wake-tuning-effective">
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                    </select>
+                  </label>
+                  <p id="wake-tuning-effective">Effective: threshold 0.50 · 2 consecutive frames.</p>
+                </div>
               </div>
               <label class="switch-control">
                 <input id="wake-diagnostics-enabled" type="checkbox" aria-describedby="wake-diagnostics-status" />

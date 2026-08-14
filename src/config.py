@@ -78,6 +78,8 @@ DEFAULT_ACK_GUARD_MIN_QUIET_SECONDS = 0.16
 DEFAULT_ACK_GUARD_QUIET_RMS = 900.0
 DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS = 1.50
 DEFAULT_WAKE_DEBUG = False
+DEFAULT_WAKE_DIAGNOSTICS_ENABLED = False
+DEFAULT_WAKE_DIAGNOSTICS_DIR: Path | None = None
 DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS = 1.0
 DEFAULT_POST_PLAYBACK_QUIET_SECONDS = 0.5
 DEFAULT_POST_PLAYBACK_QUIET_RMS = 500.0
@@ -202,6 +204,8 @@ class Settings:
     ack_guard_quiet_rms: float = DEFAULT_ACK_GUARD_QUIET_RMS
     ack_guard_max_buffer_seconds: float = DEFAULT_ACK_GUARD_MAX_BUFFER_SECONDS
     wake_debug: bool = DEFAULT_WAKE_DEBUG
+    wake_diagnostics_enabled: bool = DEFAULT_WAKE_DIAGNOSTICS_ENABLED
+    wake_diagnostics_dir: Path | None = DEFAULT_WAKE_DIAGNOSTICS_DIR
     post_playback_wake_cooldown_seconds: float = DEFAULT_POST_PLAYBACK_WAKE_COOLDOWN_SECONDS
     post_playback_quiet_seconds: float = DEFAULT_POST_PLAYBACK_QUIET_SECONDS
     post_playback_quiet_rms: float = DEFAULT_POST_PLAYBACK_QUIET_RMS
@@ -314,6 +318,8 @@ def load_settings(
     realtime_end_phrases = DEFAULT_REALTIME_END_PHRASES
     realtime_bridge_host = DEFAULT_REALTIME_BRIDGE_HOST
     realtime_bridge_port = DEFAULT_REALTIME_BRIDGE_PORT
+    wake_diagnostics_enabled = DEFAULT_WAKE_DIAGNOSTICS_ENABLED
+    wake_diagnostics_dir = DEFAULT_WAKE_DIAGNOSTICS_DIR
     if backend_value == "realtime":
         realtime_model = _text_value(raw_env, "REALTIME_MODEL", DEFAULT_REALTIME_MODEL, errors)
         realtime_voice = _text_value(raw_env, "REALTIME_VOICE", DEFAULT_REALTIME_VOICE, errors)
@@ -395,6 +401,21 @@ def load_settings(
             errors.append("REALTIME_MAX_DURATION_SECONDS must be greater than REALTIME_IDLE_TIMEOUT_SECONDS")
         if realtime_bridge_host not in {"127.0.0.1", "localhost", "::1"}:
             errors.append("REALTIME_BRIDGE_HOST must be loopback-only")
+        wake_diagnostics_enabled = _bool_value(
+            raw_env,
+            "WAKE_DIAGNOSTICS_ENABLED",
+            DEFAULT_WAKE_DIAGNOSTICS_ENABLED,
+            errors,
+        )
+        wake_diagnostics_dir = _optional_local_directory(
+            raw_env,
+            "WAKE_DIAGNOSTICS_DIR",
+            errors,
+        )
+        if wake_diagnostics_enabled and wake_diagnostics_dir is None:
+            errors.append(
+                "WAKE_DIAGNOSTICS_DIR is required when WAKE_DIAGNOSTICS_ENABLED is true"
+            )
 
     wake_backend = _choice_value(
         raw_env,
@@ -638,6 +659,11 @@ def load_settings(
         errors,
         minimum=1,
     )
+    if backend_value == "realtime":
+        if wake_threshold not in {0.5, 0.6}:
+            errors.append("WAKE_THRESHOLD must be one of 0.50 or 0.60 for Realtime")
+        if wake_confirmation_frames not in {2, 3}:
+            errors.append("WAKE_CONFIRMATION_FRAMES must be one of 2 or 3 for Realtime")
     armed_no_speech_timeout_seconds = _float_value(
         raw_env,
         "ARMED_NO_SPEECH_TIMEOUT_SECONDS",
@@ -779,6 +805,8 @@ def load_settings(
         ack_guard_quiet_rms=ack_guard_quiet_rms,
         ack_guard_max_buffer_seconds=ack_guard_max_buffer_seconds,
         wake_debug=wake_debug,
+        wake_diagnostics_enabled=wake_diagnostics_enabled,
+        wake_diagnostics_dir=wake_diagnostics_dir,
         post_playback_wake_cooldown_seconds=post_playback_wake_cooldown_seconds,
         post_playback_quiet_seconds=post_playback_quiet_seconds,
         post_playback_quiet_rms=post_playback_quiet_rms,
@@ -1000,6 +1028,21 @@ def _backend_readiness_checks(settings: Settings) -> list[DiagnosticCheck]:
             "realtime:audio-handoff",
             "ok",
             "Exclusive wake/host microphone handoff contract is available",
+        ),
+        DiagnosticCheck(
+            "realtime:wake-tuning",
+            "ok",
+            f"Effective local wake threshold={settings.wake_threshold:.2f} "
+            f"confirmation_frames={settings.wake_confirmation_frames}",
+        ),
+        DiagnosticCheck(
+            "realtime:wake-diagnostics",
+            "info",
+            (
+                f"Bounded wake diagnostics enabled at {settings.wake_diagnostics_dir}"
+                if settings.wake_diagnostics_enabled
+                else "Bounded wake diagnostics disabled; no wake evidence file will be created"
+            ),
         ),
         DiagnosticCheck(
             "realtime:arming",
@@ -1361,6 +1404,25 @@ def _path_value(env: Mapping[str, str], name: str, default: Path, errors: list[s
         errors.append(f"{name} must not be empty")
         return default
     return Path(value)
+
+
+def _optional_local_directory(
+    env: Mapping[str, str], name: str, errors: list[str]
+) -> Path | None:
+    value = _optional_text_value(env, name)
+    if value is None:
+        return None
+    if len(value) > 1024:
+        errors.append(f"{name} must be at most 1024 characters")
+        return None
+    if "\x00" in value or "://" in value:
+        errors.append(f"{name} must be a local filesystem directory")
+        return None
+    path = Path(value).expanduser()
+    if path.exists() and not path.is_dir():
+        errors.append(f"{name} must identify a directory, not a file")
+        return None
+    return path
 
 
 def _float_value(

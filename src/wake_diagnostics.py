@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -18,6 +19,16 @@ WAKE_DIAGNOSTIC_FILENAME = "wake.jsonl"
 WAKE_DIAGNOSTIC_EVENTS = frozenset(
     {"near_threshold", "positive", "reset", "confirmed", "overflow"}
 )
+APP_PREFERENCES_VERSION = 5
+APP_WAKE_THRESHOLDS = frozenset({0.5, 0.6})
+APP_WAKE_CONFIRMATION_FRAMES = frozenset({2, 3})
+
+
+@dataclass(frozen=True)
+class AppWakePreferences:
+    diagnostics_enabled: bool = False
+    threshold: float = 0.5
+    confirmation_frames: int = 2
 
 
 class WakeDiagnostics:
@@ -25,15 +36,22 @@ class WakeDiagnostics:
 
     def __init__(
         self,
-        app_support_dir: Path,
+        app_support_dir: Path | None = None,
         *,
+        diagnostics_dir: Path | None = None,
         clock_ms: Callable[[], int] = lambda: int(time.time() * 1000),
         limit_bytes: int = WAKE_DIAGNOSTIC_LIMIT_BYTES,
         generations: int = WAKE_DIAGNOSTIC_GENERATIONS,
     ) -> None:
         if limit_bytes <= 0 or generations < 1:
             raise ValueError("wake diagnostic retention bounds must be positive")
-        self.root = app_support_dir / "diagnostics"
+        if (app_support_dir is None) == (diagnostics_dir is None):
+            raise ValueError("provide exactly one wake diagnostic storage root")
+        if diagnostics_dir is not None:
+            self.root = diagnostics_dir
+        else:
+            assert app_support_dir is not None
+            self.root = app_support_dir / "diagnostics"
         self.path = self.root / WAKE_DIAGNOSTIC_FILENAME
         self._clock_ms = clock_ms
         self._limit_bytes = limit_bytes
@@ -93,26 +111,52 @@ class WakeDiagnostics:
         self.path.replace(self.path.with_suffix(".jsonl.1"))
 
 
-def wake_diagnostics_enabled(preferences_path: Path) -> bool:
-    """Fail closed unless the current native preference is an exact boolean."""
+def load_app_wake_preferences(preferences_path: Path) -> AppWakePreferences:
+    """Read the native schema exactly; a missing first-run file uses safe defaults."""
 
     try:
         value = json.loads(preferences_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return AppWakePreferences()
     except (OSError, json.JSONDecodeError, UnicodeError):
-        return False
+        raise ValueError("preferences_corrupt") from None
     if not isinstance(value, dict) or set(value) != {
         "version",
         "smart_speaker_mode",
         "app_language",
         "app_theme",
         "wake_diagnostics_enabled",
+        "wake_threshold",
+        "wake_confirmation_frames",
     }:
-        return False
-    return (
+        raise ValueError("preferences_corrupt")
+    threshold = value.get("wake_threshold")
+    frames = value.get("wake_confirmation_frames")
+    valid = (
         type(value.get("version")) is int
-        and value["version"] == 4
+        and value["version"] == APP_PREFERENCES_VERSION
         and type(value.get("smart_speaker_mode")) is bool
         and value.get("app_language") in {"en", "zh-CN"}
         and value.get("app_theme") in {"night", "day"}
-        and value.get("wake_diagnostics_enabled") is True
+        and type(value.get("wake_diagnostics_enabled")) is bool
+        and type(threshold) is float
+        and threshold in APP_WAKE_THRESHOLDS
+        and type(frames) is int
+        and frames in APP_WAKE_CONFIRMATION_FRAMES
     )
+    if not valid:
+        raise ValueError("preferences_corrupt")
+    return AppWakePreferences(
+        diagnostics_enabled=value["wake_diagnostics_enabled"],
+        threshold=threshold,
+        confirmation_frames=frames,
+    )
+
+
+def wake_diagnostics_enabled(preferences_path: Path) -> bool:
+    """Fail closed unless the current native preference is valid and enabled."""
+
+    try:
+        return load_app_wake_preferences(preferences_path).diagnostics_enabled
+    except ValueError:
+        return False
