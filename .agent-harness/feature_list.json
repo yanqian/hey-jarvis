@@ -2821,6 +2821,47 @@
       "depends_on": [
         "F124"
       ]
+    },
+    {
+      "id": "F126",
+      "title": "Persist bounded wake tuning in the Mac app",
+      "description": "Expose, persist, and apply explicit wake threshold and confirmation-frame experiments while showing the effective values and preserving safe Settings restart behavior.",
+      "acceptance": [
+        "Privacy & Diagnostics presents accessible bilingual threshold choices `0.50` and `0.60` plus confirmation-frame choices `2` and `3`, clearly shows the selected effective values, and keeps the existing wake-diagnostic opt-in and support actions logically grouped without adding another completion button.",
+        "New and migrated preferences default to `0.50` and `2`, persist only the supported numeric choices beside the existing fields, reject booleans, strings, non-finite, unknown, or out-of-contract values, and preserve language, appearance, Smart Speaker Mode, and diagnostic opt-in without secrets.",
+        "Changing either tuning value is runtime-affecting: Apply & Done uses F125 to restart only an already-started voice intent, supplies the persisted values to the packaged sidecar's detector and Realtime controller, restores prior ready/listening intent, and never starts an intentionally inactive assistant or a paid conversation.",
+        "When diagnostics are enabled, deterministic score sequences prove the selected threshold and required-frame count govern confirmation and are written into the existing bounded `hey-jarvis-wake-v1` records; logging stays off by default and retains no audio or conversation content.",
+        "Focused Rust preference/Tauri, bilingual DOM/state, sidecar configuration, detector/controller, migration/privacy, JavaScript/Python syntax, Debug-app inspection, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credential mutation, live microphone, speaker, or paid API use."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F123",
+        "F125"
+      ]
+    },
+    {
+      "id": "F127",
+      "title": "Unify CLI Realtime wake tuning diagnostics",
+      "description": "Make command-line Realtime persist the same bounded wake values through `.env` and emit the same opt-in privacy-safe JSONL evidence as the Mac app.",
+      "acceptance": [
+        "Command-line Realtime continues to load `WAKE_THRESHOLD` and `WAKE_CONFIRMATION_FRAMES` from persistent `.env`, validates them against the same F126 choices (`0.50` or `0.60`, `2` or `3`), passes both effective values explicitly to the Realtime controller, and documents or reports the effective pair without exposing secrets.",
+        "A separate explicit CLI diagnostic opt-in and local destination create no file by default; when enabled they use the shared wake writer and produce `wake.jsonl` with the same schema, event names, numeric fields, near-threshold policy, 512 KiB limit, three generations, and non-fatal filesystem behavior as the Mac app.",
+        "Equivalent deterministic score/overflow/reset/confirmation sequences through App-sidecar and CLI construction produce equivalent parsed JSON records after timestamp and storage-root normalization, preventing threshold, frame-count, field, retention, or privacy drift.",
+        "CLI Realtime diagnostics never retain PCM/audio files, transcripts, conversation text, answers, credentials, SDP/ICE, provider bodies, or tool arguments; invalid enablement/path/value configuration fails closed with an actionable bounded error and does not silently fall back to content-bearing logs.",
+        "Focused settings/main/controller/writer tests, real parser help and `.env` invocation checks, Realtime fake smoke, documentation and privacy contracts, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credentials, paid API use, speaker, or live microphone."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F126"
+      ]
     }
   ]
 }

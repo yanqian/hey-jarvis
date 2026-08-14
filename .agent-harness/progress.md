@@ -4,6 +4,19 @@
 
 Project minspec has been accepted for a simple macOS voice assistant MVP named Hey Jarvis.
 
+The owner-approved wake tuning follow-up is normalized as F126-F127. Current
+inspection confirms the gap: the Mac app persists only the diagnostic on/off
+boolean and still uses environment/default `0.50` threshold plus two
+confirmation frames; CLI Realtime loads threshold/frame values from `.env` but
+does not pass the threshold into its controller's numeric diagnostic path and
+does not construct the F123 bounded wake JSONL writer. F126 will add explicit
+persisted Mac choices `0.50`/`0.60` and `2`/`3`, visible effective values, and
+safe Apply & Done application to the packaged sidecar. F127 will then make CLI
+Realtime use the same bounded semantics and exact `hey-jarvis-wake-v1` JSONL
+schema, retention, and privacy contract through explicit local opt-in. No
+5–10-point recognition improvement is claimed until labeled false/intentional
+wake evidence measures it.
+
 F125 is evaluator-approved. Owner feedback replaces contextual
 `Done` / `Apply & Done` / `Retry apply` labels with one stable bilingual
 `Apply & Done` completion action. Runtime-neutral and intentionally inactive
@@ -49,8 +62,7 @@ evidence under the app-owned diagnostics directory, retains no audio or
 conversation content, and leaves actual threshold/model tuning for a later
 labeled evidence-driven feature.
 
-F123 provider-native implementation is complete and awaiting separate evaluator
-approval. Preferences migrate to schema v4 with wake diagnostics off by default;
+F123 is evaluator-approved. Preferences migrate to schema v4 with wake diagnostics off by default;
 the bilingual Privacy & Diagnostics toggle persists one boolean and uses the
 accepted safe sidecar stop/Resume boundary. When enabled, the packaged Realtime
 wake controller reuses the detector's existing score call and writes only
@@ -756,31 +768,20 @@ could no longer answer `Hey Jarvis`. The plan therefore requires a truthful
 voice-availability contract before adding a native idle-sleep assertion and a
 separate bounded sleep/wake recovery path.
 
-F093 is pending (`status=todo`) and intentionally deferred behind the
-owner-prioritized interaction/settings work. It owns the public engineering narrative
-and bounded demo plus privacy-safe feedback from at least three explicitly
-trusted trials or clean profiles. It must use the evaluator-approved F092
-internal artifact without publishing the unsigned binary or describing it as
-signed, notarized, Gatekeeper-ready, or suitable for anonymous download.
-
-Provider-native work has added the case study, a 210-second privacy-safe demo
-runbook, structured trusted-trial evidence, an explicit completion record, and
-a fail-closed completion verifier. The owner-led F092 run is preserved as one
-eligible privacy-safe trial. The current machine-readable decision is `HOLD`:
-the demo has not yet been recorded and two additional trusted tester or clean
-profile trials remain. No demo or external feedback has been fabricated.
-The existing F093 worktree is intentionally retained so the feature can resume
-without recreating its narrative, demo, feedback, or verification groundwork.
+F093 remains evaluator-approved and complete at the owner-approved portfolio
+boundary. F126 and F127 are planned (`status=todo`) as the next wake tuning and
+App/CLI diagnostics work; neither changes F093's completed video or portfolio
+acceptance.
 
 ## Next Feature
 
-Implement and evaluate F118, then F119 and F120. F119 paid generation and live
-speaker audition require fresh explicit owner authorization immediately before
-execution. The older optional F112 Mandarin ACK-shortening experiment and F093
-portfolio demo/trusted-trial work remain deferred behind the owner-prioritized
-bilingual product flow. Then Resume F093 by recording the bounded production-app
-demo and running two additional trusted Apple Silicon tester or distinct
-clean-profile trials. Public binary distribution remains on hold.
+Implement and evaluate F126 first: persisted bounded Mac wake threshold/frame
+controls, effective-value display, and packaged-sidecar application through the
+existing Apply & Done lifecycle. Then implement and evaluate dependent F127:
+CLI Realtime `.env` persistence and exact App/CLI diagnostic-schema parity.
+Both features remain evidence instrumentation/configuration work; any default
+tuning change or claimed recognition-rate gain requires a later labeled
+calibration decision.
 
 For the owner-prioritized interactive F118-F120 sequence, F112 is temporarily
 set to P1 so the priority-and-order-only orchestrator selects F118 first. Restore
