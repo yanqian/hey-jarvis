@@ -14,6 +14,8 @@ for path in \
   app/package.json \
   app/src/index.html \
   app/src/main.js \
+  app/src/navigation.js \
+  app/tests/navigation.test.mjs \
   app/sidecar/fake_sidecar.py \
   app/sidecar/product_sidecar.py \
   app/src-tauri/Cargo.toml \
@@ -89,6 +91,7 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "== Mac app frontend and fake sidecar tests =="
 node --check app/src/main.js
+node --test app/tests/navigation.test.mjs
 python3 -m unittest discover -s app/sidecar/tests -p 'test_*.py'
 
 echo "== Mac app Rust tests =="

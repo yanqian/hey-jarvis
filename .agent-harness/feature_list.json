@@ -2922,6 +2922,28 @@
       "depends_on": [
         "F129"
       ]
+    },
+    {
+      "id": "F131",
+      "title": "Restore Smart Speaker media retention on fast startup",
+      "description": "Carry Smart Speaker Mode through the lightweight returning-startup route so the Realtime page keeps its disabled warm microphone track and locked wake avoids a fresh delayed getUserMedia call.",
+      "acceptance": [
+        "The lightweight native startup route returns the persisted bounded Smart Speaker Mode boolean without adding Keychain work, credential exposure, microphone access, network activity, or a second full onboarding snapshot.",
+        "Completed returning startup explicitly navigates with `#smart-speaker-mode` when the mode is enabled and without it when disabled; Resume retains `#smart-speaker-resume` precedence and first-run, Settings, permission, failure, and manual-start paths remain unchanged.",
+        "The existing Realtime page retains the authorized microphone track live but disabled in Smart Speaker Mode, reuses it after wake while cached ACK and Realtime setup run concurrently, and enables user input only after both existing barriers complete; no paid pre-wake session or early speech submission is introduced.",
+        "Focused behavioral regression tests fail against the F129 route omission and cover enabled, disabled, Resume, and fast-start navigation without relying only on source-string presence; unrelated startup performance and one-line-shell behavior remain intact.",
+        "JavaScript syntax, focused Mac shell and Rust tests, Debug and Release builds, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credentials, paid API use, speaker, or live microphone."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F129",
+        "F105",
+        "F111"
+      ]
     }
   ]
 }

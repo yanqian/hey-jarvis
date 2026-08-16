@@ -303,6 +303,29 @@ class MacAppShellTests(unittest.TestCase):
         self.assertNotIn("overflow: hidden", startup_style)
         self.assertNotIn("text-overflow", startup_style)
 
+    def test_fast_startup_preserves_smart_speaker_media_route(self):
+        script = (APP / "src" / "main.js").read_text(encoding="utf-8")
+        navigation = (APP / "src" / "navigation.js").read_text(encoding="utf-8")
+        native = (APP / "src-tauri" / "src" / "lib.rs").read_text(
+            encoding="utf-8"
+        )
+
+        startup_route = native.split("struct StartupRoute", 1)[1].split(
+            "fn startup_runtime_pending", 1
+        )[0]
+        self.assertIn("smart_speaker_mode: bool", startup_route)
+        self.assertIn("smart_speaker_mode: preferences.smart_speaker_mode", startup_route)
+
+        fast_start = script.split("async function waitForStartupRuntime()", 1)[1].split(
+            "async function refreshPendingCredentialStatus()", 1
+        )[0]
+        self.assertIn(
+            "navigateToAssistant(runtime, { smartSpeakerMode: route.smart_speaker_mode === true })",
+            fast_start,
+        )
+        self.assertIn('return "smart-speaker-resume"', navigation)
+        self.assertIn('return smartSpeakerMode === true ? "smart-speaker-mode" : ""', navigation)
+
     def test_system_sleep_has_bounded_recovery_and_a_clickable_fallback(self):
         page = (APP / "src" / "index.html").read_text(encoding="utf-8")
         frontend = (APP / "src" / "main.js").read_text(encoding="utf-8")
@@ -321,7 +344,8 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("The Mac slept", page)
         self.assertIn('RESUME_REQUIRED_HASH = "#resume-required"', frontend)
         self.assertIn('invoke("resume_voice_assistant")', frontend)
-        self.assertIn('endpoint.hash = "smart-speaker-resume"', frontend)
+        self.assertIn('navigateToAssistant(await invoke("resume_voice_assistant"), { recovery: true })', frontend)
+        self.assertIn('return "smart-speaker-resume"', (APP / "src" / "navigation.js").read_text(encoding="utf-8"))
         self.assertIn("struct SleepRecoveryPolicy", power)
         self.assertIn("snapshot.enabled && snapshot.active", power)
         self.assertIn("begin_wake_attempt", power)
@@ -528,7 +552,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("explicit Sleep and closing a MacBook lid", page)
         self.assertIn("one safe recovery attempt after wake", page)
         self.assertIn('invoke("set_smart_speaker_mode", { enabled })', frontend)
-        self.assertIn('endpoint.hash = "smart-speaker-mode"', frontend)
+        self.assertIn('assistantModeFragment({ recovery, smartSpeakerMode })', frontend)
         self.assertIn("set_smart_speaker_mode", native)
         self.assertIn('availability != "wake_listening"', power)
         self.assertIn('availability == "busy" && self.assertion_id.is_some()', power)

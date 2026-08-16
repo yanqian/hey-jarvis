@@ -151,6 +151,7 @@ struct OnboardingSnapshot {
 struct StartupRoute {
     completed: bool,
     microphone_permission: String,
+    smart_speaker_mode: bool,
     app_language: String,
     app_theme: String,
     runtime_starting: bool,
@@ -163,6 +164,7 @@ fn startup_route(runtime: State<'_, AppRuntime>) -> Result<StartupRoute, String>
     Ok(StartupRoute {
         completed: onboarding.completed,
         microphone_permission: onboarding.microphone_permission,
+        smart_speaker_mode: preferences.smart_speaker_mode,
         app_language: preferences.app_language,
         app_theme: preferences.app_theme,
         runtime_starting: runtime.startup_runtime_pending.load(Ordering::Acquire),

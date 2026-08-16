@@ -2,6 +2,19 @@
 
 ## Current System Status
 
+F131 is evaluator-approved. The F129 lightweight startup route now carries the persisted
+Smart Speaker Mode boolean into returning navigation, so enabled fast launches
+restore `#smart-speaker-mode` and the accepted F105 warm disabled microphone
+track instead of falling back to a fresh lock-delayed `getUserMedia()` request.
+Mode-off navigation remains fragment-free, sleep recovery keeps
+`#smart-speaker-resume` precedence, and F111 cached ACK/Realtime concurrency and
+post-barrier input enablement are unchanged. Three executable navigation tests,
+21 focused Mac shell tests, 35 Rust tests, Debug and Release app builds, 489
+project tests, 16 sidecar tests, all smoke paths, and final recovery pass. Coding
+evidence is in `.agent-harness/runs/20260814T165020Z-F131-fast-coding.md`;
+independent approval is recorded in
+`.agent-harness/runs/20260814T165236Z-F131-evaluation-pass.md`.
+
 F130 is evaluator-approved. The Mac startup shell now keeps the product context and
 Settings escape hatch but replaces the prior STARTING label, Returning heading,
 and detail stack with one atomic polite status line. That line changes in place

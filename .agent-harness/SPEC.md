@@ -2612,3 +2612,70 @@ simplification, in-place bilingual state copy, visual styling, and screenshot
 verification form one independently valuable startup-shell behavior with one
 frontend verification surface. Further startup performance work or broader
 application redesign remains separate.
+
+### Preserve Smart Speaker Media Warmth On Fast Startup
+
+Feature mapping: F131.
+
+Goal: restore the Smart Speaker Mode media-retention contract on the F129 fast
+returning-startup path so a locked Mac can reuse the already-authorized disabled
+WebView microphone track while cached ACK playback and Realtime setup proceed in
+parallel.
+
+Included scope: carry the persisted Smart Speaker Mode preference through the
+lightweight native startup route; make assistant navigation choose the
+`smart-speaker-mode` fragment from explicit route state rather than an
+incidentally populated full Settings snapshot; preserve the existing Resume
+fragment precedence; and add focused regression coverage for enabled, disabled,
+returning, first-run, Settings, and Resume paths.
+
+Excluded scope: changing cached ACK wording or duration, serializing ACK behind
+Realtime setup, enabling user input before both existing barriers complete,
+changing wake tuning, adding public telemetry, changing the native sleep
+assertion, or moving Realtime audio out of WKWebView.
+
+Core flows: on a completed returning launch, native startup reads preferences
+without a second Keychain access and returns the bounded Smart Speaker boolean;
+after the sidecar reaches real readiness, navigation appends
+`#smart-speaker-mode` only when that value is true. The Realtime page then keeps
+its initial authorized microphone track live but disabled, primes the shared
+audio element, starts cached ACK and Realtime connection concurrently after a
+wake, and enables input only after both barriers. Mode-off launches omit the
+fragment and release the warm track as before; sleep recovery continues to use
+`#smart-speaker-resume`.
+
+Constraints: the fast startup path must not restore synchronous Keychain work,
+delay first paint or Home navigation, start a paid pre-wake session, enable
+input early, expose credentials, or infer Smart Speaker state from native power
+assertion timing. Startup route data remains bounded, non-secret local state.
+Unrelated untracked artifacts must remain untouched.
+
+Ambiguities or assumptions: retained-track behavior remains subject to macOS
+media lifecycle boundaries such as explicit sleep, lid close, Settings teardown,
+or page destruction. The observed production regression is deterministic before
+those boundaries because F129 omitted the fragment on returning startup; fixing
+that propagation restores the previously accepted F105/F111 architecture rather
+than claiming WebKit can survive every system transition.
+
+Required capabilities: existing F105 warm-media path, F111 cached-ACK/input
+barriers, F129 lightweight startup route, deterministic frontend and Rust tests,
+JavaScript syntax checking, Debug and Release builds, final project recovery,
+provider-native fast coding evidence, and a separate cold-start Evaluator Agent.
+
+Implementation paths: `app/src-tauri/src/lib.rs`, `app/src/main.js`, focused
+tests under `tests/test_mac_app_shell.py` and native Rust tests where useful,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: the lightweight startup route returns the persisted
+boolean; completed fast startup with mode on navigates with
+`#smart-speaker-mode`, mode off does not, Resume keeps its dedicated fragment,
+and source/behavior contracts retain a live disabled warm track, concurrent
+cached ACK/Realtime setup, and post-barrier input enablement. Focused tests,
+JavaScript syntax, Rust and Mac shell tests, Debug and Release builds, final
+`./init.sh`, fast coding evidence, and separate evaluator approval must pass
+without network, credentials, paid API use, speaker, or live microphone.
+
+Decomposition decision: F131 is one feature because the missing startup-route
+preference, navigation fragment, warm-track consequence, and regression tests
+form one atomic restoration of the previously accepted locked-Mac behavior.

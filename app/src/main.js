@@ -1,4 +1,5 @@
 import { applyDocumentLocale, supportedLocale, text } from "./i18n.js";
+import { assistantModeFragment } from "./navigation.js";
 
 const invoke = window.__TAURI__?.core?.invoke;
 const startupNavigationElapsed = () => Math.max(0, Math.min(300000, Math.round(performance.now())));
@@ -390,7 +391,10 @@ async function waitForAppliedRuntime(expectedAvailability = settingsEntryRuntime
   renderVoiceStatus(snapshot);
 }
 
-function navigateToAssistant(snapshot, { recovery = false } = {}) {
+function navigateToAssistant(
+  snapshot,
+  { recovery = false, smartSpeakerMode = setup?.smart_speaker_mode === true } = {},
+) {
   if (snapshot.state !== "ready" || !snapshot.control_url) {
     throw new Error(snapshot.detail || "sidecar_readiness_timed_out");
   }
@@ -398,8 +402,7 @@ function navigateToAssistant(snapshot, { recovery = false } = {}) {
   if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1") {
     throw new Error("Sidecar returned an invalid control endpoint.");
   }
-  if (recovery) endpoint.hash = "smart-speaker-resume";
-  else if (setup?.smart_speaker_mode === true) endpoint.hash = "smart-speaker-mode";
+  endpoint.hash = assistantModeFragment({ recovery, smartSpeakerMode });
   recordLifecycle("runtime_navigation", snapshot.session_id);
   window.location.assign(endpoint.href);
 }
@@ -415,7 +418,7 @@ async function waitForStartupRuntime() {
   }
   const runtime = await invoke("sidecar_status");
   if (runtime.state === "ready") {
-    navigateToAssistant(runtime);
+    navigateToAssistant(runtime, { smartSpeakerMode: route.smart_speaker_mode === true });
     return;
   }
 
