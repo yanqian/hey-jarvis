@@ -2679,3 +2679,145 @@ without network, credentials, paid API use, speaker, or live microphone.
 Decomposition decision: F131 is one feature because the missing startup-route
 preference, navigation fragment, warm-track consequence, and regression tests
 form one atomic restoration of the previously accepted locked-Mac behavior.
+
+### Prepare Configurable-Session Voice Cue Candidates
+
+Feature mapping: F132.
+
+Goal: prepare owner-auditionable English and Simplified Chinese spoken warnings
+for an approaching Realtime session limit, plus a language-neutral ready-to-wake
+tone, without changing runtime behavior or selecting production assets before
+the owner listens.
+
+Included scope: define one duration-neutral warning script per supported locale;
+generate no more than three OpenAI TTS candidates per locale with the existing
+project-authorized model and voice workflow; deterministically synthesize three
+local non-speech ready-tone candidates; validate bounded mono 24 kHz PCM WAV
+shape, duration, silence, digest, and manifest metadata; and provide an explicit
+owner-confirmed promotion path and concise audition instructions.
+
+Excluded scope: changing the configured 10- or 20-minute session limit,
+scheduling or playing a warning in production, closing a live session, restoring
+wake listening, selecting a candidate without owner confirmation, adding remote
+telemetry, or retaining conversation content.
+
+Core flows: an explicitly authorized offline command creates candidate-01
+through candidate-03 for Chinese and English and stops after at most six paid
+speech calls; a separate deterministic local path creates three ready tones
+without network use. Validation rejects malformed, clipped, silent, oversized,
+misidentified, or out-of-contract assets. The owner can play every candidate
+from stable local paths, then a promotion command requires the chosen IDs and an
+explicit confirmation before writing canonical runtime assets.
+
+Constraints: speech must not name a fixed number of minutes because the maximum
+is configurable. The Chinese meaning is: “本轮对话即将结束。结束后，听到提示音，
+再说 ‘Hey Jarvis’ 即可开始新一轮对话。” The English meaning is: “This
+conversation is about to end. When you hear the tone, say ‘Hey Jarvis’ to start
+a new one.” Paid generation is owner-authorized for this feature only, bounded
+to six calls, never exercised by tests, and must not print or persist API keys.
+Candidates remain local development artifacts until the owner chooses.
+
+Ambiguities or assumptions: “两个提示音” is interpreted as two notification
+moments: a spoken localized near-end warning and a short universal ready-to-wake
+chime after the session ends and wake listening returns. Three style variants
+per spoken locale and three locally synthesized chimes provide a bounded choice
+set while keeping paid usage predictable.
+
+Required capabilities: existing F036/F037/F076 audio candidate validation and
+promotion patterns, explicit paid-generation authorization, deterministic local
+PCM synthesis, manifests and SHA-256 digests, focused offline tests, final
+project recovery, provider-native fast coding evidence, owner audition, and a
+separate cold-start Evaluator Agent after owner selection permits completion.
+
+Implementation paths: project-owned candidate tooling under `src/` and
+`src/evals/`, focused tests under `tests/`, local candidates under
+`artifacts/audio/candidates/`, canonical audio only after explicit promotion,
+operator documentation, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: deterministic tests cover scripts, paid-call bounds,
+candidate IDs, WAV validation, clipping/silence/duration failures, reproducible
+tone bytes, manifest/digest integrity, and promotion confirmation without
+network, credentials, microphone, speaker, or paid calls. The one explicitly
+authorized generation run records exactly which candidates were created; final
+recovery passes and the owner receives clickable local audition paths.
+
+Decomposition decision: F132 stops at safe candidate preparation and owner
+selection because judging voice and chime quality is a human approval boundary;
+production session timing and lifecycle integration are independently valuable
+and remain F133.
+
+### Announce Configurable Session Expiry And Wake Recovery
+
+Feature mapping: F133.
+
+Goal: retain the existing configurable Realtime hard limit while making its
+approach and the next wake action understandable through the owner-selected
+bilingual warning and ready tone.
+
+Included scope: schedule one near-end warning relative to the effective maximum;
+play the selected locale asset at a safe output boundary while local wake
+detection stays closed and Realtime input is gated; preserve the exact hard-stop
+duration; close and clean up the Realtime session; acquire the wake microphone
+in a non-detecting recovery state; play the selected universal ready tone;
+discard playback residue, reset the detector, require a quiet boundary, and only
+then publish `wake_listening`; and record bounded content-free lifecycle
+diagnostics for warning, expiry, teardown, restoration, gating, and failure.
+
+Excluded scope: extending or removing the 10-/20-minute limit, automatically
+starting a new paid session, speaking a fixed duration, replaying conversation
+content, changing wake threshold/frame tuning, or adding network telemetry.
+
+Core flows: for either supported configured maximum, the controller arms one
+warning approximately 30 seconds before expiry and emits it once without
+interrupting active assistant speech. Local wake capture remains closed and
+Realtime input is temporarily gated while that warning says “Hey Jarvis.” At
+the unchanged maximum the controller closes the session using the existing
+teardown contract. Successful wake-microphone acquisition enters a bounded
+recovery gate rather than public wake listening; it plays the short chime while
+the detector cannot confirm a wake, drains buffered cue audio, resets detector
+state, waits for quiet, and only then returns to normal wake listening. Failure
+stays truthful and does not publish a false-ready state.
+
+Constraints: timing derives from the effective session configuration rather
+than a hard-coded 10 minutes; short or invalid configurations fail closed; the
+warning cannot overlap or re-enter assistant playback or be submitted as a user
+turn; neither cue can trigger the detector; microphone acquisition alone must
+not publish `wake_listening`; the recovery gate is bounded and failure remains
+`resume_required`; logs contain only allowlisted states, reason codes, and
+bounded numeric elapsed values, never audio, transcripts, answers, credentials,
+SDP/ICE, provider bodies, or tool arguments.
+
+Ambiguities or assumptions: approximately 30 seconds is enough notice to make
+the transition legible without materially shortening a conversation. If no safe
+playback boundary occurs before expiry, the hard limit wins and the app proceeds
+to teardown rather than extending the session. Exact copy and tone are the
+owner-promoted F132 assets.
+
+Required capabilities: F132 canonical assets, existing configurable Realtime
+duration and teardown, wake-listening state confirmation, shared playback and
+self-wake suppression, content-free local diagnostics, deterministic clocks and
+fake backends, Debug/Release builds, final project recovery, fast coding
+evidence, and separate cold-start evaluator approval.
+
+Implementation paths: Realtime browser/controller lifecycle code, packaged
+sidecar/controller code where the authoritative duration lives, selected audio
+assets, focused Python/JavaScript/Rust tests, operator documentation,
+`.agent-harness/feature_list.json`, `.agent-harness/progress.md`, and
+`.agent-harness/runs/`.
+
+Verification surface: deterministic 10- and 20-minute clock tests prove one
+relative warning and the unchanged hard stop; busy-output and input-gating tests
+prove the spoken cue cannot become a user turn; teardown success/failure tests
+prove microphone acquisition enters recovery rather than public wake listening;
+scripted cue residue containing a wake-positive frame is discarded, the detector
+is reset, quiet is required, and only then is `wake_listening` visible; self-wake,
+failure, timeout, and duplicate-timer tests remain closed; privacy-schema checks,
+Realtime fake smoke, JavaScript/Python syntax, Debug and Release builds, final
+`./init.sh`, fast coding evidence, and separate evaluator approval pass without
+live network, credentials, microphone, speaker, or paid API use.
+
+Decomposition decision: F133 is one runtime feature because warning timing,
+unchanged expiry, teardown, truthful wake restoration, and the ready cue form
+one user-visible recovery contract; asset generation remains separately gated
+by F132 owner selection.

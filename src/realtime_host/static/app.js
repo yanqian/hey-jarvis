@@ -23,6 +23,7 @@ let acknowledgementCaptureLabel=null,acknowledgementCapture=null,acknowledgement
 let cachedAcknowledgementUrl=null,cachedAcknowledgementPending=false,cachedAcknowledgementToken=0;
 let cachedFarewellUrl=null,cachedFarewellPending=false,cachedFarewellToken=0;
 let cachedAcknowledgementUrls={},cachedFarewellUrls={},activeCueLocale=null;
+let sessionExpiryWarningUrls={},sessionExpiryWarningPending=false,sessionExpiryWarningToken=0,sessionExpiryWarningReject=null;
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
@@ -124,6 +125,18 @@ async function prepareCachedFarewell(settings){
   const bytes=await response.arrayBuffer();if(bytes.byteLength<44||bytes.byteLength>1500000)throw new Error("Cached farewell size is invalid");
   cachedFarewellUrl=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
 }
+async function prepareSessionExpiryWarnings(settings){
+  for(const url of Object.values(sessionExpiryWarningUrls))URL.revokeObjectURL(url);sessionExpiryWarningUrls={};
+  const warnings=settings?.session_expiry_warnings;if(!warnings)return;
+  const locales=Object.keys(warnings).sort();if(locales.join(",")!=="en,zh-CN")throw new Error("Session expiry warning locales are incomplete");
+  for(const locale of locales){
+    const warning=warnings[locale],expectedUrl=`/session-expiry-warning.wav?locale=${encodeURIComponent(locale)}`;
+    if(warning.url!==expectedUrl||!Number.isInteger(warning.duration_ms)||warning.duration_ms<2000||warning.duration_ms>15000||typeof warning.sha256!=="string"||!/^[a-f0-9]{64}$/.test(warning.sha256))throw new Error("Session expiry warning metadata is invalid");
+    const response=await fetch(warning.url,{cache:"no-store"});if(!response.ok)throw new Error("Session expiry warning is unavailable");
+    const bytes=await response.arrayBuffer();if(bytes.byteLength<44||bytes.byteLength>1500000)throw new Error("Session expiry warning size is invalid");
+    sessionExpiryWarningUrls[locale]=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
+  }
+}
 function resetCachedAcknowledgementPlayback(){
   cachedAcknowledgementToken+=1;cachedAcknowledgementPending=false;
   const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");
@@ -132,8 +145,13 @@ function resetCachedFarewellPlayback(){
   cachedFarewellToken+=1;cachedFarewellPending=false;
   const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");
 }
+function resetSessionExpiryWarningPlayback(){
+  sessionExpiryWarningToken+=1;sessionExpiryWarningPending=false;
+  if(sessionExpiryWarningReject){sessionExpiryWarningReject(new Error("Session expiry warning cancelled"));sessionExpiryWarningReject=null;}
+  const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");
+}
 async function attachRemoteAudio(){
-  if(!remoteStream||cachedAcknowledgementPending||cachedFarewellPending)return;
+  if(!remoteStream||cachedAcknowledgementPending||cachedFarewellPending||sessionExpiryWarningPending)return;
   const audio=$("remoteAudio");audio.onended=null;audio.onerror=null;audio.pause();audio.removeAttribute("src");audio.srcObject=remoteStream;audio.volume=configuredOutputVolume();
   const playAttempt=audio.play();if(playAttempt)await playAttempt;log("remote_audio_track");
 }
@@ -165,6 +183,21 @@ async function startCachedFarewell(){
   if(token!==cachedFarewellToken||sessionId!==expectedSession)return;
   cachedFarewellPending=false;audio.onended=null;audio.onerror=null;
   await finishIfStopping(await hostEvent("farewell_playback_stopped"),"farewell_complete");
+}
+async function startSessionExpiryWarning(command){
+  const warningUrl=sessionExpiryWarningUrls[command.cue_locale];
+  if(command.session_id!==sessionId||!warningUrl||!inputTrack||!inputTrack.enabled||responseActive||assistantSpeaking||turnResponsePending)throw new Error("Session expiry warning requires an idle active session");
+  const expectedSession=sessionId,token=++sessionExpiryWarningToken,audio=$("remoteAudio");sessionExpiryWarningPending=true;inputTrack.enabled=false;
+  await hostEvent("session_expiry_warning_started");
+  audio.pause();audio.srcObject=null;audio.src=warningUrl;audio.volume=configuredOutputVolume();audio.currentTime=0;setUiState("speaking");
+  const ended=new Promise((resolve,reject)=>{sessionExpiryWarningReject=reject;audio.onended=resolve;audio.onerror=()=>reject(new Error("Session expiry warning playback failed"));});
+  await audio.play();await ended;
+  if(token!==sessionExpiryWarningToken||sessionId!==expectedSession)return;
+  sessionExpiryWarningPending=false;sessionExpiryWarningReject=null;audio.onended=null;audio.onerror=null;
+  await attachRemoteAudio();
+  await hostEvent("session_expiry_warning_stopped");
+  if(token!==sessionExpiryWarningToken||sessionId!==expectedSession||!inputTrack)return;
+  inputTrack.enabled=Boolean(1);setUiState("listening");log("session_expiry_warning_completed");
 }
 
 function showEndControl(show){
@@ -270,6 +303,7 @@ async function arm(){
     sessionConfig=safeSettings;
     await prepareCachedAcknowledgement(safeSettings);
     await prepareCachedFarewell(safeSettings);
+    await prepareSessionExpiryWarnings(safeSettings);
     renderSettings(warm.getAudioTracks()[0]?.getSettings()||{});
     if(KEEP_WARM_MICROPHONE){warm.getAudioTracks().forEach(track=>{track.enabled=false;});warmStream=warm;}
     else warm.getTracks().forEach(track=>track.stop());
@@ -516,6 +550,7 @@ async function stop(reason="command",finalState="wake-ready"){
   if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
   resetCachedAcknowledgementPlayback();
   resetCachedFarewellPlayback();
+  resetSessionExpiryWarningPlayback();
   setUiState("stopping");showEndControl(false);
   const channel=dc;dc=null;if(channel){channel.onclose=null;try{channel.close()}catch{}}
   const peer=pc;pc=null;if(peer){peer.onconnectionstatechange=null;try{peer.close()}catch{}}
@@ -571,7 +606,7 @@ async function sendFixtureAudio(command){
   log("fixture_audio_sent",{name:String(command.fixture_name||"unknown")});
 }
 
-async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error","error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
+async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="session_expiry_warning"&&command.session_id===sessionId)startSessionExpiryWarning(command).catch(async()=>{if(sessionId===command.session_id){await hostEvent("error",{reason:"session_expiry_warning_failed"}).catch(()=>{});await stop("session_expiry_warning_failed","error");}});if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error","error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
 function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:"Count slowly from one to one hundred, saying every number clearly. Do not abbreviate or skip any number."}]}}));dc.send(JSON.stringify({type:"response.create"}));}
 
 $("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop").addEventListener("click",()=>{setUiState("stopping");$("stop").disabled=true;post("/api/stop").catch(error=>setUiState("error",appLanguage==="zh-CN"?`无法结束对话：${error.message}`:`Could not end the conversation: ${error.message}`));});$("app-settings").addEventListener("click",openAppSettings);
@@ -579,10 +614,12 @@ function releasePageMedia(){
   if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
   resetCachedAcknowledgementPlayback();
   resetCachedFarewellPlayback();
+  resetSessionExpiryWarningPlayback();
   if(cachedAcknowledgementUrl){URL.revokeObjectURL(cachedAcknowledgementUrl);cachedAcknowledgementUrl=null;}
   if(cachedFarewellUrl){URL.revokeObjectURL(cachedFarewellUrl);cachedFarewellUrl=null;}
   for(const url of Object.values(cachedAcknowledgementUrls))URL.revokeObjectURL(url);cachedAcknowledgementUrls={};
   for(const url of Object.values(cachedFarewellUrls))URL.revokeObjectURL(url);cachedFarewellUrls={};activeCueLocale=null;
+  for(const url of Object.values(sessionExpiryWarningUrls))URL.revokeObjectURL(url);sessionExpiryWarningUrls={};
   acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;
   const activeStream=stream;stream=null;
   if(activeStream)activeStream.getTracks().forEach(track=>track.stop());

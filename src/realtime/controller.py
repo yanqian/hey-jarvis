@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import time
+import math
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
 from src.realtime_host.coordinator import HandoffCoordinator, HandoffState
+from src.wake_word import pcm_rms_and_peak
 
 
 class WakeDetector(Protocol):
@@ -29,6 +31,7 @@ class RealtimeSessionController:
         coordinator: HandoffCoordinator,
         wake_detector: WakeDetector,
         play_acknowledgement: Callable[[], None],
+        play_ready_tone: Callable[[], None] | None = None,
         acknowledgement_duration_ms: int | None = None,
         idle_timeout_seconds: float,
         max_duration_seconds: float,
@@ -42,10 +45,18 @@ class RealtimeSessionController:
         wake_threshold: float | None = None,
         wake_diagnostics: object | None = None,
         shutdown_requested: Callable[[], bool] = lambda: False,
+        session_expiry_warning_enabled: bool = False,
+        session_expiry_warning_lead_seconds: float = 30.0,
+        wake_recovery_sample_rate: int = 16_000,
+        wake_recovery_cooldown_seconds: float = 1.0,
+        wake_recovery_quiet_seconds: float = 0.5,
+        wake_recovery_quiet_rms: float = 500.0,
+        wake_recovery_max_seconds: float = 6.0,
     ) -> None:
         self.coordinator = coordinator
         self.wake_detector = wake_detector
         self.play_acknowledgement = play_acknowledgement
+        self.play_ready_tone = play_ready_tone
         if acknowledgement_duration_ms is not None and not 1 <= acknowledgement_duration_ms <= 60_000:
             raise ValueError("acknowledgement_duration_ms must be between 1 and 60000")
         self.acknowledgement_duration_ms = acknowledgement_duration_ms
@@ -65,9 +76,29 @@ class RealtimeSessionController:
         self.wake_threshold = wake_threshold
         self.wake_diagnostics = wake_diagnostics
         self.shutdown_requested = shutdown_requested
+        self.session_expiry_warning_enabled = session_expiry_warning_enabled
+        if session_expiry_warning_enabled and not 0 < session_expiry_warning_lead_seconds < max_duration_seconds:
+            raise ValueError("session_expiry_warning_lead_seconds must be below max duration")
+        if (
+            isinstance(wake_recovery_sample_rate, bool)
+            or not isinstance(wake_recovery_sample_rate, int)
+            or wake_recovery_sample_rate <= 0
+            or not 0 <= wake_recovery_cooldown_seconds < wake_recovery_max_seconds
+            or not 0 < wake_recovery_quiet_seconds < wake_recovery_max_seconds
+            or wake_recovery_quiet_rms < 0
+        ):
+            raise ValueError("Wake recovery gate configuration was invalid")
+        self.session_expiry_warning_lead_seconds = session_expiry_warning_lead_seconds
+        self.wake_recovery_sample_rate = wake_recovery_sample_rate
+        self.wake_recovery_cooldown_seconds = wake_recovery_cooldown_seconds
+        self.wake_recovery_quiet_seconds = wake_recovery_quiet_seconds
+        self.wake_recovery_quiet_rms = wake_recovery_quiet_rms
+        self.wake_recovery_max_seconds = wake_recovery_max_seconds
+        self._recovery_reset_performed = False
 
     def run_once(self) -> RealtimeSessionResult:
         session_id: str | None = None
+        self._recovery_reset_performed = False
         try:
             self._raise_if_shutting_down()
             self._wait_for_armed_host()
@@ -103,17 +134,25 @@ class RealtimeSessionController:
                 HandoffState.HOST_ACTIVE,
                 HandoffState.HOST_FAREWELL,
             }:
+                if self.session_expiry_warning_enabled:
+                    self.coordinator.maybe_request_session_expiry_warning(
+                        max_duration_seconds=self.max_duration_seconds,
+                        lead_seconds=self.session_expiry_warning_lead_seconds,
+                    )
                 reason = self.coordinator.timeout_reason(
                     idle_seconds=self.idle_timeout_seconds,
                     max_duration_seconds=self.max_duration_seconds,
                     farewell_seconds=self.farewell_timeout_seconds,
                 )
                 if reason is not None:
-                    self.coordinator.request_stop(reason)
+                    self.coordinator.request_stop(
+                        reason,
+                        recovery_gate=(reason == "max_duration" and self.play_ready_tone is not None),
+                    )
                     break
                 self.sleep(self.poll_seconds)
             recovered = self._wait_for_wake_ownership()
-            if recovered:
+            if recovered and not self._recovery_reset_performed:
                 reset = getattr(self.wake_detector, "reset", None)
                 if reset is not None:
                     reset()
@@ -133,7 +172,7 @@ class RealtimeSessionController:
             if session_id is None:
                 self.coordinator.restore_wake_microphone("pre_session_error")
             recovered = self._wait_for_wake_ownership()
-            if recovered:
+            if recovered and not self._recovery_reset_performed:
                 reset = getattr(self.wake_detector, "reset", None)
                 if reset is not None:
                     reset()
@@ -239,14 +278,100 @@ class RealtimeSessionController:
     def _wait_for_wake_ownership(self) -> bool:
         if self.shutdown_requested():
             return False
+        if self.coordinator.state == HandoffState.WAKE_RECOVERING:
+            return self._complete_wake_recovery()
         if self.coordinator.state == HandoffState.WAKE_OWNED:
             return self.coordinator.wake_microphone_open
         deadline = self.clock() + self.close_timeout_seconds
-        while self.coordinator.state != HandoffState.WAKE_OWNED and self.clock() < deadline:
+        while self.coordinator.state not in {
+            HandoffState.WAKE_OWNED,
+            HandoffState.WAKE_RECOVERING,
+        } and self.clock() < deadline:
             if self.shutdown_requested():
                 return False
             self.sleep(self.poll_seconds)
+        if self.coordinator.state == HandoffState.WAKE_RECOVERING:
+            return self._complete_wake_recovery()
         return self.coordinator.state == HandoffState.WAKE_OWNED and self.coordinator.wake_microphone_open
+
+    def _complete_wake_recovery(self) -> bool:
+        if self.play_ready_tone is None or not self.coordinator.wake_microphone_open:
+            return self.coordinator.complete_wake_recovery(
+                quiet_observed=False,
+                reason="ready_cue_unavailable",
+            )
+        started = self.clock()
+        try:
+            self.coordinator.record_wake_recovery_event("wake_ready_cue_started")
+            self.play_ready_tone()
+            self.coordinator.record_wake_recovery_event(
+                "wake_ready_cue_completed",
+                elapsed_ms=self._bounded_elapsed_ms(started),
+            )
+            drained_seconds = 0.0
+            drained_chunks = 0
+            while drained_seconds < self.wake_recovery_cooldown_seconds:
+                self._raise_if_shutting_down()
+                chunk = self.coordinator.read_wake_chunk()
+                drained_chunks += 1
+                drained_seconds += self._chunk_seconds(chunk)
+                if drained_seconds >= self.wake_recovery_max_seconds:
+                    break
+            self.coordinator.record_wake_recovery_event(
+                "wake_recovery_residue_discarded",
+                chunks=min(drained_chunks, 60_000),
+                elapsed_ms=min(round(drained_seconds * 1000), 60_000),
+            )
+            reset = getattr(self.wake_detector, "reset", None)
+            if reset is not None:
+                reset()
+                self._recovery_reset_performed = True
+            self.coordinator.record_wake_recovery_event("wake_detector_reset")
+
+            quiet_seconds = 0.0
+            while quiet_seconds < self.wake_recovery_quiet_seconds:
+                self._raise_if_shutting_down()
+                if self.clock() - started >= self.wake_recovery_max_seconds:
+                    self.coordinator.record_wake_recovery_event(
+                        "wake_recovery_quiet_timeout",
+                        elapsed_ms=self._bounded_elapsed_ms(started),
+                    )
+                    return self.coordinator.complete_wake_recovery(
+                        quiet_observed=False,
+                        reason="quiet_timeout",
+                    )
+                chunk = self.coordinator.read_wake_chunk()
+                chunk_seconds = self._chunk_seconds(chunk)
+                rms, _ = pcm_rms_and_peak(chunk)
+                if not self.coordinator.wake_microphone_overflowed and rms <= self.wake_recovery_quiet_rms:
+                    quiet_seconds += chunk_seconds
+                else:
+                    quiet_seconds = 0.0
+            self.coordinator.record_wake_recovery_event(
+                "wake_recovery_quiet_succeeded",
+                quiet_ms=min(round(quiet_seconds * 1000), 60_000),
+                elapsed_ms=self._bounded_elapsed_ms(started),
+            )
+            return self.coordinator.complete_wake_recovery(
+                quiet_observed=True,
+                reason="ready_cue_quiet",
+            )
+        except _ControllerShutdown:
+            return self.coordinator.complete_wake_recovery(
+                quiet_observed=False,
+                reason="shutdown",
+            )
+        except Exception:
+            return self.coordinator.complete_wake_recovery(
+                quiet_observed=False,
+                reason="recovery_error",
+            )
+
+    def _chunk_seconds(self, chunk: bytes) -> float:
+        return max(len(chunk) / (2 * self.wake_recovery_sample_rate), 1 / self.wake_recovery_sample_rate)
+
+    def _bounded_elapsed_ms(self, started: float) -> int:
+        return min(60_000, max(0, math.floor((self.clock() - started) * 1000)))
 
     def _final_reason(self, fallback: str) -> str:
         events = self.coordinator.report()["events"]

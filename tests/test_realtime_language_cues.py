@@ -19,6 +19,8 @@ ENGLISH_ACK = PROJECT_ROOT / "assets/realtime_acknowledgement_alloy_en.wav"
 ENGLISH_ACK_MANIFEST = ENGLISH_ACK.with_suffix(".json")
 ENGLISH_FAREWELL = PROJECT_ROOT / "assets/realtime_farewell_alloy_en.wav"
 ENGLISH_FAREWELL_MANIFEST = ENGLISH_FAREWELL.with_suffix(".json")
+SESSION_WARNING_EN = PROJECT_ROOT / "assets/session_expiry_warning_alloy_en.wav"
+SESSION_WARNING_ZH = PROJECT_ROOT / "assets/session_expiry_warning_alloy_zh.wav"
 
 
 class FakeLease:
@@ -110,6 +112,8 @@ class RealtimeLanguageCueTests(unittest.TestCase):
                 english_cached_acknowledgement_manifest_path=ENGLISH_ACK_MANIFEST,
                 english_cached_farewell_audio_path=ENGLISH_FAREWELL,
                 english_cached_farewell_manifest_path=ENGLISH_FAREWELL_MANIFEST,
+                session_expiry_warning_en_path=SESSION_WARNING_EN,
+                session_expiry_warning_zh_path=SESSION_WARNING_ZH,
                 app_language_path=preferences,
             )
 
@@ -127,11 +131,15 @@ class RealtimeLanguageCueTests(unittest.TestCase):
 
             self.assertEqual(responses[0][0], HTTPStatus.OK)
             cues = responses[0][1]["voice_cues"]
+            warnings = responses[0][1]["session_expiry_warnings"]
             self.assertEqual(set(cues), {"en", "zh-CN"})
             self.assertEqual(cues["en"]["acknowledgement"]["url"], "/acknowledgement.wav?locale=en")
             self.assertEqual(cues["en"]["farewell"]["url"], "/farewell.wav?locale=en")
             self.assertEqual(cues["zh-CN"]["acknowledgement"]["url"], "/acknowledgement.wav?locale=zh-CN")
             self.assertEqual(cues["zh-CN"]["farewell"]["url"], "/farewell.wav?locale=zh-CN")
+            self.assertEqual(set(warnings), {"en", "zh-CN"})
+            self.assertEqual(warnings["en"]["url"], "/session-expiry-warning.wav?locale=en")
+            self.assertEqual(warnings["zh-CN"]["url"], "/session-expiry-warning.wav?locale=zh-CN")
 
             served = []
             handler._bytes = lambda status, body, kind: served.append((status, body, kind))
@@ -141,6 +149,10 @@ class RealtimeLanguageCueTests(unittest.TestCase):
                 self.assertEqual(served[-1], (HTTPStatus.OK, expected.read_bytes(), "audio/wav"))
             for locale, expected in (("en", ENGLISH_FAREWELL), ("zh-CN", PROJECT_ROOT / CANONICAL_FAREWELL_ASSET)):
                 handler.path = f"/farewell.wav?locale={locale}"
+                handler.do_GET()
+                self.assertEqual(served[-1], (HTTPStatus.OK, expected.read_bytes(), "audio/wav"))
+            for locale, expected in (("en", SESSION_WARNING_EN), ("zh-CN", SESSION_WARNING_ZH)):
+                handler.path = f"/session-expiry-warning.wav?locale={locale}"
                 handler.do_GET()
                 self.assertEqual(served[-1], (HTTPStatus.OK, expected.read_bytes(), "audio/wav"))
 
@@ -169,6 +181,10 @@ class RealtimeLanguageCueTests(unittest.TestCase):
         ]
         farewell = javascript[
             javascript.index("async function prepareCachedFarewell"):
+            javascript.index("async function prepareSessionExpiryWarnings")
+        ]
+        warning = javascript[
+            javascript.index("async function prepareSessionExpiryWarnings"):
             javascript.index("function resetCachedAcknowledgementPlayback")
         ]
         playback = javascript[
@@ -177,8 +193,11 @@ class RealtimeLanguageCueTests(unittest.TestCase):
         ]
         self.assertIn('locales.join(",")!=="en,zh-CN"', acknowledgement)
         self.assertIn('locales.join(",")!=="en,zh-CN"', farewell)
+        self.assertIn('locales.join(",")!=="en,zh-CN"', warning)
         self.assertIn("cachedAcknowledgementUrls[command.cue_locale]", playback)
         self.assertIn("cachedFarewellUrls[activeCueLocale]", playback)
+        self.assertIn("sessionExpiryWarningUrls[command.cue_locale]", playback)
+        self.assertIn("inputTrack.enabled=false", playback)
         self.assertNotIn("appLanguage", playback)
         self.assertIn("activeCueLocale=command.cue_locale", javascript)
         self.assertIn('if(!["en","zh-CN"].includes(command.cue_locale))', javascript)

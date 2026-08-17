@@ -256,6 +256,56 @@ preparation verifies the digest and installs `var/realtime-ack.wav` without a
 network request. The candidate directory may contain deliberately retained
 audio and must not be attached to support bundles or committed.
 
+### Configurable-session notification candidates
+
+The session-expiry candidate workflow is separate from live conversations and
+does not change the configured hard limit. Its English and Simplified Chinese
+warnings deliberately avoid saying a number of minutes, so the same selected
+cue works with a 10- or 20-minute configuration. Paid speech generation is one
+explicit batch of three candidates per locale (six calls maximum, no automatic
+retries):
+
+```bash
+python -m src.evals.session_expiry_cues generate-warnings --owner-authorized
+```
+
+The ready-to-wake tones are deterministic local synthesis and make no API call:
+
+```bash
+python -m src.evals.session_expiry_cues synthesize-tones
+```
+
+Audition the nine WAV files under
+`artifacts/audio/candidates/session-expiry/`. Nothing is selected or installed
+automatically. After the owner chooses one English warning, one Chinese warning,
+and one ready tone, promote all three in one explicit operation:
+
+```bash
+python -m src.evals.session_expiry_cues promote \
+  --english artifacts/audio/candidates/session-expiry/warning-en/candidate-01.wav \
+  --chinese artifacts/audio/candidates/session-expiry/warning-zh-CN/candidate-01.wav \
+  --ready artifacts/audio/candidates/session-expiry/ready-tone/candidate-01.wav \
+  --owner-confirmed
+```
+
+Promotion validates PCM format, duration, silence, clipping, identity, manifest,
+and digest before writing canonical assets. The owner-selected candidate-03
+assets are now used by the runtime session-expiry flow.
+
+For every configured maximum, including 10 and 20 minutes, the controller queues
+the localized warning once at approximately 30 seconds remaining. It waits for
+no user speech, pending response, or assistant playback, disables browser input
+while the cached warning plays, and never moves the hard stop. If no safe
+boundary occurs, the hard limit wins and the warning is recorded as skipped.
+
+At the hard stop, local wake capture enters `wake_recovering`, not public
+`wake_listening`. The local ready chime plays while wake confirmation is gated;
+the controller then discards buffered playback residue, resets the wake model,
+and requires the existing quiet boundary. Only success publishes
+`wake_listening`. Playback, microphone, or quiet-boundary failure closes capture
+and reports `resume_required`, so neither the spoken “Hey Jarvis” nor the ready
+chime can wake the assistant itself.
+
 RT001 verifies saved-wake handoff, exclusive microphone ordering, connection,
 configured-session readiness, acknowledgement-gated input, cleanup, timing
 attribution, and wake recovery. It needs no fresh human speech:

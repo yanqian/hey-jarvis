@@ -20,6 +20,9 @@ from product_sidecar import (  # noqa: E402
     ENGLISH_CACHED_ACKNOWLEDGEMENT_RESOURCE,
     ENGLISH_CACHED_FAREWELL_MANIFEST_RESOURCE,
     ENGLISH_CACHED_FAREWELL_RESOURCE,
+    READY_CHIME_RESOURCE,
+    SESSION_EXPIRY_WARNING_EN_RESOURCE,
+    SESSION_EXPIRY_WARNING_ZH_RESOURCE,
     LifecycleDiagnostics,
     ProductRuntime,
     ProductRuntimeError,
@@ -412,6 +415,9 @@ class ProductSidecarTests(unittest.TestCase):
             ENGLISH_CACHED_FAREWELL_MANIFEST_RESOURCE.as_posix(),
             "assets/realtime_farewell_alloy_en.json",
         )
+        self.assertEqual(SESSION_EXPIRY_WARNING_EN_RESOURCE.as_posix(), "assets/session_expiry_warning_alloy_en.wav")
+        self.assertEqual(SESSION_EXPIRY_WARNING_ZH_RESOURCE.as_posix(), "assets/session_expiry_warning_alloy_zh.wav")
+        self.assertEqual(READY_CHIME_RESOURCE.as_posix(), "assets/realtime_ready_chime.wav")
 
     def test_product_runtime_passes_both_languages_to_the_loopback_host(self):
         source = (SIDECAR_DIR / "product_sidecar.py").read_text(encoding="utf-8")
@@ -423,6 +429,8 @@ class ProductSidecarTests(unittest.TestCase):
             start,
         )
         self.assertIn("english_cached_farewell_audio_path=english_cached_farewell", start)
+        self.assertIn("session_expiry_warning_en_path=session_expiry_warning_en", start)
+        self.assertIn("session_expiry_warning_zh_path=session_expiry_warning_zh", start)
         self.assertIn('app_language_path=app_support_dir / "preferences-v1.json"', start)
 
     def test_product_runtime_enables_only_persisted_wake_diagnostics(self):

@@ -42,6 +42,12 @@
       "../../assets/realtime_acknowledgement_alloy_en.json": "assets/realtime_acknowledgement_alloy_en.json",
       "../../assets/realtime_farewell_alloy_en.wav": "assets/realtime_farewell_alloy_en.wav",
       "../../assets/realtime_farewell_alloy_en.json": "assets/realtime_farewell_alloy_en.json",
+      "../../assets/session_expiry_warning_alloy_en.wav": "assets/session_expiry_warning_alloy_en.wav",
+      "../../assets/session_expiry_warning_alloy_en.json": "assets/session_expiry_warning_alloy_en.json",
+      "../../assets/session_expiry_warning_alloy_zh.wav": "assets/session_expiry_warning_alloy_zh.wav",
+      "../../assets/session_expiry_warning_alloy_zh.json": "assets/session_expiry_warning_alloy_zh.json",
+      "../../assets/realtime_ready_chime.wav": "assets/realtime_ready_chime.wav",
+      "../../assets/realtime_ready_chime.json": "assets/realtime_ready_chime.json",
       "../../build/macos-sidecar/hey-jarvis-sidecar": "sidecar",
       "../../build/macos-sidecar/manifests": "packaging-manifests"
     },

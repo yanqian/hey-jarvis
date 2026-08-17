@@ -26,6 +26,7 @@ from .recorder import RecordingResult
 from .realtime.controller import RealtimeSessionController
 from .realtime_ack_asset import CANONICAL_ACK_ASSET, CANONICAL_ACK_MANIFEST
 from .realtime_farewell_asset import CANONICAL_FAREWELL_ASSET, CANONICAL_FAREWELL_MANIFEST
+from .session_expiry_cues import CANONICAL_ASSETS
 from .state_machine import AssistantState, VoiceAssistantStateMachine
 from .tools.providers import provider_config_from_settings
 from .tools.router import format_text_debug
@@ -466,6 +467,8 @@ def run_realtime_forever(settings: Settings) -> int:
             cached_acknowledgement_manifest_path=project_root / CANONICAL_ACK_MANIFEST,
             cached_farewell_audio_path=project_root / CANONICAL_FAREWELL_ASSET,
             cached_farewell_manifest_path=project_root / CANONICAL_FAREWELL_MANIFEST,
+            session_expiry_warning_en_path=project_root / CANONICAL_ASSETS["en"],
+            session_expiry_warning_zh_path=project_root / CANONICAL_ASSETS["zh-CN"],
         )
     except HostServerError as exc:
         logger.error("Realtime host startup failed: %s", exc)
@@ -485,6 +488,9 @@ def run_realtime_forever(settings: Settings) -> int:
         if settings.realtime_acknowledgement_mode == "local":
             player.play_acknowledgement(settings.wake_acknowledgement_audio_path)
 
+    def play_ready_tone() -> None:
+        player.play(project_root / CANONICAL_ASSETS["ready"])
+
     wake_options = build_realtime_wake_options(settings)
     wake_diagnostics = wake_options["wake_diagnostics"]
     diagnostic_state = (
@@ -502,9 +508,16 @@ def run_realtime_forever(settings: Settings) -> int:
         coordinator=server.coordinator,
         wake_detector=detector,
         play_acknowledgement=play_acknowledgement,
+        play_ready_tone=play_ready_tone,
         acknowledgement_duration_ms=acknowledgement_duration_ms,
         idle_timeout_seconds=settings.realtime_idle_timeout_seconds,
         max_duration_seconds=settings.realtime_max_duration_seconds,
+        session_expiry_warning_enabled=True,
+        wake_recovery_sample_rate=settings.sample_rate,
+        wake_recovery_cooldown_seconds=settings.post_playback_wake_cooldown_seconds,
+        wake_recovery_quiet_seconds=settings.post_playback_quiet_seconds,
+        wake_recovery_quiet_rms=settings.post_playback_quiet_rms,
+        wake_recovery_max_seconds=settings.post_playback_max_suppression_seconds,
         **wake_options,
     )
     logger.info("Realtime host launched at %s; arm it once, then say %s", url, settings.wake_phrase)

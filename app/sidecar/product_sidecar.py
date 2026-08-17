@@ -54,6 +54,9 @@ ENGLISH_CACHED_ACKNOWLEDGEMENT_RESOURCE = Path("assets/realtime_acknowledgement_
 ENGLISH_CACHED_ACKNOWLEDGEMENT_MANIFEST_RESOURCE = Path("assets/realtime_acknowledgement_alloy_en.json")
 ENGLISH_CACHED_FAREWELL_RESOURCE = Path("assets/realtime_farewell_alloy_en.wav")
 ENGLISH_CACHED_FAREWELL_MANIFEST_RESOURCE = Path("assets/realtime_farewell_alloy_en.json")
+SESSION_EXPIRY_WARNING_EN_RESOURCE = Path("assets/session_expiry_warning_alloy_en.wav")
+SESSION_EXPIRY_WARNING_ZH_RESOURCE = Path("assets/session_expiry_warning_alloy_zh.wav")
+READY_CHIME_RESOURCE = Path("assets/realtime_ready_chime.wav")
 PRIVATE_BOOTSTRAP_MAX_BYTES = 4096
 OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 DIAGNOSTIC_LIMIT_BYTES = 512 * 1024
@@ -368,6 +371,9 @@ class ProductRuntime:
         english_cached_farewell_manifest = (
             resource_dir / ENGLISH_CACHED_FAREWELL_MANIFEST_RESOURCE
         ).resolve()
+        session_expiry_warning_en = (resource_dir / SESSION_EXPIRY_WARNING_EN_RESOURCE).resolve()
+        session_expiry_warning_zh = (resource_dir / SESSION_EXPIRY_WARNING_ZH_RESOURCE).resolve()
+        ready_chime = (resource_dir / READY_CHIME_RESOURCE).resolve()
         settings = replace(
             settings,
             wake_acknowledgement_audio_path=acknowledgement,
@@ -406,6 +412,8 @@ class ProductRuntime:
             english_cached_acknowledgement_manifest_path=english_cached_acknowledgement_manifest,
             english_cached_farewell_audio_path=english_cached_farewell,
             english_cached_farewell_manifest_path=english_cached_farewell_manifest,
+            session_expiry_warning_en_path=session_expiry_warning_en,
+            session_expiry_warning_zh_path=session_expiry_warning_zh,
             app_language_path=app_support_dir / "preferences-v1.json",
             startup_event=startup_diagnostics.record_webview,
         )
@@ -428,14 +436,24 @@ class ProductRuntime:
             if settings.realtime_acknowledgement_mode == "local":
                 player.play_acknowledgement(settings.wake_acknowledgement_audio_path)
 
+        def play_ready_tone() -> None:
+            player.play(ready_chime)
+
         stop_event = threading.Event()
         controller = RealtimeSessionController(
             coordinator=server.coordinator,
             wake_detector=detector,
             play_acknowledgement=play_acknowledgement,
+            play_ready_tone=play_ready_tone,
             acknowledgement_duration_ms=acknowledgement_duration_ms,
             idle_timeout_seconds=settings.realtime_idle_timeout_seconds,
             max_duration_seconds=settings.realtime_max_duration_seconds,
+            session_expiry_warning_enabled=True,
+            wake_recovery_sample_rate=settings.sample_rate,
+            wake_recovery_cooldown_seconds=settings.post_playback_wake_cooldown_seconds,
+            wake_recovery_quiet_seconds=settings.post_playback_quiet_seconds,
+            wake_recovery_quiet_rms=settings.post_playback_quiet_rms,
+            wake_recovery_max_seconds=settings.post_playback_max_suppression_seconds,
             **wake_options,
             shutdown_requested=stop_event.is_set,
         )

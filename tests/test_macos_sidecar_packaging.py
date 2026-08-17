@@ -91,6 +91,25 @@ class MacOSSidecarPackagingTests(unittest.TestCase):
             self.assertEqual(manifest["locale"], "en")
             self.assertEqual(hashlib.sha256(audio_source.read_bytes()).hexdigest(), manifest["sha256"])
 
+    def test_tauri_bundles_owner_selected_session_expiry_cues(self) -> None:
+        config = json.loads((ROOT / "app" / "src-tauri" / "tauri.conf.json").read_text())
+        resources = config["bundle"]["resources"]
+        expected = {
+            "session_expiry_warning_alloy_en": "en",
+            "session_expiry_warning_alloy_zh": "zh-CN",
+            "realtime_ready_chime": "und",
+        }
+        for stem, locale in expected.items():
+            audio = ROOT / "assets" / f"{stem}.wav"
+            manifest_path = ROOT / "assets" / f"{stem}.json"
+            self.assertEqual(resources[f"../../assets/{stem}.wav"], f"assets/{stem}.wav")
+            self.assertEqual(resources[f"../../assets/{stem}.json"], f"assets/{stem}.json")
+            manifest = json.loads(manifest_path.read_text())
+            self.assertTrue(manifest["selected_by_owner"])
+            self.assertEqual(manifest["candidate"], "candidate-03")
+            self.assertEqual(manifest["locale"], locale)
+            self.assertEqual(hashlib.sha256(audio.read_bytes()).hexdigest(), manifest["sha256"])
+
     def test_zip_normalization_is_byte_reproducible(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.zip"

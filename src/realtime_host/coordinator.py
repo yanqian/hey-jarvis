@@ -38,6 +38,16 @@ INPUT_LEVEL_PHASES = frozenset({"no_remote_playback", "remote_playback"})
 LOCAL_TIMING_MARKERS = frozenset({"wake_confirmed", "ack_started", "ack_completed"})
 ACKNOWLEDGEMENT_MODES = frozenset({"cached", "local", "realtime"})
 FAREWELL_MODES = frozenset({"cached", "realtime"})
+WAKE_RECOVERY_EVENTS = frozenset(
+    {
+        "wake_ready_cue_started",
+        "wake_ready_cue_completed",
+        "wake_recovery_residue_discarded",
+        "wake_detector_reset",
+        "wake_recovery_quiet_succeeded",
+        "wake_recovery_quiet_timeout",
+    }
+)
 ACKNOWLEDGEMENT_CAPTURE_LABEL = re.compile(r"^candidate-[0-9]{2}$")
 HANDOFF_PHASE_TIMING_FIELDS = frozenset(
     {
@@ -110,6 +120,7 @@ class MicrophoneLease(Protocol):
 
 class HandoffState(str, Enum):
     WAKE_OWNED = "wake_owned"
+    WAKE_RECOVERING = "wake_recovering"
     HOST_STARTING = "host_starting"
     HOST_READY = "host_ready"
     HOST_ACTIVE = "host_active"
@@ -216,6 +227,13 @@ class HandoffCoordinator:
         self._connected_at: float | None = None
         self._last_activity_at: float | None = None
         self._assistant_playback_active = False
+        self._assistant_response_active = False
+        self._user_speech_active = False
+        self._turn_response_pending = False
+        self._expiry_warning_requested = False
+        self._expiry_warning_started = False
+        self._expiry_warning_stopped = False
+        self._wake_recovery_gate_required = False
         self._farewell_started_at: float | None = None
         self._farewell_response_created = False
         self._farewell_response_done = False
@@ -272,7 +290,7 @@ class HandoffCoordinator:
         with self._lock:
             if self._closing:
                 raise HandoffError("Coordinator is shutting down")
-            if self._state != HandoffState.WAKE_OWNED:
+            if self._state not in {HandoffState.WAKE_OWNED, HandoffState.WAKE_RECOVERING}:
                 raise HandoffError("Wake microphone cannot be read during a host session")
             read_chunk = getattr(self._wake_lease, "read_chunk", None)
             if read_chunk is None:
@@ -468,6 +486,13 @@ class HandoffCoordinator:
             self._connected_at = None
             self._last_activity_at = self._clock()
             self._assistant_playback_active = False
+            self._assistant_response_active = False
+            self._user_speech_active = False
+            self._turn_response_pending = False
+            self._expiry_warning_requested = False
+            self._expiry_warning_started = False
+            self._expiry_warning_stopped = False
+            self._wake_recovery_gate_required = False
             self._reset_farewell()
             self._handoff_timing_received = False
             self._seen_transcription_items.clear()
@@ -499,13 +524,102 @@ class HandoffCoordinator:
             self._input_enable_requested = True
             self._enqueue("enable_input", self._session_id)
 
-    def request_stop(self, reason: str = "requested") -> None:
+    def request_stop(self, reason: str = "requested", *, recovery_gate: bool = False) -> None:
         with self._lock:
-            if self._session_id is None or self._state == HandoffState.WAKE_OWNED:
+            if self._session_id is None or self._state in {
+                HandoffState.WAKE_OWNED,
+                HandoffState.WAKE_RECOVERING,
+            }:
                 return
             if self._state != HandoffState.HOST_STOPPING:
+                self._wake_recovery_gate_required = recovery_gate
+                if reason == "max_duration" and not self._expiry_warning_requested:
+                    self._record(
+                        "session_expiry_warning_skipped",
+                        session_id=self._session_id,
+                        reason="no_safe_boundary",
+                    )
                 self._state = HandoffState.HOST_STOPPING
                 self._enqueue("stop", self._session_id, reason=reason)
+
+    def maybe_request_session_expiry_warning(
+        self,
+        *,
+        max_duration_seconds: float,
+        lead_seconds: float = 30.0,
+    ) -> bool:
+        """Queue one warning only at a content-free, input-safe session boundary."""
+
+        if (
+            isinstance(max_duration_seconds, bool)
+            or not isinstance(max_duration_seconds, (int, float))
+            or isinstance(lead_seconds, bool)
+            or not isinstance(lead_seconds, (int, float))
+            or not 0 < lead_seconds < max_duration_seconds <= 86_400
+        ):
+            raise HandoffError("Session expiry warning timing was invalid")
+        with self._lock:
+            if (
+                self._state != HandoffState.HOST_ACTIVE
+                or self._connected_at is None
+                or self._expiry_warning_requested
+                or self._assistant_playback_active
+                or self._assistant_response_active
+                or self._user_speech_active
+                or self._turn_response_pending
+                or self._clock() - self._connected_at < max_duration_seconds - lead_seconds
+            ):
+                return False
+            self._expiry_warning_requested = True
+            elapsed_ms = min(
+                MAX_HANDOFF_TIMING_MS,
+                max(0, round((self._clock() - self._connected_at) * 1000)),
+            )
+            self._record(
+                "session_expiry_warning_armed",
+                session_id=self._session_id,
+                elapsed_ms=elapsed_ms,
+            )
+            self._enqueue(
+                "session_expiry_warning",
+                self._session_id,
+                cue_locale=self._active_cue_locale or "en",
+            )
+            return True
+
+    def complete_wake_recovery(self, *, quiet_observed: bool, reason: str) -> bool:
+        """Publish wake listening only after cue residue and quiet gating complete."""
+
+        with self._lock:
+            if self._state != HandoffState.WAKE_RECOVERING:
+                raise HandoffError("Wake recovery completion was out of order")
+            if quiet_observed and self._wake_lease.is_open and not self._closing:
+                self._state = HandoffState.WAKE_OWNED
+                self._record("wake_microphone_reopened", result=reason)
+                return True
+            if self._wake_lease.is_open:
+                self._wake_lease.close()
+            self._state = HandoffState.WAKE_OWNED
+            self._record("wake_recovery_failed", result=reason)
+            return False
+
+    def record_wake_recovery_event(self, event: str, **detail: int) -> None:
+        """Record only allowlisted content-free recovery lifecycle evidence."""
+
+        with self._lock:
+            if self._state != HandoffState.WAKE_RECOVERING or event not in WAKE_RECOVERY_EVENTS:
+                raise HandoffError("Wake recovery evidence was invalid or out of order")
+            safe: dict[str, int] = {}
+            for key, value in detail.items():
+                if (
+                    key not in {"elapsed_ms", "chunks", "quiet_ms"}
+                    or isinstance(value, bool)
+                    or not isinstance(value, int)
+                    or not 0 <= value <= MAX_HANDOFF_TIMING_MS
+                ):
+                    raise HandoffError("Wake recovery evidence detail was invalid")
+                safe[key] = value
+            self._record(event, **safe)
 
     def timeout_reason(
         self,
@@ -606,7 +720,26 @@ class HandoffCoordinator:
             } and self._state in {HandoffState.HOST_STARTING, HandoffState.HOST_READY}:
                 raise HandoffError("Host user-turn activity arrived before input readiness")
             if event_type == "transcription":
+                if self._expiry_warning_started and not self._expiry_warning_stopped:
+                    self._record(
+                        "session_expiry_warning_input_ignored",
+                        session_id=session_id,
+                        reason="transcription",
+                    )
+                    return "accepted"
                 return self._handle_completed_transcription(session_id, detail)
+            if self._expiry_warning_started and not self._expiry_warning_stopped and event_type in {
+                "speech_started",
+                "speech_stopped",
+                "fixture_submitted",
+                "transcription_failed",
+            }:
+                self._record(
+                    "session_expiry_warning_input_ignored",
+                    session_id=session_id,
+                    reason=event_type,
+                )
+                return "accepted"
             if self._state == HandoffState.HOST_FAREWELL and event_type in {
                 "speech_started",
                 "speech_stopped",
@@ -666,6 +799,16 @@ class HandoffCoordinator:
                 self._assistant_playback_active = True
             elif event_type == "playback_stopped":
                 self._assistant_playback_active = False
+            if event_type == "response_created":
+                self._assistant_response_active = True
+                self._turn_response_pending = False
+            elif event_type == "response_done":
+                self._assistant_response_active = False
+            if event_type == "speech_started":
+                self._user_speech_active = True
+            elif event_type == "speech_stopped":
+                self._user_speech_active = False
+                self._turn_response_pending = True
             if event_type in {
                 "fixture_submitted",
                 "speech_started",
@@ -714,6 +857,18 @@ class HandoffCoordinator:
                     raise HandoffError("Farewell playback completion was out of order")
                 self._farewell_playback_stopped = True
                 self._finish_farewell_if_ready()
+            elif event_type == "session_expiry_warning_started":
+                if (
+                    self._state != HandoffState.HOST_ACTIVE
+                    or not self._expiry_warning_requested
+                    or self._expiry_warning_started
+                ):
+                    raise HandoffError("Session expiry warning start was out of order")
+                self._expiry_warning_started = True
+            elif event_type == "session_expiry_warning_stopped":
+                if not self._expiry_warning_started or self._expiry_warning_stopped:
+                    raise HandoffError("Session expiry warning completion was out of order")
+                self._expiry_warning_stopped = True
             elif event_type == "cached_ack_playback_started":
                 if (
                     self._state not in {HandoffState.HOST_STARTING, HandoffState.HOST_READY}
@@ -899,6 +1054,7 @@ class HandoffCoordinator:
             if self._state == HandoffState.WAKE_OWNED:
                 return "wake_listening" if self._wake_lease.is_open else "resume_required"
             if self._state in {
+                HandoffState.WAKE_RECOVERING,
                 HandoffState.HOST_STARTING,
                 HandoffState.HOST_READY,
                 HandoffState.HOST_ACTIVE,
@@ -943,18 +1099,34 @@ class HandoffCoordinator:
         self._connected_at = None
         self._last_activity_at = None
         self._assistant_playback_active = False
+        self._assistant_response_active = False
+        self._user_speech_active = False
+        self._turn_response_pending = False
         self._reset_farewell()
         self._handoff_timing_received = False
         self._seen_transcription_items.clear()
         self._handled_tool_calls.clear()
-        if not self._closing and not self._wake_lease.is_open:
-            self._wake_lease.open()
-        self._state = HandoffState.WAKE_OWNED
-        self._record(
-            "wake_microphone_reopened" if not self._closing else "wake_microphone_not_reopened",
-            session_id=session_id,
-            result=result,
-        )
+        if self._wake_recovery_gate_required and not self._closing:
+            try:
+                if not self._wake_lease.is_open:
+                    self._wake_lease.open()
+            except Exception:
+                self._state = HandoffState.WAKE_OWNED
+                self._record("wake_recovery_failed", session_id=session_id, result="microphone_open_failed")
+            else:
+                self._state = HandoffState.WAKE_RECOVERING
+                self._record("wake_microphone_acquired", session_id=session_id, result=result)
+                self._record("wake_recovery_gate_started", session_id=session_id)
+        else:
+            if not self._closing and not self._wake_lease.is_open:
+                self._wake_lease.open()
+            self._state = HandoffState.WAKE_OWNED
+            self._record(
+                "wake_microphone_reopened" if not self._closing else "wake_microphone_not_reopened",
+                session_id=session_id,
+                result=result,
+            )
+        self._wake_recovery_gate_required = False
 
     def _begin_farewell(self, session_id: str, *, reason: str) -> None:
         if self._state == HandoffState.HOST_FAREWELL:

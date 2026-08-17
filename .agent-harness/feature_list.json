@@ -2944,6 +2944,48 @@
         "F105",
         "F111"
       ]
+    },
+    {
+      "id": "F132",
+      "title": "Prepare configurable-session voice cue candidates",
+      "description": "Generate and validate bounded bilingual near-expiry speech candidates plus deterministic local ready-to-wake chimes for explicit owner audition and selection.",
+      "acceptance": [
+        "One duration-neutral Simplified Chinese warning and one natural English equivalent explain that the conversation is about to end and that, after the tone, saying Hey Jarvis starts a new conversation; neither script names a fixed 10- or 20-minute duration.",
+        "An explicitly owner-authorized generator creates only candidate-01 through candidate-03 per locale with the existing `gpt-4o-mini-tts` and `alloy` workflow, makes at most six paid API calls total, performs no automatic paid retries, and never prints or persists credentials; tests use fakes and make no paid calls.",
+        "A deterministic offline synthesizer creates exactly three short language-neutral ready-to-wake chime candidates without network or paid APIs, and repeated runs with the same inputs produce identical PCM bytes and digests.",
+        "Project-owned validation enforces bounded mono 24 kHz PCM WAV format, duration, non-silence, clipping, candidate identity, manifest metadata, and SHA-256 integrity for all candidates; malformed assets fail closed and explicit owner confirmation is required before any chosen IDs can be promoted to canonical runtime assets.",
+        "Focused offline tests, audition documentation and clickable local candidate paths, exact generation evidence, final `./init.sh`, fast coding evidence, owner selection, and separate cold-start evaluator approval pass without live microphone, speaker, or test-time network/API use."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F037",
+        "F076"
+      ]
+    },
+    {
+      "id": "F133",
+      "title": "Announce configurable session expiry and wake recovery",
+      "description": "Keep the existing Realtime hard limit while warning once near expiry and playing a ready tone only after wake listening has actually been restored.",
+      "acceptance": [
+        "The effective configured Realtime maximum, including 10- and 20-minute values, schedules one localized warning approximately 30 seconds before expiry; the warning is duration-neutral, plays only at a safe output boundary with local wake detection closed and Realtime input gated, cannot become a user turn, and never extends or changes the existing hard stop.",
+        "At the unchanged maximum the session follows the existing close and cleanup contract; successful wake-microphone acquisition enters a non-detecting recovery state, plays the selected universal ready tone, discards playback residue, resets the detector, and requires a quiet boundary before publishing `wake_listening`, while failure or timeout remains `resume_required` and produces no false-ready state.",
+        "Timers, reconnects, busy assistant output, cancellation, teardown failure, and repeated state changes cannot duplicate the warning, leak a paid session, overlap speech, arm input early, or let either cue self-trigger the wake detector; a scripted wake-positive residue frame is suppressed by deterministic tests.",
+        "Bounded local lifecycle diagnostics report warning armed/played/skipped, maximum reached, teardown, wake acquisition, recovery gate, cue playback, residue discard, detector reset, quiet success/timeout, and final wake restore using allowlisted reason codes and numeric elapsed/configuration fields without audio, transcripts, answers, credentials, SDP/ICE, provider bodies, tool arguments, or remote telemetry.",
+        "Deterministic clock and fake-backend tests for 10/20-minute timing, safe output/input gating, recovery-state availability, quiet boundary, failure, duplicate, and self-wake paths; Realtime fake smoke; JavaScript/Python syntax; Debug and Release builds; final `./init.sh`; fast coding evidence; and separate cold-start evaluator approval pass without live network, credentials, microphone, speaker, or paid API use."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F132",
+        "F104"
+      ]
     }
   ]
 }

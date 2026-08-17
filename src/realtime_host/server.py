@@ -32,6 +32,10 @@ from src.realtime_farewell_asset import (
     RealtimeFarewellAssetError,
     load_selected_asset as load_farewell_asset,
 )
+from src.session_expiry_cues import (
+    SessionExpiryCueError,
+    load_selected_asset as load_session_expiry_cue,
+)
 from src.tools.router import FX_SUPPORTED_CURRENCIES
 
 
@@ -349,6 +353,7 @@ class HostHTTPServer(ThreadingHTTPServer):
     cached_farewell_manifest: dict[str, object] | None
     cached_acknowledgements: dict[str, tuple[bytes, dict[str, object]]]
     cached_farewells: dict[str, tuple[bytes, dict[str, object]]]
+    session_expiry_warnings: dict[str, tuple[bytes, dict[str, object]]]
     app_language_path: Path | None
     startup_event: Callable[[str, int], None] | None
 
@@ -375,6 +380,8 @@ def build_server(
     english_cached_acknowledgement_manifest_path: str | Path | None = None,
     english_cached_farewell_audio_path: str | Path | None = None,
     english_cached_farewell_manifest_path: str | Path | None = None,
+    session_expiry_warning_en_path: str | Path | None = None,
+    session_expiry_warning_zh_path: str | Path | None = None,
     app_language_path: str | Path | None = None,
     startup_event: Callable[[str, int], None] | None = None,
 ) -> HostHTTPServer:
@@ -448,6 +455,21 @@ def build_server(
         ):
             raise HostServerError("English cached voice cue voice or gain does not match settings")
     language_path = Path(app_language_path) if app_language_path is not None else None
+    warning_paths = {
+        "en": session_expiry_warning_en_path,
+        "zh-CN": session_expiry_warning_zh_path,
+    }
+    session_expiry_warnings: dict[str, tuple[bytes, dict[str, object]]] = {}
+    if any(path is not None for path in warning_paths.values()):
+        if not all(path is not None for path in warning_paths.values()):
+            raise HostServerError("Both session expiry warning locales must be configured")
+        try:
+            for locale, path in warning_paths.items():
+                session_expiry_warnings[locale] = load_session_expiry_cue(
+                    Path(path), expected_slot=locale
+                )
+        except SessionExpiryCueError as exc:
+            raise HostServerError(str(exc)) from exc
     lease = SoundDeviceWakeLease(open_microphone_stream) if real_microphone else MemoryWakeLease()
     server = HostHTTPServer((host, port), HostRequestHandler)
     server.coordinator = HandoffCoordinator(
@@ -471,6 +493,7 @@ def build_server(
     server.cached_farewell_manifest = cached_farewell_manifest
     server.cached_acknowledgements = {}
     server.cached_farewells = {}
+    server.session_expiry_warnings = session_expiry_warnings
     if isinstance(cached_audio, bytes) and isinstance(cached_manifest, dict):
         server.cached_acknowledgements["zh-CN"] = (cached_audio, cached_manifest)
     if isinstance(cached_farewell_audio, bytes) and isinstance(cached_farewell_manifest, dict):
@@ -599,6 +622,16 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                     }
                 if voice_cues:
                     payload["voice_cues"] = voice_cues
+            warning_assets = getattr(host_server, "session_expiry_warnings", {})
+            if set(warning_assets) == {"en", "zh-CN"}:
+                payload["session_expiry_warnings"] = {
+                    locale: {
+                        "url": f"/session-expiry-warning.wav?locale={urllib.parse.quote(locale, safe='')}",
+                        "duration_ms": warning_assets[locale][1]["duration_ms"],
+                        "sha256": warning_assets[locale][1]["sha256"],
+                    }
+                    for locale in ("en", "zh-CN")
+                }
             self._json(HTTPStatus.OK, payload)
             return
         if parsed.path == "/acknowledgement.wav":
@@ -632,6 +665,15 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
                 return
             self._bytes(HTTPStatus.OK, body, "audio/wav")
+            return
+        if parsed.path == "/session-expiry-warning.wav":
+            query = urllib.parse.parse_qs(parsed.query)
+            locale = query.get("locale", [""])[0]
+            asset = getattr(self.server, "session_expiry_warnings", {}).get(locale)
+            if locale not in {"en", "zh-CN"} or asset is None:
+                self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                return
+            self._bytes(HTTPStatus.OK, asset[0], "audio/wav")
             return
         asset = resolve_static(parsed.path)
         if asset is None:

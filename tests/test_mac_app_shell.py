@@ -573,7 +573,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('audio.srcObject=warmStream;audio.volume=0;await audio.play()', host)
         self.assertIn('remoteStream=event.streams[0]', host)
         self.assertIn(
-            'if(!remoteStream||cachedAcknowledgementPending||cachedFarewellPending)return',
+            'if(!remoteStream||cachedAcknowledgementPending||cachedFarewellPending||sessionExpiryWarningPending)return',
             host,
         )
         self.assertIn('audio.srcObject=remoteStream', host)

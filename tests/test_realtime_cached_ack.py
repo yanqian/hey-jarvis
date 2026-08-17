@@ -231,7 +231,7 @@ class CachedAcknowledgementTests(unittest.TestCase):
         microphone = javascript.index('await hostEvent("microphone_requested")', start)
         self.assertLess(start, microphone)
         self.assertIn(
-            'cachedAcknowledgementPending||cachedFarewellPending)return',
+            'cachedAcknowledgementPending||cachedFarewellPending||sessionExpiryWarningPending)return',
             javascript,
         )
         self.assertIn('hostEvent("cached_ack_playback_started")', javascript)

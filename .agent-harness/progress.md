@@ -2,6 +2,28 @@
 
 ## Current System Status
 
+F132 is evaluator-approved. The owner selected candidate-03 for the English
+warning, Simplified Chinese warning, and local ready-to-wake chime. All three
+were promoted through the explicit confirmation path with matching SHA-256
+manifests. The paid batch remained bounded to six calls with SDK retries
+disabled. Independent approval is recorded in
+`.agent-harness/runs/20260816T160500Z-F132-evaluation-pass.md`.
+
+F133 is evaluator-approved. The existing
+configured hard limit is unchanged. One duration-neutral localized warning is
+scheduled 30 seconds before expiry and waits for a safe boundary while browser
+input is gated. At maximum duration, the existing close path enters a bounded
+non-detecting recovery gate: the selected ready chime plays locally, microphone
+residue is discarded, the detector is reset, and `wake_listening` is published
+only after quiet succeeds. Failure remains `resume_required`. Deterministic
+tests include 10/20-minute scheduling and a wake-positive residue frame that is
+never submitted to the detector. Debug and Release app builds pass; final
+recovery passes 499 project tests, 16 Mac frontend/sidecar tests, 35 Rust tests,
+and all smoke paths. Coding evidence is in
+`.agent-harness/runs/20260816T151922Z-F133-fast-coding.md`; independent approval
+is recorded in
+`.agent-harness/runs/20260816T152235Z-F133-evaluation-pass.md`.
+
 F131 is evaluator-approved. The F129 lightweight startup route now carries the persisted
 Smart Speaker Mode boolean into returning navigation, so enabled fast launches
 restore `#smart-speaker-mode` and the accepted F105 warm disabled microphone
