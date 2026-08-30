@@ -2,6 +2,37 @@
 
 ## Current System Status
 
+F122 was explicitly selected by the owner for interactive continuation on
+2026-08-30. The installed orchestrator has no feature-selection flag, so F122
+was restored to `in_progress` as an explicit selection fallback before the
+required `make -C .agent-harness work-fast` handoff. Current-baseline coding is
+complete: the missing normalized SPEC entry is now durable, v1/v2 Night-default
+and runtime-neutral route coverage is strengthened, focused tests and
+Debug/Release Rust builds pass, and final recovery passes 499 project tests, 16
+Mac frontend/fake-sidecar tests, 36 Rust tests, and all smoke paths. Coding
+evidence is in
+`.agent-harness/runs/20260830T135952Z-F122-fast-coding.md`. A separate cold-start
+Evaluator approved F122 and wrote durable evidence in
+`.agent-harness/runs/20260830T140648Z-F122-evaluation-pass.md`; F122 is complete.
+F112 remains unchanged and out of scope for this run.
+
+The first evaluator handoff was rejected before evaluator launch because the
+coding evidence mentioned the reserved evaluator verdict marker while explaining
+that only the evaluator could write it. The orchestrator correctly failed closed
+and recorded
+`.agent-harness/runs/20260830T140048Z-F122-failure.md` with primary domain
+`agent_workflow_gap`. The coding evidence wording is corrected without changing
+product scope or test claims; no harness improvement is required because the
+existing guard detected the workflow error exactly as designed.
+
+The subsequent cold-start Evaluator returned a pass verdict to the orchestrator,
+but did not persist that verdict under `.agent-harness/runs/`. The completion
+transition was therefore reverted after final `./init.sh` failed with
+`missing evaluator evidence: F122`. The recovery note is
+`.agent-harness/runs/20260830T140410Z-F122-evaluator-evidence-retry.md`.
+A fresh evaluator retry then wrote the required durable approval before the
+orchestrator marked F122 complete.
+
 F132 is evaluator-approved. The owner selected candidate-03 for the English
 warning, Simplified Chinese warning, and local ready-to-wake chime. All three
 were promoted through the explicit confirmation path with matching SHA-256
@@ -174,15 +205,17 @@ Apple Silicon DMG is published as a public GitHub prerelease for internal
 evaluation, while publicly trusted binary distribution remains deferred. The
 final recovery run passes.
 
-F122 provider-native implementation is complete and awaiting independent evaluator
-approval. Settings now offers a persisted Appearance choice with Night as the
+F122 is evaluator-approved. Settings now offers a persisted Appearance choice with Night as the
 default and a low-glare Day mode based on the approved soft paper-white palette.
 The choice applies immediately to Settings, the main Realtime voice page, and
 returning/resume states without restarting the sidecar or disturbing a live
-conversation. Preferences migrate v1/v2 records to schema v3, reject unknown or
-unsupported themes, and preserve language and Smart Speaker settings. Focused
-frontend, Realtime, and Rust tests pass; the full recovery run passes 472 project
-tests, 12 Mac frontend/fake-sidecar tests, 30 Rust tests, and all smoke paths.
+conversation. Current schema-v5 preferences default v1/v2 records to Night,
+preserve valid Day selections through v3/v4 migrations, reject unknown or
+unsupported themes, and preserve language, Smart Speaker, diagnostics, and wake
+tuning settings. Focused frontend, Realtime, and Rust tests pass; final recovery
+passes 499 project tests, 16 Mac frontend/fake-sidecar tests, 36 Rust tests, and
+all smoke paths. Independent approval is recorded in
+`.agent-harness/runs/20260830T140648Z-F122-evaluation-pass.md`.
 
 F120 provider-native coding and owner-led bilingual target-Mac acceptance pass.
 Each wake now captures one bounded `en` or `zh-CN` preference and carries it as
@@ -865,14 +898,14 @@ completed video or portfolio acceptance.
 
 ## Next Feature
 
-No P0 feature is currently in progress. F112 and F122 remain deferred P1 work.
+No P0 feature is currently in progress. F112 is the only unfinished feature and
+remains deferred P1 owner-led A/B work. F122 is evaluator-approved.
 F126-F127 remain evidence instrumentation/configuration work; any default tuning
 change or claimed recognition-rate gain requires a later labeled calibration
 decision.
 
-For the owner-prioritized interactive F118-F120 sequence, F112 is temporarily
-set to P1 so the priority-and-order-only orchestrator selects F118 first. Restore
-F112 to P0 after F120 evaluation or if the bilingual sequence is abandoned.
+F112 remains P1 until the owner chooses to authorize and prioritize its bounded
+target-Mac acknowledgement experiment.
 
 F113 was explicitly selected for interactive work ahead of the older F112 todo
 item because the owner reported a repeatable P0 native crash and asked to fix

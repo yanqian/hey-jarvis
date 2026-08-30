@@ -2752,8 +2752,8 @@
         "The main voice page, Settings page, returning state, and Resume-required state all use the selected appearance, while native menus, credentials, audio cues, microphone behavior, language behavior, and runtime lifecycle remain unchanged.",
         "Focused preference migration/validation, DOM/catalog/CSS contracts, JavaScript syntax, Rust and Mac shell tests, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credential mutation, microphone request, speaker, or paid API use."
       ],
-      "passes": false,
-      "status": "todo",
+      "passes": true,
+      "status": "done",
       "attempts": 1,
       "last_error": "",
       "priority": "P1",

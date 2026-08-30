@@ -2455,6 +2455,89 @@ behavior with one asset/configuration/browser verification surface. Bilingual
 assets and language selection are independently valuable and explicitly
 deferred.
 
+### Persisted Low-Glare Day Appearance
+
+Feature mapping: F122.
+
+Goal: add an optional low-glare Day appearance to the macOS product while
+preserving the accepted Night appearance as the default and leaving the active
+voice runtime undisturbed when the user changes appearance.
+
+Included scope: persist exactly one `night` or `day` application preference;
+default new and migrated preference records to Night when no appearance exists;
+preserve the selected appearance through later preference-schema migrations;
+present one accessible bilingual Appearance selector in General Settings; apply
+the selection immediately to the bundled Settings surface, returning and
+Resume-required startup surfaces, and the Realtime Home surface; and use the
+owner-approved soft paper-white, muted-green Day palette with restrained borders,
+shadows, and glow.
+
+Excluded scope: following the macOS system appearance automatically, adding more
+than two themes, recoloring native menus or prompts, changing the accepted Night
+palette, changing app language or fixed voice-cue language, restarting the
+sidecar, changing microphone or speaker ownership, changing credentials,
+changing wake tuning, adding network telemetry, or making a quantified display
+luminance or reflection claim.
+
+Core flows: a new or migrated installation opens in Night; the user opens
+General Settings and chooses Day or Night; the native command validates and
+persists the bounded value, returns a fresh non-secret snapshot, and the current
+document updates immediately without stopping or restarting voice behavior. The
+Realtime Home page reads the same bounded local preference and applies a changed
+appearance while preserving its current localized state. Relaunch, returning,
+and Resume-required routes apply the stored appearance before presenting their
+normal state. Invalid, corrupt, oversized, missing, or unsupported values fail
+closed to the existing safe preference or Night fallback as appropriate.
+
+Constraints: only `night` and `day` are valid; Night remains byte-for-byte
+stylistically unchanged outside the shared theme plumbing; Day colors must retain
+readable dark text and visible focus/control boundaries while substantially
+reducing high-contrast glow and shadow relative to Night. The preference remains
+local and contains no credential or conversation data. Appearance changes must
+not request a microphone, use a speaker, call a provider, mutate credentials,
+restart the sidecar, interrupt a conversation, or change lifecycle availability.
+Automated verification must require no network, credentials, paid API, live
+microphone, or speaker.
+
+Ambiguities or assumptions: the previously approved soft paper-white palette is
+the visual acceptance baseline; `day` is an explicit user choice rather than an
+automatic system setting. Reduced glare is represented by the accepted palette
+and bounded CSS shadow/glow contracts, not a hardware luminance measurement.
+Native macOS menus and secure credential prompts continue to use system-owned
+appearance. Later preference versions must preserve `app_theme`, so evaluation
+uses the current schema rather than assuming the original schema-v3 boundary is
+still latest.
+
+Required capabilities: existing native preference persistence and migration,
+the bundled Settings command bridge, the Realtime loopback preference reader,
+the existing localization catalog, deterministic DOM/CSS/JavaScript tests,
+Rust preference and command tests, project recovery verification, fast coding
+evidence, and a separate cold-start Evaluator Agent. No new external service,
+credential, permission, generator, or paid capability is required.
+
+Implementation paths: `app/src-tauri/src/preferences.rs`,
+`app/src-tauri/src/lib.rs`, `app/src/index.html`, `app/src/main.js`,
+`app/src/i18n.js`, `app/src/styles.css`, `src/realtime_host/server.py`,
+`src/realtime_host/static/app.js`, `src/realtime_host/static/styles.css`, focused
+tests under `tests/` and `app/src-tauri/`, `.agent-harness/feature_list.json`,
+`.agent-harness/progress.md`, and `.agent-harness/runs/`.
+
+Verification surface: new/default and legacy/current preference loading;
+`night`/`day` validation and corrupt-value rejection; preservation of Smart
+Speaker, language, diagnostics, and wake-tuning values; accessible bilingual
+Settings markup; immediate Settings and Realtime application; returning and
+Resume-required route propagation; absence of sidecar restart or voice-runtime
+mutation; Night-style preservation and Day palette/CSS contracts; JavaScript
+syntax; focused Python and Rust tests; Debug and Release app builds; final
+`./init.sh`; fast coding evidence; and separate evaluator approval.
+
+Decomposition decision: F122 intentionally remains one feature because native
+preference persistence, the Settings selector, route propagation, and matching
+Settings/Home styling together form one independently valuable appearance
+choice with one bounded value and one shared verification surface. Automatic
+system-theme following, additional themes, native-menu theming, and measured
+display-glare research are separate potential requirements and remain excluded.
+
 ### Observable And Faster Mac App Startup
 
 Feature mapping: F128 establishes the startup timeline and repeatable baseline;

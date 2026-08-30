@@ -255,6 +255,7 @@ mod tests {
             initial.app_language.as_str(),
             ENGLISH | SIMPLIFIED_CHINESE
         ));
+        assert_eq!(initial.app_theme, NIGHT_THEME);
         assert!(!initial.smart_speaker_mode);
         assert!(!initial.wake_diagnostics_enabled);
         assert_eq!(initial.wake_threshold, DEFAULT_WAKE_THRESHOLD);
@@ -307,9 +308,35 @@ mod tests {
             migrated.app_language.as_str(),
             ENGLISH | SIMPLIFIED_CHINESE
         ));
+        assert_eq!(migrated.app_theme, NIGHT_THEME);
         let persisted = std::fs::read_to_string(&state_path).unwrap();
         assert!(persisted.contains("\"version\":5"));
         assert!(persisted.contains("\"wake_diagnostics_enabled\":false"));
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn version_two_migrates_language_and_defaults_theme_to_night() {
+        let directory = fixture("v2-migration");
+        let state_path = path(&directory);
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            &state_path,
+            br#"{"version":2,"smart_speaker_mode":true,"app_language":"zh-CN"}"#,
+        )
+        .unwrap();
+        let migrated = load(&state_path).unwrap();
+        assert_eq!(migrated.version, 5);
+        assert!(migrated.smart_speaker_mode);
+        assert_eq!(migrated.app_language, SIMPLIFIED_CHINESE);
+        assert_eq!(migrated.app_theme, NIGHT_THEME);
+        assert!(!migrated.wake_diagnostics_enabled);
+        assert_eq!(migrated.wake_threshold, DEFAULT_WAKE_THRESHOLD);
+        assert_eq!(
+            migrated.wake_confirmation_frames,
+            DEFAULT_WAKE_CONFIRMATION_FRAMES
+        );
         let _ = std::fs::remove_dir_all(&directory);
     }
 

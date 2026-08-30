@@ -627,6 +627,13 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn('invoke("set_app_theme", { theme: elements.appTheme.value })', frontend)
         self.assertIn('id="app-theme"', page)
         self.assertIn('value="day"', page)
+        theme_handler = frontend.split("async function setAppTheme", 1)[1].split(
+            "for (const item", 1
+        )[0]
+        self.assertNotIn("restart_sidecar", theme_handler)
+        self.assertNotIn("stop_sidecar", theme_handler)
+        self.assertIn("setTheme(snapshot.app_theme)", frontend)
+        self.assertIn("setTheme(route.app_theme)", frontend)
         language_handler = frontend.split("async function setAppLanguage", 1)[1].split(
             "async function", 1
         )[0]
