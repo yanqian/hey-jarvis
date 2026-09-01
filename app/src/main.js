@@ -1,5 +1,6 @@
 import { applyDocumentLocale, supportedLocale, text } from "./i18n.js";
 import { assistantModeFragment } from "./navigation.js";
+import { runStartupHandoff } from "./startup-runtime.js";
 
 const invoke = window.__TAURI__?.core?.invoke;
 const startupNavigationElapsed = () => Math.max(0, Math.min(300000, Math.round(performance.now())));
@@ -90,6 +91,7 @@ const DYNAMIC_ZH = new Map(Object.entries({
   "System Settings could not be opened. Open Privacy & Security → Microphone manually.": "无法打开系统设置。请手动打开“隐私与安全性 → 麦克风”。",
   "The local wake model is not ready. Restart the runtime; reinstall this app version if the error repeats.": "本地唤醒模型尚未就绪。请重启运行环境；如果错误重复出现，请重新安装此版本。",
   "The local runtime could not start. Retry, then quit and reopen Hey Jarvis if the problem continues.": "本地运行环境无法启动。请重试；如果问题持续存在，请退出并重新打开 Hey Jarvis。",
+  "Local voice could not finish starting — open Settings and try again.": "本地语音未能完成启动，请打开设置后重试。",
   "OpenAI key required before voice listening can start.": "开始语音监听前需要 OpenAI 密钥。",
   "Microphone access needs attention in System Settings.": "需要在系统设置中处理麦克风访问权限。",
   "OpenAI is configured. Complete the microphone check to start.": "OpenAI 已配置。请完成麦克风检查以启动。",
@@ -407,26 +409,18 @@ function navigateToAssistant(
   window.location.assign(endpoint.href);
 }
 
-async function waitForStartupRuntime() {
-  const deadline = Date.now() + 30000;
-  while (await invoke("startup_runtime_pending")) {
-    if (Date.now() >= deadline) {
+async function waitForStartupRuntime(smartSpeakerMode) {
+  await runStartupHandoff({
+    invoke,
+    navigate: navigateToAssistant,
+    smartSpeakerMode,
+    onTimeout: () => {
       elements.returningStatus.textContent = ui("Voice is taking longer to start — Settings is still available.");
-      return;
-    }
-    await new Promise(resolve => window.setTimeout(resolve, 100));
-  }
-  const runtime = await invoke("sidecar_status");
-  if (runtime.state === "ready") {
-    navigateToAssistant(runtime, { smartSpeakerMode: route.smart_speaker_mode === true });
-    return;
-  }
-
-  const snapshot = await invoke("onboarding_status");
-  renderSetup(snapshot);
-  resetSettingsSurface();
-  if (!snapshot.openai_configured) activatePanel("api-keys");
-  elements.message.textContent = friendlyError(runtime.detail || "sidecar_readiness_timed_out");
+    },
+    onFailure: () => {
+      elements.returningStatus.textContent = ui("Local voice could not finish starting — open Settings and try again.");
+    },
+  });
 }
 
 async function refreshPendingCredentialStatus() {
@@ -467,7 +461,7 @@ async function load() {
       setTheme(route.app_theme);
       if (route.completed && route.microphone_permission === "granted") {
         showVoiceRuntimePreparation();
-        await waitForStartupRuntime();
+        await waitForStartupRuntime(route.smart_speaker_mode === true);
         return;
       }
       resetSettingsSurface();

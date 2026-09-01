@@ -15,7 +15,9 @@ for path in \
   app/src/index.html \
   app/src/main.js \
   app/src/navigation.js \
+  app/src/startup-runtime.js \
   app/tests/navigation.test.mjs \
+  app/tests/startup-runtime.test.mjs \
   app/sidecar/fake_sidecar.py \
   app/sidecar/product_sidecar.py \
   app/src-tauri/Cargo.toml \
@@ -91,7 +93,8 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 echo "== Mac app frontend and fake sidecar tests =="
 node --check app/src/main.js
-node --test app/tests/navigation.test.mjs
+node --check app/src/startup-runtime.js
+node --test app/tests/*.test.mjs
 python3 -m unittest discover -s app/sidecar/tests -p 'test_*.py'
 
 echo "== Mac app Rust tests =="

@@ -2,6 +2,33 @@
 
 ## Current System Status
 
+F131 is evaluator-approved after reopening a human-acceptance regression on
+2026-09-01. A freshly built and installed Release launch
+`launch-1788230961884-49362` reached native `sidecar_ready` at 13,826 ms and the
+packaged sidecar continued healthy loopback checks, but the WebView never
+recorded `runtime_navigation` and remained on `Preparing local voice...` beyond
+the promised bounded notice. Read-only native and WebContent samples found no
+sidecar crash or retained native startup thread. Code execution identifies the
+deterministic failure introduced by F131: `waitForStartupRuntime()` reads
+`route.smart_speaker_mode` even though `route` is local to `load()`, then the
+outer catch writes the resulting `ReferenceError` into a hidden Settings message.
+The correction keeps F129's fast paint, passes the persisted mode explicitly,
+makes startup handoff failures visible, adds a fixed overall deadline, and adds
+executable pending-to-ready tests. Debug and Release builds pass; final recovery
+passes 499 project tests, 9 frontend tests, 16 sidecar tests, 36 Rust tests, and
+all smoke paths. Fresh coding evidence is in
+`.agent-harness/runs/20260901T031610Z-F131-fast-coding.md`; separate cold-start
+approval is recorded in
+`.agent-harness/runs/20260901T032038Z-F131-evaluation-pass.md`. Durable regression evidence is in
+`.agent-harness/runs/20260901T111000Z-F131-human-regression.md`. The earlier F129
+classification and evaluator rejection are retained as superseded diagnostic
+evidence; F129's original completion state is restored. The first F131 retry was
+rejected before evaluator launch because the historical evaluator note quoted
+the old coding markers verbatim and the reopened-feature guard misclassified it
+as coding evidence. The old verdict remains intact; only that redundant literal
+quotation was normalized before retry. The workflow failure is recorded in
+`.agent-harness/runs/20260901T031723Z-F131-failure.md`.
+
 F122 was explicitly selected by the owner for interactive continuation on
 2026-08-30. The installed orchestrator has no feature-selection flag, so F122
 was restored to `in_progress` as an explicit selection fallback before the

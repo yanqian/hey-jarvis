@@ -2904,3 +2904,63 @@ Decomposition decision: F133 is one runtime feature because warning timing,
 unchanged expiry, teardown, truthful wake restoration, and the ready cue form
 one user-visible recovery contract; asset generation remains separately gated
 by F132 owner selection.
+
+### F131 Human-Acceptance Regression: Preserve Fast-Startup Route Scope
+
+Feature mapping: reopened F131; this is `current_feature` correction of the
+original Smart Speaker fast-start promise, not an independent new requirement.
+
+Goal: preserve F129's early truthful startup shell while guaranteeing that a
+successfully ready local voice runtime leaves that shell and reaches Home while
+carrying the persisted Smart Speaker value through an explicit function boundary.
+
+Included scope: pass the persisted Smart Speaker Mode value explicitly from the
+lightweight startup route into the asynchronous ready handoff; preserve validated
+loopback-only control URLs and enabled/disabled fragments; show handoff failures
+on the visible startup status surface; and add behavioral tests that execute the
+pending-to-ready startup transition rather than checking source strings only.
+
+Excluded scope: changing Keychain storage, wake detection, microphone policy,
+Realtime session behavior, Smart Speaker media retention, startup appearance,
+or adding network telemetry or paid API calls.
+
+Core flows: on a completed returning launch, the window paints immediately and
+native credential/sidecar startup remains asynchronous. When pending clears, a
+validated `ready` snapshot navigates with the explicit route value: enabled adds
+`#smart-speaker-mode`, disabled remains fragment-free. A handoff exception stays
+on the local shell with a bilingual actionable message and working Settings
+escape hatch instead of writing only to a hidden Settings message.
+
+Constraints: only `http://127.0.0.1` control endpoints may navigate; readiness
+must remain truthful and fail closed; navigation must preserve F131's
+Smart Speaker fragment; no duplicate sidecar or route lookup may disturb
+Settings, first run, Resume, or sleep/wake recovery; diagnostics remain bounded
+and content-free; unrelated user-owned working-tree files remain untouched.
+
+Ambiguities or assumptions: the captured launch proves native and sidecar
+readiness. Source execution now identifies the deterministic failure before
+navigation: F131 references `route.smart_speaker_mode` inside a function where
+`route` is out of scope. The outer catch then renders the resulting JavaScript
+error into a hidden Settings message, matching the observed stuck shell.
+
+Required capabilities: existing F129 startup route and lifecycle diagnostics,
+deterministic JavaScript invoke/navigation fixtures, Debug and Release app builds, final project recovery,
+provider-native fast coding evidence, and a separate cold-start Evaluator Agent.
+
+Implementation paths: `app/src/main.js` and a project-owned testable startup
+module where useful, focused tests under `app/tests/`,
+`tests/test_mac_app_shell.py`, and F131 state/evidence under `.agent-harness/`.
+
+Verification surface: deterministic behavior tests must fail against the old
+implementation and prove pending-to-ready navigation receives an explicit mode
+value, enabled/disabled fragments, and visible failure copy with no free `route`
+lookup. Focused JavaScript/Rust/Mac-shell tests, Debug and
+Release builds, final `./init.sh`, fast coding evidence, and separate evaluator
+approval must pass without live credentials, microphone, speaker, network, or
+paid API use. A fresh installed Release remains an owner acceptance step after
+the automatic gate.
+
+Decomposition decision: this remains F131 because the out-of-scope access was
+introduced when F131 threaded Smart Speaker Mode into F129's ready navigation.
+The explicit handoff, visible failure handling, and executable tests form one
+independently verifiable correction of that original feature promise.

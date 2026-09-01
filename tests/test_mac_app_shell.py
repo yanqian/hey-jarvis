@@ -214,7 +214,7 @@ class MacAppShellTests(unittest.TestCase):
         self.assertLess(window_shown, background_start)
         self.assertIn("showStartingRuntime()", app_script)
         self.assertIn('await invoke("startup_route")', app_script)
-        self.assertIn('await invoke("startup_runtime_pending")', app_script)
+        self.assertIn('runStartupHandoff({', app_script)
         self.assertIn("Voice is taking longer to start — Settings is still available.", app_script)
         self.assertIn("await afterCommittedPaint();\n      recordStartup(\"shell_interactive\")", app_script)
         self.assertIn('tauri::plugin::Builder::<_, ()>::new("settings-navigation")', native)
@@ -274,7 +274,7 @@ class MacAppShellTests(unittest.TestCase):
 
         route = script.index('await invoke("startup_route")')
         preparation = script.index("showVoiceRuntimePreparation();", route)
-        timeout_flow = script.split("async function waitForStartupRuntime()", 1)[1].split(
+        timeout_flow = script.split("async function waitForStartupRuntime(smartSpeakerMode)", 1)[1].split(
             "async function refreshPendingCredentialStatus()", 1
         )[0]
         self.assertIn('ui("Checking local setup…")', script)
@@ -306,6 +306,12 @@ class MacAppShellTests(unittest.TestCase):
     def test_fast_startup_preserves_smart_speaker_media_route(self):
         script = (APP / "src" / "main.js").read_text(encoding="utf-8")
         navigation = (APP / "src" / "navigation.js").read_text(encoding="utf-8")
+        startup_runtime = (APP / "src" / "startup-runtime.js").read_text(
+            encoding="utf-8"
+        )
+        startup_tests = (APP / "tests" / "startup-runtime.test.mjs").read_text(
+            encoding="utf-8"
+        )
         native = (APP / "src-tauri" / "src" / "lib.rs").read_text(
             encoding="utf-8"
         )
@@ -316,13 +322,17 @@ class MacAppShellTests(unittest.TestCase):
         self.assertIn("smart_speaker_mode: bool", startup_route)
         self.assertIn("smart_speaker_mode: preferences.smart_speaker_mode", startup_route)
 
-        fast_start = script.split("async function waitForStartupRuntime()", 1)[1].split(
+        fast_start = script.split("async function waitForStartupRuntime(smartSpeakerMode)", 1)[1].split(
             "async function refreshPendingCredentialStatus()", 1
         )[0]
+        self.assertIn("smartSpeakerMode,", fast_start)
+        self.assertNotIn("route.", fast_start)
         self.assertIn(
-            "navigateToAssistant(runtime, { smartSpeakerMode: route.smart_speaker_mode === true })",
-            fast_start,
+            "await waitForStartupRuntime(route.smart_speaker_mode === true)", script
         )
+        self.assertIn('navigate(runtime, { smartSpeakerMode: smartSpeakerMode === true })', startup_runtime)
+        self.assertIn("pending-to-ready handoff", startup_tests)
+        self.assertIn('ReferenceError("route is not defined")', startup_tests)
         self.assertIn('return "smart-speaker-resume"', navigation)
         self.assertIn('return smartSpeakerMode === true ? "smart-speaker-mode" : ""', navigation)
 

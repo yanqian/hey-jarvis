@@ -2929,14 +2929,14 @@
       "description": "Carry Smart Speaker Mode through the lightweight returning-startup route so the Realtime page keeps its disabled warm microphone track and locked wake avoids a fresh delayed getUserMedia call.",
       "acceptance": [
         "The lightweight native startup route returns the persisted bounded Smart Speaker Mode boolean without adding Keychain work, credential exposure, microphone access, network activity, or a second full onboarding snapshot.",
-        "Completed returning startup explicitly navigates with `#smart-speaker-mode` when the mode is enabled and without it when disabled; Resume retains `#smart-speaker-resume` precedence and first-run, Settings, permission, failure, and manual-start paths remain unchanged.",
+        "Completed returning startup explicitly carries the bounded Smart Speaker value across the asynchronous ready handoff and navigates with `#smart-speaker-mode` when enabled and without it when disabled; that handoff cannot reference an out-of-scope route value or strand the visible preparing shell, while Resume retains `#smart-speaker-resume` precedence and first-run, Settings, permission, failure, and manual-start paths remain unchanged.",
         "The existing Realtime page retains the authorized microphone track live but disabled in Smart Speaker Mode, reuses it after wake while cached ACK and Realtime setup run concurrently, and enables user input only after both existing barriers complete; no paid pre-wake session or early speech submission is introduced.",
-        "Focused behavioral regression tests fail against the F129 route omission and cover enabled, disabled, Resume, and fast-start navigation without relying only on source-string presence; unrelated startup performance and one-line-shell behavior remain intact.",
+        "Focused behavioral regression tests execute the pending-to-ready handoff and fail against both the original F129 route omission and F131's out-of-scope route regression; they cover enabled, disabled, Resume, successful navigation, and visible startup failure without relying only on source-string presence, while unrelated startup performance and one-line-shell behavior remain intact.",
         "JavaScript syntax, focused Mac shell and Rust tests, Debug and Release builds, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without network, credentials, paid API use, speaker, or live microphone."
       ],
       "passes": true,
       "status": "done",
-      "attempts": 1,
+      "attempts": 2,
       "last_error": "",
       "priority": "P0",
       "depends_on": [
