@@ -7,6 +7,7 @@ import base64
 import binascii
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -51,12 +52,40 @@ STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/i18n.js": ("i18n.js", "text/javascript; charset=utf-8"),
+    "/negotiation-diagnostics.js": ("negotiation-diagnostics.js", "text/javascript; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
 }
 
 
 class HostServerError(RuntimeError):
     pass
+
+
+class RealtimeCallError(HostServerError):
+    """Privacy-safe summary of one rejected upstream Realtime call."""
+
+    def __init__(
+        self,
+        http_status: int,
+        *,
+        provider_error_type: str | None = None,
+        provider_error_code: str | None = None,
+    ) -> None:
+        super().__init__(f"OpenAI Realtime call failed with HTTP {http_status}")
+        self.http_status = http_status
+        self.provider_error_type = provider_error_type
+        self.provider_error_code = provider_error_code
+
+    def safe_payload(self) -> dict[str, object]:
+        error: dict[str, object] = {
+            "type": "realtime_call_failed",
+            "upstream_http_status": self.http_status,
+        }
+        if self.provider_error_type is not None:
+            error["provider_error_type"] = self.provider_error_type
+        if self.provider_error_code is not None:
+            error["provider_error_code"] = self.provider_error_code
+        return {"error": error}
 
 
 class MemoryWakeLease:
@@ -333,12 +362,42 @@ def create_realtime_call(
         with urlopen(request, timeout=20) as response:
             answer = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        raise HostServerError(f"OpenAI Realtime call failed with HTTP {exc.code}") from exc
+        provider_type, provider_code = _safe_realtime_error_fields(exc)
+        raise RealtimeCallError(
+            exc.code,
+            provider_error_type=provider_type,
+            provider_error_code=provider_code,
+        ) from exc
     except (urllib.error.URLError, TimeoutError, UnicodeDecodeError) as exc:
         raise HostServerError("OpenAI Realtime call failed safely") from exc
     if not answer.startswith("v=0") or len(answer.encode("utf-8")) > MAX_SDP_BYTES:
         raise HostServerError("OpenAI Realtime SDP answer was malformed")
     return answer
+
+
+def _safe_realtime_error_fields(error: urllib.error.HTTPError) -> tuple[str | None, str | None]:
+    try:
+        raw = error.read(4097)
+    except (OSError, ValueError):
+        return None, None
+    finally:
+        error.close()
+    if len(raw) > 4096:
+        return None, None
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None, None
+    provider_error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(provider_error, dict):
+        return None, None
+
+    def bounded(value: object) -> str | None:
+        if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", value):
+            return None
+        return value
+
+    return bounded(provider_error.get("type")), bounded(provider_error.get("code"))
 
 
 class HostHTTPServer(ThreadingHTTPServer):
@@ -384,6 +443,7 @@ def build_server(
     session_expiry_warning_zh_path: str | Path | None = None,
     app_language_path: str | Path | None = None,
     startup_event: Callable[[str, int], None] | None = None,
+    negotiation_failure_sink: Callable[[dict[str, object]], None] | None = None,
 ) -> HostHTTPServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise HostServerError("Realtime host server must bind to loopback")
@@ -481,6 +541,7 @@ def build_server(
         tool_provider_config=tool_provider_config,
         tool_http_client=tool_http_client,
         app_language_provider=lambda: read_app_language(language_path),
+        negotiation_failure_sink=negotiation_failure_sink,
     )
     server.settings = settings
     server.capability_lease = capability_lease
@@ -813,6 +874,9 @@ class HostRequestHandler(BaseHTTPRequestHandler):
                     self.server.startup_event(stage, elapsed_ms)
                 self._json(HTTPStatus.OK, {"status": "recorded"})
                 return
+        except RealtimeCallError as exc:
+            self._json(HTTPStatus.CONFLICT, exc.safe_payload())
+            return
         except (ConfigError, HandoffError, HostServerError, RealtimeAckAssetError) as exc:
             self._json(HTTPStatus.CONFLICT, {"error": "host_control_failed", "message": str(exc)})
             return

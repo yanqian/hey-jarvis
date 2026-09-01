@@ -1230,9 +1230,12 @@ class RealtimeHostTests(unittest.TestCase):
     def test_static_host_is_separate_hands_free_and_secret_free(self):
         html = server.resolve_static("/")[0].decode()
         javascript = server.resolve_static("/app.js")[0].decode()
+        negotiation_javascript = server.resolve_static("/negotiation-diagnostics.js")[0].decode()
         catalog = server.resolve_static("/i18n.js")[0].decode()
         guidance = (server.STATIC_ROOT.parent / "README.md").read_text()
         self.assertIn("Enable voice assistant", html)
+        self.assertIn('/negotiation-diagnostics.js', html)
+        self.assertIn("buildNegotiationDiagnostic", negotiation_javascript)
         self.assertIn("只需启用一次语音助手，之后即可用语音唤醒 Jarvis。", catalog)
         self.assertNotIn("只需启用一次免手持音频，之后即可用语音唤醒 Jarvis。", catalog)
         self.assertIn('data-ui-state="ready"', html)
@@ -1284,11 +1287,7 @@ class RealtimeHostTests(unittest.TestCase):
             "function skipInputLevels(timing)",
             "if(command.input_level_diagnostics===true)startInputLevels(stream,handoffTiming)",
             "else skipInputLevels(handoffTiming)",
-            "webrtc_negotiation_failed",
-            'response.headers.get("x-request-id")',
-            'response.headers.get("retry-after")',
-            'response.headers.get("x-ratelimit-remaining-requests")',
-            'response.headers.get("x-ratelimit-reset-requests")',
+            "HeyJarvisNegotiationDiagnostics.buildNegotiationDiagnostic",
             "error.safeDiagnostic=detail",
             'type:"input_audio"',
             'hostEvent("fixture_submitted")',
@@ -1324,6 +1323,7 @@ class RealtimeHostTests(unittest.TestCase):
             'log("input_ready")',
         ):
             self.assertIn(text, javascript)
+        self.assertIn("webrtc_negotiation_failed", negotiation_javascript)
         self.assertLess(
             javascript.index("track.enabled=false;inputTrack=track"),
             javascript.index("pc.addTrack(track,stream)"),
@@ -1436,6 +1436,139 @@ class RealtimeHostTests(unittest.TestCase):
         self.assertIn('name="session"', body)
         self.assertIn('{"type":"realtime","model":"model-test"}', body)
         self.assertNotIn("sk-fake-standard", body)
+
+    def test_unified_call_error_retains_only_bounded_provider_type_and_code(self):
+        def rejected(status, payload):
+            def fake_urlopen(_request, timeout):
+                self.assertEqual(timeout, 20)
+                body = json.dumps(payload).encode("utf-8")
+                raise server.urllib.error.HTTPError(
+                    server.REALTIME_CALLS_URL,
+                    status,
+                    "rejected",
+                    {},
+                    BytesIO(body),
+                )
+
+            with self.assertRaises(server.RealtimeCallError) as raised:
+                server.create_realtime_call(
+                    api_key="sk-never-reported",
+                    sdp="v=0\r\no=offer",
+                    session={"type": "realtime", "model": "model-test"},
+                    urlopen=fake_urlopen,
+                    boundary="test-boundary",
+                )
+            return raised.exception
+
+        for status in (400, 401, 403, 404, 429, 500, 503):
+            with self.subTest(status=status):
+                error = rejected(
+                    status,
+                    {
+                        "error": {
+                            "message": "private provider text sk-secret",
+                            "type": "invalid_request_error",
+                            "code": "unsupported_value",
+                            "param": "session.audio.input",
+                        }
+                    },
+                )
+                self.assertEqual(
+                    error.safe_payload(),
+                    {
+                        "error": {
+                            "type": "realtime_call_failed",
+                            "upstream_http_status": status,
+                            "provider_error_type": "invalid_request_error",
+                            "provider_error_code": "unsupported_value",
+                        }
+                    },
+                )
+                encoded = json.dumps(error.safe_payload())
+                self.assertNotIn("private provider text", encoded)
+                self.assertNotIn("sk-secret", encoded)
+                self.assertNotIn("session.audio.input", encoded)
+
+        for payload in (
+            b"not-json",
+            json.dumps({"error": {"type": "unsafe value", "code": "x" * 101}}).encode(),
+            json.dumps({"error": {"type": "safe", "code": "safe"}, "padding": "x" * 5000}).encode(),
+        ):
+            with self.subTest(payload_length=len(payload)):
+                def fake_urlopen(_request, timeout, body=payload):
+                    self.assertEqual(timeout, 20)
+                    raise server.urllib.error.HTTPError(
+                        server.REALTIME_CALLS_URL,
+                        400,
+                        "rejected",
+                        {},
+                        BytesIO(body),
+                    )
+
+                with self.assertRaises(server.RealtimeCallError) as raised:
+                    server.create_realtime_call(
+                        api_key="sk-never-reported",
+                        sdp="v=0\r\no=offer",
+                        session={"type": "realtime"},
+                        urlopen=fake_urlopen,
+                    )
+                self.assertEqual(
+                    raised.exception.safe_payload(),
+                    {"error": {"type": "realtime_call_failed", "upstream_http_status": 400}},
+                )
+
+        def network_failure(_request, timeout):
+            self.assertEqual(timeout, 20)
+            raise server.urllib.error.URLError("private network detail")
+
+        with self.assertRaisesRegex(server.HostServerError, "failed safely") as raised:
+            server.create_realtime_call(
+                api_key="sk-never-reported",
+                sdp="v=0\r\no=offer",
+                session={"type": "realtime"},
+                urlopen=network_failure,
+            )
+        self.assertNotIsInstance(raised.exception, server.RealtimeCallError)
+        self.assertNotIn("private network detail", str(raised.exception))
+
+    def test_session_endpoint_returns_structured_safe_upstream_failure(self):
+        responses: list[tuple[HTTPStatus, dict[str, object]]] = []
+        handler = object.__new__(server.HostRequestHandler)
+        handler.path = "/session"
+        handler.server = SimpleNamespace()
+        handler._has_capability = lambda: True
+        handler._read_sdp = lambda: "v=0\r\no=offer"
+        handler._settings = lambda **_kwargs: SimpleNamespace(openai_api_key="sk-private")
+        handler._json = lambda status, payload: responses.append((status, dict(payload)))
+        handler._bytes = lambda *_args, **_kwargs: self.fail("SDP success was unexpected")
+        failure = server.RealtimeCallError(
+            400,
+            provider_error_type="invalid_request_error",
+            provider_error_code="unsupported_value",
+        )
+
+        with patch.object(server, "build_realtime_session_config", return_value={"type": "realtime"}), patch.object(
+            server, "create_realtime_call", side_effect=failure
+        ):
+            handler.do_POST()
+
+        self.assertEqual(
+            responses,
+            [
+                (
+                    HTTPStatus.CONFLICT,
+                    {
+                        "error": {
+                            "type": "realtime_call_failed",
+                            "upstream_http_status": 400,
+                            "provider_error_type": "invalid_request_error",
+                            "provider_error_code": "unsupported_value",
+                        }
+                    },
+                )
+            ],
+        )
+        self.assertNotIn("sk-private", json.dumps(responses))
 
     def test_unified_session_uses_complete_validated_configuration(self):
         settings = SimpleNamespace(
@@ -1794,20 +1927,25 @@ class RealtimeHostTests(unittest.TestCase):
                     other.host_event("handoff_timing", other_session, **detail)
 
     def test_negotiation_error_retains_only_strict_safe_metadata(self):
-        coordinator, _lease = self.build_coordinator()
+        persisted = []
+        coordinator = HandoffCoordinator(
+            FakeLease(),
+            clock=lambda: 1.25,
+            session_ids=lambda: "session-1",
+            negotiation_failure_sink=persisted.append,
+        )
         coordinator.host_event("armed")
         session_id = coordinator.begin_handoff()
         coordinator.host_event(
             "error",
             session_id,
             reason="webrtc_negotiation_failed",
-            httpStatus=429,
+            localHttpStatus=409,
+            upstreamHttpStatus=429,
             errorType="insufficient_quota",
             errorCode="insufficient_quota",
-            requestId="req_safe_123",
-            retryAfter="60",
-            rateLimitRemainingRequests="0",
-            rateLimitResetRequests="1m0s",
+            requestId="must_be_dropped",
+            retryAfter="must_be_dropped",
             responseBody='{"api_key":"sk-secret"}',
             transcript="private utterance",
         )
@@ -1821,19 +1959,29 @@ class RealtimeHostTests(unittest.TestCase):
                 "type": "host_error",
                 "session_id": session_id,
                 "reason": "webrtc_negotiation_failed",
-                "httpStatus": 429,
+                "localHttpStatus": 409,
+                "upstreamHttpStatus": 429,
                 "errorType": "insufficient_quota",
                 "errorCode": "insufficient_quota",
-                "requestId": "req_safe_123",
-                "retryAfter": "60",
-                "rateLimitRemainingRequests": "0",
-                "rateLimitResetRequests": "1m0s",
             },
         )
         report_text = json.dumps(coordinator.report())
         self.assertNotIn("sk-secret", report_text)
         self.assertNotIn("private utterance", report_text)
         self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
+        self.assertEqual(
+            persisted,
+            [
+                {
+                    "reason": "webrtc_negotiation_failed",
+                    "localHttpStatus": 409,
+                    "upstreamHttpStatus": 429,
+                    "errorType": "insufficient_quota",
+                    "errorCode": "insufficient_quota",
+                }
+            ],
+        )
+        first_persisted = list(persisted)
 
         coordinator2, _lease2 = self.build_coordinator()
         coordinator2.host_event("armed")
@@ -1843,9 +1991,32 @@ class RealtimeHostTests(unittest.TestCase):
                 "error",
                 session_id2,
                 reason="webrtc_negotiation_failed",
-                httpStatus=429,
+                localHttpStatus=409,
+                upstreamHttpStatus=429,
                 errorCode="unsafe value with spaces",
             )
+        self.assertEqual(persisted, first_persisted)
+
+    def test_negotiation_diagnostic_sink_failure_does_not_block_cleanup(self):
+        def failing_sink(_detail):
+            raise OSError("disk unavailable")
+
+        coordinator = HandoffCoordinator(
+            FakeLease(),
+            session_ids=lambda: "session-1",
+            negotiation_failure_sink=failing_sink,
+        )
+        coordinator.host_event("armed")
+        session_id = coordinator.begin_handoff()
+        coordinator.host_event(
+            "error",
+            session_id,
+            reason="webrtc_negotiation_failed",
+            localHttpStatus=409,
+            upstreamHttpStatus=503,
+            errorType="server_error",
+        )
+        self.assertEqual(coordinator.state, HandoffState.HOST_STOPPING)
 
 
 if __name__ == "__main__":

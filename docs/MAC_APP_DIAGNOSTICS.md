@@ -26,10 +26,15 @@ threshold and required-frame count, so exported evidence identifies the exact
 experiment. Low-score background frames are omitted,
 and write failures never interrupt wake listening.
 
-Records contain only schema version, timestamp, component, event, bounded
-session correlation, and state. Credentials, authorization values, raw audio,
-SDP/ICE, transcripts, answers, tool arguments, and provider request/response
-bodies are excluded. The dedicated Privacy & Diagnostics Settings section can
+The default lifecycle records contain only schema version, timestamp,
+component, event, bounded session correlation, and state. A failed Realtime
+negotiation additionally writes one `hey-jarvis-realtime-v1` summary containing
+only the local HTTP status, optional upstream HTTP status, and optional bounded
+error type/code after coordinator validation. It never extracts the protected
+loopback cookie and does not retain error messages, bodies, headers, request
+identifiers, credentials, authorization values, raw audio, SDP/ICE, transcripts,
+answers, or tool arguments. The dedicated Privacy & Diagnostics Settings
+section can
 export a versioned, size-bounded `hey-jarvis-support-v1` JSON bundle or clear
 all local diagnostic generations after an explicit confirmation.
 Exports are written under the app-owned `support-exports/` directory and must
@@ -74,7 +79,9 @@ loopback server, coordinator, detector, and microphone ownership.
 
 - Rust tests cover redacted export, clear, intentional stop, unexpected exit,
   bounded restart, and crash-loop state.
-- Python tests cover lifecycle-only diagnostics and forbidden event rejection.
+- Python tests cover lifecycle diagnostics, sanitized Realtime failure
+  persistence, rotation/concurrency, non-fatal writes, and forbidden event
+  rejection.
 - JavaScript syntax and contracts cover reload/freeze media release and the
   export/clear UI.
 - `./init.sh` runs these checks with the full project and fake smoke paths.

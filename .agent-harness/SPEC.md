@@ -2964,3 +2964,147 @@ Decomposition decision: this remains F131 because the out-of-scope access was
 introduced when F131 threaded Smart Speaker Mode into F129's ready navigation.
 The explicit handoff, visible failure handling, and executable tests form one
 independently verifiable correction of that original feature promise.
+
+### Preserve Safe Realtime Negotiation Failure Details
+
+Feature mapping: F134.
+
+Goal: make a failed wake-triggered OpenAI Realtime negotiation diagnosable from
+the existing local lifecycle report so a generic local 409 no longer hides
+whether the upstream rejected session parameters, credentials or quota, or
+failed transiently.
+
+Included scope: parse a bounded OpenAI HTTP error response at the server-side
+Realtime call boundary; retain only allowlisted upstream HTTP status, provider
+error type, and provider error code; return those fields in the loopback
+`/session` failure contract; carry them through the browser's existing
+`webrtc_negotiation_failed` host event; and preserve them in the bounded local
+report used for support diagnosis.
+
+Excluded scope: changing Realtime model, voice, session schema, account quota,
+billing, retry policy, wake recognition, microphone behavior, cached cues,
+generic user-facing failure copy, or logging provider messages, response bodies,
+request headers, credentials, SDP/ICE, audio, transcripts, answers, or tool
+arguments.
+
+Core flows: when OpenAI rejects `POST /v1/realtime/calls`, the Python host reads
+at most a small bounded body, accepts only a JSON error object with bounded
+string `type` and `code`, and raises a structured safe failure containing the
+upstream status. The loopback endpoint responds with a stable structured error
+object. The browser recognizes only those allowlisted fields, reports them with
+`webrtc_negotiation_failed`, closes media through the existing cleanup path,
+and the coordinator returns to wake listening as before. Malformed, oversized,
+non-JSON, network, timeout, or unexpected provider failures remain safely
+generic and never expose raw content.
+
+Constraints: the standard API key remains server-side; no new remote telemetry,
+automatic retry, paid preflight, microphone access, or provider-body persistence
+is introduced. Diagnostic strings are length- and character-bounded and cannot
+inject arbitrary provider text into logs or UI. Existing local HTTP 409 behavior
+may remain for compatibility, but it must no longer be mistaken for the
+upstream status. Unrelated user-owned working-tree files remain untouched.
+
+Ambiguities or assumptions: the two observed real-device wake attempts reached
+microphone acquisition and cached English acknowledgement playback, then failed
+before WebRTC connection. Existing reporting records only the loopback 409
+because the server collapses upstream failures and the browser ignores the
+server message. This feature intentionally improves evidence first; the actual
+provider rejection may require a follow-up correction once one fresh installed
+build captures its safe upstream code.
+
+Required capabilities: existing server-side Realtime call proxy, loopback
+capability lease, browser host-event contract, bounded coordinator report,
+offline HTTP-error fakes, JavaScript source/behavior tests, Debug and Release
+Mac builds, final project recovery, provider-native fast coding evidence, a
+separate cold-start Evaluator Agent, and one owner-authorized live wake after
+installation.
+
+Implementation paths: `src/realtime_host/server.py`,
+`src/realtime_host/static/app.js`, `src/realtime_host/coordinator.py`, focused
+tests under `tests/`, operator diagnostics documentation where needed, and F134
+state/evidence under `.agent-harness/`.
+
+Verification surface: deterministic upstream 400/401/403/404/429/5xx response
+tests prove only status/type/code survive; malformed, oversized, secret-bearing,
+and network failures remain generic; browser tests prove the loopback 409 is not
+reported as the upstream status and safe fields reach the existing host event;
+coordinator/report tests prove cleanup and wake recovery are unchanged. Focused
+tests, JavaScript/Python syntax, Realtime fake smoke, Debug and Release builds,
+final `./init.sh`, fast coding evidence, and separate evaluator approval pass
+without network, credentials, microphone, speaker, or paid API use. A freshly
+installed build and one live wake provide product diagnosis evidence but do not
+replace the automatic gate.
+
+Decomposition decision: F134 is one feature because structured extraction,
+loopback transport, browser forwarding, and report retention form one atomic
+diagnostic path with one privacy and verification boundary. Correcting whatever
+provider error F134 reveals remains a separate requirement unless it is already
+a direct implementation defect within this same accepted contract.
+
+### Persist Safe Realtime Negotiation Failure Summaries
+
+Feature mapping: F135.
+
+Goal: make F134's already-sanitized Realtime negotiation failure summary
+available in the app's existing rotated diagnostics and support export, so an
+operator can diagnose an installed wake failure without extracting a WebKit
+capability cookie or attaching a debugger to the live process.
+
+Included scope: add one product-side diagnostic sink for the coordinator's
+validated `webrtc_negotiation_failed` event; persist only the local HTTP status,
+optional upstream HTTP status, and optional bounded error type/code in an
+app-owned rotated JSONL record; include the record through the existing support
+export and clear flows; and keep diagnostic writes non-fatal and thread-safe.
+
+Excluded scope: exposing or weakening the loopback capability lease, reading or
+exporting WebKit cookies, changing the Realtime request/session schema, changing
+the generic user-facing error copy, adding retries or preflights, and retaining
+provider messages/bodies/headers, request identifiers, credentials, SDP/ICE,
+audio, transcripts, answers, or tool arguments.
+
+Core flows: after the browser submits an authenticated negotiation failure, the
+coordinator first validates and bounds the F134 fields, records its existing
+in-memory evidence, and invokes the optional product diagnostic sink with only
+the sanitized summary. The packaged sidecar writes one bounded record under its
+existing diagnostics directory. Offline/CLI hosts without a sink behave exactly
+as before. Writer failure never changes cleanup or wake recovery.
+
+Constraints: persistence occurs only after coordinator validation; the sink
+cannot receive the original event payload; identifier strings keep the existing
+character and length bounds; numeric statuses stay within HTTP error ranges;
+rotation and support export limits remain bounded; concurrent health and HTTP
+event writes cannot interleave; and no diagnostic lookup requires credential or
+session-material extraction.
+
+Ambiguities or assumptions: F134 correctly preserves the fields in the
+capability-protected in-memory report and passed independent evaluation, but the
+installed product's lifecycle diagnostics intentionally record only generic
+events. The owner-authorized live wake reproduced the failure before user input.
+Because policy correctly blocks extracting the WebKit cookie, durable sanitized
+logging is treated as a new operational capability rather than weakening auth.
+
+Required capabilities: existing F134 sanitizer and coordinator event path,
+packaged-sidecar lifecycle diagnostics, deterministic sink/writer/rotation and
+privacy fixtures, support-export verification, Debug and Release builds, final
+project recovery, provider-native fast coding evidence, and a separate
+cold-start Evaluator Agent.
+
+Implementation paths: `src/realtime_host/coordinator.py`,
+`src/realtime_host/server.py`, `app/sidecar/product_sidecar.py`, focused Python
+and Mac sidecar tests, diagnostics documentation where needed, and F135 state
+and evidence under `.agent-harness/`.
+
+Verification surface: coordinator tests prove only sanitized values reach the
+sink and malformed values never do; product-side tests prove exact persisted
+schema, rotation, thread safety, non-fatal writer failure, and rejection of
+secret-bearing/unbounded fields; support-export tests prove inclusion and clear
+behavior; existing negotiation cleanup/wake recovery tests, JavaScript/Python
+syntax, Realtime fake smoke, Debug and Release builds, final `./init.sh`, fast
+coding evidence, and separate evaluator approval pass without network,
+credentials, microphone, speaker, or paid API use. One fresh installed live wake
+may then reveal the actual provider class.
+
+Decomposition decision: F135 is intentionally one feature because the optional
+sanitized sink and its bounded product persistence form one independently
+verifiable diagnostic capability. Fixing the provider rejection that it reveals
+remains separate.

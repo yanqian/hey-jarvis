@@ -2,6 +2,40 @@
 
 ## Current System Status
 
+F135 is evaluator-approved. The packaged sidecar now persists F134's already-sanitized
+Realtime negotiation failure summary in `diagnostics/realtime.jsonl`, with only
+local/upstream HTTP status and bounded error type/code. Coordinator validation
+precedes the optional sink; malformed values never reach it, and sink/write
+failures cannot block the existing stop and wake-recovery path. The writer is
+thread-safe, rotates at the existing 512 KiB / three-generation bound, and the
+support exporter structurally permits safe names such as `invalid_api_key`
+while rejecting secret-shaped values and unknown/content-bearing fields. Fresh
+frozen-sidecar, Debug, and Release builds pass. Final recovery passes 502
+project tests, 11 frontend tests, 20 sidecar tests, 38 Rust tests, and all smoke
+paths. Coding evidence is in
+`.agent-harness/runs/20260901T062751Z-F135-fast-coding.md`. One fresh installed
+Release wake captured the real failure as upstream HTTP 429 with bounded
+`insufficient_quota` / `credit_balance_exhausted` fields, proving the installed
+diagnostic path without exposing credentials or provider response content.
+Separate cold-start approval is recorded in
+`.agent-harness/runs/20260901T063115Z-F135-evaluation-pass.md`.
+
+F134 is evaluator-approved. The wake, microphone, and cached acknowledgement path is unchanged;
+only failed OpenAI Realtime call evidence is repaired. Upstream HTTP failures
+now retain a bounded status plus allowlisted provider `type` and `code`, while
+the loopback compatibility 409 is recorded separately. Provider messages,
+bodies, headers, credentials, SDP/ICE, audio, transcripts, answers, and tool
+arguments are excluded. The browser executes a separately tested pure sanitizer,
+the coordinator and F060 export retain only the new safe fields, and recovery
+continues through the existing exactly-once stop path. The PyInstaller asset
+list now includes that sanitizer, and fresh Debug and Release bundles both
+contain it. Final recovery passes 501 project tests, 11 frontend tests, 16
+sidecar tests, 36 Rust tests, and all smoke paths. Coding evidence is in
+`.agent-harness/runs/20260901T040006Z-F134-fast-coding.md`. One installed live
+wake subsequently identified the actual upstream failure through F135's durable
+sink. Separate cold-start approval is recorded in
+`.agent-harness/runs/20260901T040216Z-F134-evaluation-pass.md`.
+
 F131 is evaluator-approved after reopening a human-acceptance regression on
 2026-09-01. A freshly built and installed Release launch
 `launch-1788230961884-49362` reached native `sidecar_ready` at 13,826 ms and the

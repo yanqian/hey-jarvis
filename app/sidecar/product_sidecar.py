@@ -63,6 +63,7 @@ DIAGNOSTIC_LIMIT_BYTES = 512 * 1024
 DIAGNOSTIC_GENERATIONS = 3
 CONTROLLER_SHUTDOWN_TIMEOUT_SECONDS = 4.0
 SAFE_DIAGNOSTIC = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+SAFE_REALTIME_DIAGNOSTIC = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
 FORBIDDEN_DIAGNOSTIC = ("sk-", "api_key", "authorization", "sdp", "candidate", "transcript", "answer", "tool_argument", "provider_body", "audio")
 
 
@@ -70,6 +71,13 @@ class ProductRuntimeError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+def safe_realtime_diagnostic_identifier(value: object) -> bool:
+    if not isinstance(value, str) or not SAFE_REALTIME_DIAGNOSTIC.fullmatch(value):
+        return False
+    lowered = value.lower()
+    return not lowered.startswith("sk-") and not lowered.startswith("ek_")
 
 
 def apply_app_wake_preferences(
@@ -130,7 +138,9 @@ class LifecycleDiagnostics:
     def __init__(self, app_support_dir: Path, session_id: str) -> None:
         self.root = app_support_dir / "diagnostics"
         self.path = self.root / "python.jsonl"
+        self.realtime_path = self.root / "realtime.jsonl"
         self.session_id = session_id if SAFE_DIAGNOSTIC.fullmatch(session_id) else None
+        self._lock = threading.Lock()
 
     def record(self, event: str, state: str | None = None) -> None:
         if not SAFE_DIAGNOSTIC.fullmatch(event) or (
@@ -139,14 +149,6 @@ class LifecycleDiagnostics:
             return
         if any(marker in event.lower() or (state is not None and marker in state.lower()) for marker in FORBIDDEN_DIAGNOSTIC):
             return
-        self.root.mkdir(parents=True, exist_ok=True)
-        if self.path.exists() and self.path.stat().st_size >= DIAGNOSTIC_LIMIT_BYTES:
-            for generation in range(DIAGNOSTIC_GENERATIONS - 1, 0, -1):
-                source = self.path.with_suffix(f".jsonl.{generation}")
-                target = self.path.with_suffix(f".jsonl.{generation + 1}")
-                if source.exists():
-                    source.replace(target)
-            self.path.replace(self.path.with_suffix(".jsonl.1"))
         record = {
             "schema": 1,
             "at_ms": int(time.time() * 1000),
@@ -155,8 +157,76 @@ class LifecycleDiagnostics:
             "session": self.session_id,
             "state": state,
         }
-        with self.path.open("a", encoding="utf-8") as output:
-            output.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
+        self._append(self.path, record)
+
+    def record_negotiation_failure(self, detail: dict[str, object]) -> None:
+        allowed = {
+            "reason",
+            "localHttpStatus",
+            "upstreamHttpStatus",
+            "errorType",
+            "errorCode",
+        }
+        if set(detail) - allowed or detail.get("reason") != "webrtc_negotiation_failed":
+            return
+        local_status = detail.get("localHttpStatus")
+        if (
+            isinstance(local_status, bool)
+            or not isinstance(local_status, int)
+            or not 400 <= local_status <= 599
+        ):
+            return
+        record: dict[str, object] = {
+            "schema": "hey-jarvis-realtime-v1",
+            "at_ms": int(time.time() * 1000),
+            "component": "python",
+            "event": "realtime_negotiation_failed",
+            "session": self.session_id,
+            "local_http_status": local_status,
+        }
+        upstream_status = detail.get("upstreamHttpStatus")
+        if upstream_status is not None:
+            if (
+                isinstance(upstream_status, bool)
+                or not isinstance(upstream_status, int)
+                or not 400 <= upstream_status <= 599
+            ):
+                return
+            record["upstream_http_status"] = upstream_status
+        for source, target in (("errorType", "error_type"), ("errorCode", "error_code")):
+            value = detail.get(source)
+            if value is not None:
+                if not safe_realtime_diagnostic_identifier(value):
+                    return
+                record[target] = value
+        self._append(self.realtime_path, record, structurally_validated=True)
+
+    def _append(
+        self,
+        path: Path,
+        record: dict[str, object],
+        *,
+        structurally_validated: bool = False,
+    ) -> None:
+        try:
+            encoded = json.dumps(record, sort_keys=True, separators=(",", ":"))
+            if not structurally_validated and any(
+                marker in encoded.lower() for marker in FORBIDDEN_DIAGNOSTIC
+            ):
+                return
+            with self._lock:
+                self.root.mkdir(parents=True, exist_ok=True)
+                if path.exists() and path.stat().st_size >= DIAGNOSTIC_LIMIT_BYTES:
+                    for generation in range(DIAGNOSTIC_GENERATIONS - 1, 0, -1):
+                        source = path.with_suffix(f".jsonl.{generation}")
+                        target = path.with_suffix(f".jsonl.{generation + 1}")
+                        if source.exists():
+                            source.replace(target)
+                    path.replace(path.with_suffix(".jsonl.1"))
+                with path.open("a", encoding="utf-8") as output:
+                    output.write(encoded + "\n")
+        except (OSError, TypeError, ValueError):
+            return
 
 
 class StartupDiagnostics:
@@ -416,6 +486,7 @@ class ProductRuntime:
             session_expiry_warning_zh_path=session_expiry_warning_zh,
             app_language_path=app_support_dir / "preferences-v1.json",
             startup_event=startup_diagnostics.record_webview,
+            negotiation_failure_sink=diagnostics.record_negotiation_failure,
         )
         server_thread = threading.Thread(
             target=server.serve_forever,

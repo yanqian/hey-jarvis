@@ -2,6 +2,7 @@ import io
 import json
 import sys
 import tempfile
+import threading
 import unittest
 import urllib.error
 from pathlib import Path
@@ -229,6 +230,100 @@ class ProductSidecarTests(unittest.TestCase):
             self.assertEqual(record["session"], "session-product-1")
             self.assertNotIn("transcript_secret", text)
 
+    def test_realtime_negotiation_diagnostics_persist_only_safe_summary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            diagnostics = LifecycleDiagnostics(Path(directory), "session-product-1")
+            diagnostics.record_negotiation_failure(
+                {
+                    "reason": "webrtc_negotiation_failed",
+                    "localHttpStatus": 409,
+                    "upstreamHttpStatus": 429,
+                    "errorType": "insufficient_quota",
+                    "errorCode": "invalid_api_key",
+                }
+            )
+            record = json.loads(diagnostics.realtime_path.read_text(encoding="utf-8"))
+            self.assertEqual(record["schema"], "hey-jarvis-realtime-v1")
+            self.assertEqual(record["local_http_status"], 409)
+            self.assertEqual(record["upstream_http_status"], 429)
+            self.assertEqual(record["error_type"], "insufficient_quota")
+            self.assertEqual(record["error_code"], "invalid_api_key")
+            text = json.dumps(record)
+            for forbidden in (
+                "message",
+                "body",
+                "header",
+                "request_id",
+                "cookie",
+                "sdp",
+                "audio",
+                "transcript",
+            ):
+                self.assertNotIn(forbidden, text.lower())
+
+    def test_realtime_negotiation_diagnostics_reject_malformed_and_serialize_threads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            diagnostics = LifecycleDiagnostics(Path(directory), "session-product-1")
+            invalid = (
+                {"reason": "webrtc_negotiation_failed", "localHttpStatus": 399},
+                {"reason": "webrtc_negotiation_failed", "localHttpStatus": 409, "upstreamHttpStatus": True},
+                {"reason": "webrtc_negotiation_failed", "localHttpStatus": 409, "errorCode": "unsafe value"},
+                {"reason": "webrtc_negotiation_failed", "localHttpStatus": 409, "message": "sk-secret"},
+                {"reason": "webrtc_negotiation_failed", "localHttpStatus": 409, "errorCode": "sk-secret"},
+            )
+            for detail in invalid:
+                diagnostics.record_negotiation_failure(detail)
+            self.assertFalse(diagnostics.realtime_path.exists())
+
+            safe = {
+                "reason": "webrtc_negotiation_failed",
+                "localHttpStatus": 409,
+                "upstreamHttpStatus": 503,
+            }
+            threads = [
+                threading.Thread(
+                    target=diagnostics.record_negotiation_failure,
+                    args=(safe,),
+                )
+                for _ in range(12)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            records = [
+                json.loads(line)
+                for line in diagnostics.realtime_path.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(records), 12)
+            self.assertTrue(all(record["upstream_http_status"] == 503 for record in records))
+
+    def test_realtime_negotiation_diagnostic_writer_failure_is_non_fatal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            diagnostics = LifecycleDiagnostics(Path(directory), "session-product-1")
+            diagnostics.root = Path(directory) / "not-a-directory"
+            diagnostics.root.write_text("occupied", encoding="utf-8")
+            diagnostics.realtime_path = diagnostics.root / "realtime.jsonl"
+            diagnostics.record_negotiation_failure(
+                {"reason": "webrtc_negotiation_failed", "localHttpStatus": 409}
+            )
+
+    def test_realtime_negotiation_diagnostics_use_existing_rotation_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            diagnostics = LifecycleDiagnostics(Path(directory), "session-product-1")
+            diagnostics.root.mkdir(parents=True)
+            diagnostics.realtime_path.write_bytes(b"x" * (512 * 1024))
+            diagnostics.record_negotiation_failure(
+                {
+                    "reason": "webrtc_negotiation_failed",
+                    "localHttpStatus": 409,
+                    "upstreamHttpStatus": 500,
+                }
+            )
+            self.assertTrue(diagnostics.realtime_path.with_suffix(".jsonl.1").exists())
+            record = json.loads(diagnostics.realtime_path.read_text(encoding="utf-8"))
+            self.assertEqual(record["upstream_http_status"], 500)
+
     def test_openai_credential_validation_distinguishes_valid_invalid_and_offline(self):
         class Response:
             def __enter__(self):
@@ -432,6 +527,10 @@ class ProductSidecarTests(unittest.TestCase):
         self.assertIn("session_expiry_warning_en_path=session_expiry_warning_en", start)
         self.assertIn("session_expiry_warning_zh_path=session_expiry_warning_zh", start)
         self.assertIn('app_language_path=app_support_dir / "preferences-v1.json"', start)
+        self.assertIn(
+            "negotiation_failure_sink=diagnostics.record_negotiation_failure",
+            start,
+        )
 
     def test_product_runtime_enables_only_persisted_wake_diagnostics(self):
         source = (SIDECAR_DIR / "product_sidecar.py").read_text(encoding="utf-8")

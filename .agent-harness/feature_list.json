@@ -2986,6 +2986,47 @@
         "F132",
         "F104"
       ]
+    },
+    {
+      "id": "F134",
+      "title": "Preserve safe Realtime negotiation failure details",
+      "description": "Carry allowlisted upstream Realtime HTTP failure details through the loopback session endpoint and existing local report so a generic local 409 no longer hides the actionable provider failure class.",
+      "acceptance": [
+        "OpenAI Realtime call failures retain the upstream HTTP status plus only bounded allowlisted provider error type and code; response messages, response bodies, headers, credentials, SDP/ICE, audio, transcripts, answers, and tool arguments are never logged, returned, or persisted.",
+        "The loopback `/session` failure contract returns a stable structured error that distinguishes its compatibility 409 from the upstream status, while malformed, oversized, non-JSON, network, timeout, and unexpected failures remain safely generic without automatic retry or paid preflight.",
+        "The browser validates and forwards only the allowlisted upstream fields in the existing `webrtc_negotiation_failed` event, and the bounded coordinator report preserves them while retaining exactly-once media cleanup and truthful return to wake listening.",
+        "Deterministic server, browser, coordinator, privacy, 400/401/403/404/429/5xx, malformed-body, and network-failure tests prove the diagnostic path and fail against the prior behavior that reported only the local 409.",
+        "JavaScript/Python syntax, focused Realtime tests, Realtime fake smoke, Debug and Release builds, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without live network, credentials, microphone, speaker, or paid API use; one freshly installed owner-authorized wake may then capture the real upstream failure for follow-up diagnosis."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F054",
+        "F067"
+      ]
+    },
+    {
+      "id": "F135",
+      "title": "Persist safe Realtime negotiation failure summaries",
+      "description": "Write F134's already-sanitized negotiation failure fields into the packaged app's existing bounded diagnostics so installed failures can be diagnosed without extracting loopback session material.",
+      "acceptance": [
+        "Only after coordinator validation, an optional diagnostic sink receives local HTTP status, optional upstream HTTP status, and optional bounded error type/code for `webrtc_negotiation_failed`; raw browser payloads and malformed values never reach the sink.",
+        "The packaged sidecar writes one versioned app-owned rotated JSONL summary with bounded thread-safe non-fatal I/O, while CLI/test hosts without a sink and existing cleanup/wake recovery behavior remain unchanged.",
+        "Provider messages/bodies/headers, request identifiers, credentials, capability cookies, SDP/ICE, audio, transcripts, answers, and tool arguments are never persisted; secret-bearing, malformed, unbounded, and writer-failure fixtures fail closed.",
+        "The existing support export includes the safe summary and the existing clear action removes it without weakening loopback authentication or requiring WebKit cookie extraction.",
+        "Focused coordinator, sidecar, privacy, rotation, concurrency, support-export and regression tests, JavaScript/Python syntax, Realtime fake smoke, Debug and Release builds, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass without live network, credentials, microphone, speaker, or paid API use; one freshly installed owner-authorized wake may then capture the actual provider class."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F134"
+      ]
     }
   ]
 }

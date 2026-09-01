@@ -222,26 +222,9 @@ async function preferStrongestEchoCancellation(track){
   await track.applyConstraints(AUDIO_CONSTRAINTS);
   return {requested:"true",allSupported};
 }
-function boundedDiagnosticValue(value){
-  return typeof value==="string"&&/^[A-Za-z0-9_.:-]{1,100}$/.test(value)?value:null;
-}
 async function negotiationFailure(response){
   let payload=null;try{payload=await response.clone().json()}catch{}
-  const providerError=payload&&typeof payload.error==="object"&&payload.error?payload.error:{};
-  const detail={reason:"webrtc_negotiation_failed",httpStatus:response.status};
-  const fields=[
-    ["errorType",providerError.type],
-    ["errorCode",providerError.code],
-    ["requestId",response.headers.get("x-request-id")],
-    ["retryAfter",response.headers.get("retry-after")],
-    ["rateLimitRemainingRequests",response.headers.get("x-ratelimit-remaining-requests")],
-    ["rateLimitRemainingTokens",response.headers.get("x-ratelimit-remaining-tokens")],
-    ["rateLimitRemainingProjectTokens",response.headers.get("x-ratelimit-remaining-project-tokens")],
-    ["rateLimitResetRequests",response.headers.get("x-ratelimit-reset-requests")],
-    ["rateLimitResetTokens",response.headers.get("x-ratelimit-reset-tokens")],
-    ["rateLimitResetProjectTokens",response.headers.get("x-ratelimit-reset-project-tokens")],
-  ];
-  for(const [key,value] of fields){const safe=boundedDiagnosticValue(value);if(safe!==null)detail[key]=safe;}
+  const detail=globalThis.HeyJarvisNegotiationDiagnostics.buildNegotiationDiagnostic(response.status,payload);
   const error=new Error(`WebRTC negotiation failed (${response.status})`);error.safeDiagnostic=detail;return error;
 }
 function flushInputLevels(){

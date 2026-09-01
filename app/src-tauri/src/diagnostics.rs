@@ -101,10 +101,10 @@ impl Diagnostics {
             for path in paths {
                 let text = fs::read_to_string(path).map_err(|_| "diagnostics_unavailable")?;
                 for line in text.lines() {
-                    if forbidden(line) {
-                        continue;
-                    }
                     if let Ok(value) = serde_json::from_str::<Value>(line) {
+                        if forbidden(line) && !safe_realtime_summary(&value) {
+                            continue;
+                        }
                         records.push(value);
                     }
                 }
@@ -117,7 +117,10 @@ impl Diagnostics {
             "records": records,
         });
         let encoded = serde_json::to_vec_pretty(&bundle).map_err(|_| "support_export_failed")?;
-        if encoded.len() > EXPORT_LIMIT || forbidden(std::str::from_utf8(&encoded).unwrap_or("")) {
+        // Every source record was already filtered above. Re-scanning the
+        // assembled bundle as an unstructured string would incorrectly reject
+        // safe structured codes such as `invalid_api_key`.
+        if encoded.len() > EXPORT_LIMIT {
             return Err("support_export_rejected".into());
         }
         let exports = app_support.join("support-exports");
@@ -156,6 +159,68 @@ fn safe_identifier(value: &str) -> bool {
 
 fn safe_session(value: &str) -> bool {
     value.starts_with("session-") && value.len() <= 64 && safe_identifier(value)
+}
+
+fn safe_realtime_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && !value.to_ascii_lowercase().starts_with("sk-")
+        && !value.to_ascii_lowercase().starts_with("ek_")
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b':'))
+}
+
+fn safe_realtime_summary(value: &Value) -> bool {
+    let Some(record) = value.as_object() else {
+        return false;
+    };
+    const ALLOWED: &[&str] = &[
+        "schema",
+        "at_ms",
+        "component",
+        "event",
+        "session",
+        "local_http_status",
+        "upstream_http_status",
+        "error_type",
+        "error_code",
+    ];
+    if record.keys().any(|key| !ALLOWED.contains(&key.as_str()))
+        || record.get("schema").and_then(Value::as_str) != Some("hey-jarvis-realtime-v1")
+        || record.get("component").and_then(Value::as_str) != Some("python")
+        || record.get("event").and_then(Value::as_str) != Some("realtime_negotiation_failed")
+        || record.get("at_ms").and_then(Value::as_u64).is_none()
+    {
+        return false;
+    }
+    if let Some(session) = record.get("session") {
+        if !session.is_null() && !session.as_str().map(safe_session).unwrap_or(false) {
+            return false;
+        }
+    }
+    for field in ["local_http_status", "upstream_http_status"] {
+        if field == "local_http_status" || record.contains_key(field) {
+            let Some(status) = record.get(field).and_then(Value::as_u64) else {
+                return false;
+            };
+            if !(400..=599).contains(&status) {
+                return false;
+            }
+        }
+    }
+    for field in ["error_type", "error_code"] {
+        if let Some(identifier) = record.get(field) {
+            if !identifier
+                .as_str()
+                .map(safe_realtime_identifier)
+                .unwrap_or(false)
+            {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 fn forbidden(value: &str) -> bool {
@@ -248,6 +313,79 @@ mod tests {
         assert!(text.contains("hey-jarvis-wake-v1"));
         assert!(text.contains("confirmed"));
         assert!(!text.contains("transcript"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn export_includes_safe_realtime_negotiation_summary() {
+        let root = temp_root();
+        let diagnostics = Diagnostics::new(&root);
+        fs::create_dir_all(root.join("diagnostics")).expect("directory");
+        let realtime = json!({
+            "schema": "hey-jarvis-realtime-v1",
+            "at_ms": 1234,
+            "component": "python",
+            "event": "realtime_negotiation_failed",
+            "session": "session-safe",
+            "local_http_status": 409,
+            "upstream_http_status": 429,
+            "error_type": "insufficient_quota",
+            "error_code": "invalid_api_key"
+        });
+        fs::write(
+            root.join("diagnostics/realtime.jsonl"),
+            format!(
+                "{}\n",
+                serde_json::to_string(&realtime).expect("realtime record")
+            ),
+        )
+        .expect("realtime log");
+        let export = diagnostics.export(&root).expect("export");
+        let text = fs::read_to_string(export.path).expect("bundle");
+        assert!(text.contains("hey-jarvis-realtime-v1"));
+        assert!(text.contains("invalid_api_key"));
+        assert!(!text.contains("provider_body"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn export_rejects_secret_shaped_or_extra_realtime_summary_fields() {
+        let root = temp_root();
+        let diagnostics = Diagnostics::new(&root);
+        fs::create_dir_all(root.join("diagnostics")).expect("directory");
+        let unsafe_records = [
+            json!({
+                "schema": "hey-jarvis-realtime-v1",
+                "at_ms": 1234,
+                "component": "python",
+                "event": "realtime_negotiation_failed",
+                "session": "session-safe",
+                "local_http_status": 409,
+                "error_code": "sk-secret"
+            }),
+            json!({
+                "schema": "hey-jarvis-realtime-v1",
+                "at_ms": 1234,
+                "component": "python",
+                "event": "realtime_negotiation_failed",
+                "session": "session-safe",
+                "local_http_status": 409,
+                "message": "api_key"
+            }),
+        ];
+        fs::write(
+            root.join("diagnostics/realtime.jsonl"),
+            unsafe_records
+                .iter()
+                .map(|record| serde_json::to_string(record).expect("record"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .expect("realtime log");
+        let export = diagnostics.export(&root).expect("export");
+        let text = fs::read_to_string(export.path).expect("bundle");
+        assert!(!text.contains("sk-secret"));
+        assert!(!text.contains("\"message\""));
         let _ = fs::remove_dir_all(root);
     }
 

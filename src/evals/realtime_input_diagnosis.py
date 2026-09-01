@@ -52,14 +52,6 @@ NEGOTIATION_DIAGNOSTIC_FIELDS = frozenset(
     {
         "errorType",
         "errorCode",
-        "requestId",
-        "retryAfter",
-        "rateLimitRemainingRequests",
-        "rateLimitRemainingTokens",
-        "rateLimitRemainingProjectTokens",
-        "rateLimitResetRequests",
-        "rateLimitResetTokens",
-        "rateLimitResetProjectTokens",
     }
 )
 
@@ -127,15 +119,15 @@ def sanitize_diagnostic_report(report: dict[str, object]) -> dict[str, object]:
             )
             level_events += 1
         if event_type == "host_error":
-            http_status = event.get("httpStatus")
-            if (
-                isinstance(http_status, bool)
-                or not isinstance(http_status, int)
-                or not 400 <= http_status <= 599
-            ):
-                http_status = None
-            if http_status is not None:
-                safe["httpStatus"] = http_status
+            for status_field in ("localHttpStatus", "upstreamHttpStatus"):
+                http_status = event.get(status_field)
+                if (
+                    isinstance(http_status, bool)
+                    or not isinstance(http_status, int)
+                    or not 400 <= http_status <= 599
+                ):
+                    continue
+                safe[status_field] = http_status
             for key in NEGOTIATION_DIAGNOSTIC_FIELDS:
                 value = event.get(key)
                 if isinstance(value, str) and SAFE_DIAGNOSTIC_VALUE.fullmatch(value):

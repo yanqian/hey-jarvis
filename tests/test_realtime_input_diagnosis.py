@@ -84,13 +84,12 @@ class DiagnosticSanitizerTests(unittest.TestCase):
                 "at_ms": 201,
                 "session_id": SESSION_ID,
                 "reason": "webrtc_negotiation_failed",
-                "httpStatus": 429,
+                "localHttpStatus": 409,
+                "upstreamHttpStatus": 429,
                 "errorType": "insufficient_quota",
                 "errorCode": "insufficient_quota",
-                "requestId": "req_safe_123",
-                "retryAfter": "60",
-                "rateLimitRemainingRequests": "0",
-                "rateLimitResetRequests": "1m0s",
+                "requestId": "must_be_dropped",
+                "retryAfter": "must_be_dropped",
                 "responseBody": "private provider body",
             }
         )
@@ -113,9 +112,11 @@ class DiagnosticSanitizerTests(unittest.TestCase):
         for forbidden in ("private", "base64", "api_key", "sk-secret", "transcript"):
             self.assertNotIn(forbidden, encoded)
         self.assertIn('"reason": "redacted"', encoded)
-        self.assertIn('"httpStatus": 429', encoded)
+        self.assertIn('"localHttpStatus": 409', encoded)
+        self.assertIn('"upstreamHttpStatus": 429', encoded)
         self.assertIn('"errorCode": "insufficient_quota"', encoded)
-        self.assertIn('"requestId": "req_safe_123"', encoded)
+        self.assertNotIn("requestId", encoded)
+        self.assertNotIn("retryAfter", encoded)
         self.assertNotIn("private provider body", encoded)
 
     def test_build_observation_correlates_windows_vad_and_cleanup(self):
@@ -321,11 +322,12 @@ class FakeDiagnosticHost:
             self.add(
                 "host_error",
                 reason="webrtc_negotiation_failed",
-                httpStatus=429,
+                localHttpStatus=409,
+                upstreamHttpStatus=429,
                 errorType="rate_limit_error",
                 errorCode="rate_limit_exceeded",
-                requestId="req_fake_f060",
-                retryAfter="30",
+                requestId="must_be_dropped",
+                retryAfter="must_be_dropped",
             )
             return
         self.state = "host_active"
@@ -452,7 +454,8 @@ class AssistedDiagnosticRunnerTests(unittest.TestCase):
         self.assertEqual(caught.exception.evidence["result"]["failure_stage"], "session_start")
         evidence_text = json.dumps(caught.exception.evidence)
         self.assertIn("rate_limit_exceeded", evidence_text)
-        self.assertIn("req_fake_f060", evidence_text)
+        self.assertIn('"upstreamHttpStatus": 429', evidence_text)
+        self.assertNotIn("requestId", evidence_text)
 
     def test_offline_cli_classifies_saved_sanitized_observation(self):
         with tempfile.TemporaryDirectory() as directory:

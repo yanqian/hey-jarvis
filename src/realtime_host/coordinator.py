@@ -93,14 +93,6 @@ NEGOTIATION_DIAGNOSTIC_FIELDS = frozenset(
     {
         "errorType",
         "errorCode",
-        "requestId",
-        "retryAfter",
-        "rateLimitRemainingRequests",
-        "rateLimitRemainingTokens",
-        "rateLimitRemainingProjectTokens",
-        "rateLimitResetRequests",
-        "rateLimitResetTokens",
-        "rateLimitResetProjectTokens",
     }
 )
 
@@ -190,6 +182,7 @@ class HandoffCoordinator:
         tool_http_client: object | None = None,
         tool_now_provider: Callable[[], datetime] | None = None,
         app_language_provider: Callable[[], str] = lambda: "en",
+        negotiation_failure_sink: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
         if acknowledgement_mode not in ACKNOWLEDGEMENT_MODES:
             raise ValueError("acknowledgement_mode must be 'cached', 'realtime', or 'local'")
@@ -199,6 +192,7 @@ class HandoffCoordinator:
         self._clock = clock
         self._session_ids = session_ids
         self._app_language_provider = app_language_provider
+        self._negotiation_failure_sink = negotiation_failure_sink
         self._lock = threading.RLock()
         self._closing = False
         self._closed = False
@@ -784,6 +778,17 @@ class HandoffCoordinator:
                     and isinstance(value, (str, int, float, bool))
                 }
             self._record(f"host_{event_type}", session_id=session_id, **safe_detail)
+            if (
+                event_type == "error"
+                and safe_detail.get("reason") == "webrtc_negotiation_failed"
+                and self._negotiation_failure_sink is not None
+            ):
+                try:
+                    self._negotiation_failure_sink(dict(safe_detail))
+                except Exception:
+                    # Diagnostics must never interfere with media cleanup or
+                    # truthful return to wake listening.
+                    pass
             if event_type == "connected":
                 self._state = HandoffState.HOST_ACTIVE
                 self._connected_at = self._clock()
@@ -1259,17 +1264,26 @@ def _sanitize_input_level(detail: dict[str, object]) -> dict[str, object]:
 
 
 def _sanitize_negotiation_error(detail: dict[str, object]) -> dict[str, object]:
-    http_status = detail.get("httpStatus")
+    local_http_status = detail.get("localHttpStatus")
     if (
-        isinstance(http_status, bool)
-        or not isinstance(http_status, int)
-        or not 400 <= http_status <= 599
+        isinstance(local_http_status, bool)
+        or not isinstance(local_http_status, int)
+        or not 400 <= local_http_status <= 599
     ):
-        raise HandoffError("Negotiation HTTP status was invalid")
+        raise HandoffError("Negotiation local HTTP status was invalid")
     safe: dict[str, object] = {
         "reason": "webrtc_negotiation_failed",
-        "httpStatus": http_status,
+        "localHttpStatus": local_http_status,
     }
+    upstream_http_status = detail.get("upstreamHttpStatus")
+    if upstream_http_status is not None:
+        if (
+            isinstance(upstream_http_status, bool)
+            or not isinstance(upstream_http_status, int)
+            or not 400 <= upstream_http_status <= 599
+        ):
+            raise HandoffError("Negotiation upstream HTTP status was invalid")
+        safe["upstreamHttpStatus"] = upstream_http_status
     for key in NEGOTIATION_DIAGNOSTIC_FIELDS:
         value = detail.get(key)
         if value is None:
