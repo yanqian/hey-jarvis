@@ -3027,6 +3027,27 @@
       "depends_on": [
         "F134"
       ]
+    },
+    {
+      "id": "F136",
+      "title": "Show actionable Realtime failure guidance",
+      "description": "Map F134's sanitized Realtime negotiation failure tuple to fixed bilingual in-page causes and recovery actions while preserving safe wake recovery.",
+      "acceptance": [
+        "Validated quota exhaustion displays fixed English and Simplified Chinese guidance that identifies the OpenAI API balance, names API Platform Billing, and tells the user to retry Hey Jarvis after adding credit; invalid/unauthorized credentials, access or configuration rejection, non-quota rate limiting, and transient provider failure receive distinct fixed actions.",
+        "Unknown, missing, malformed, secret-shaped, or unrecognized diagnostic values fall back to the existing generic recovery presentation; provider messages, response bodies, headers, credentials, identifiers, cookies, SDP/ICE, audio, transcripts, answers, tool arguments, and arbitrary upstream strings never reach the DOM.",
+        "The actionable failure remains visible while periodic availability polling truthfully reports recovered wake listening, then a new wake attempt clears it through the existing connecting flow; exactly-once media cleanup, disabled conversation input, Settings access, and local wake recovery remain unchanged.",
+        "Deterministic pure JavaScript and host integration tests cover bilingual known mappings, quota-vs-rate-limit precedence, generic fallback, presentation persistence, next-wake clearing, privacy rejection, and packaged asset inclusion without live network, credentials, microphone, speaker, or paid API use.",
+        "JavaScript syntax, focused Realtime tests, Realtime fake smoke, Debug and Release builds, final `./init.sh`, fast coding evidence, and separate cold-start evaluator approval pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0",
+      "depends_on": [
+        "F134",
+        "F135"
+      ]
     }
   ]
 }

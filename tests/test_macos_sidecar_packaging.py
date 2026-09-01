@@ -63,6 +63,7 @@ class MacOSSidecarPackagingTests(unittest.TestCase):
             "app.js",
             "i18n.js",
             "negotiation-diagnostics.js",
+            "failure-guidance.js",
             "styles.css",
         ):
             self.assertIn(f'REALTIME_STATIC / "{asset}"', source)

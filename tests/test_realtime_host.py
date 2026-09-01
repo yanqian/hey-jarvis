@@ -1231,11 +1231,15 @@ class RealtimeHostTests(unittest.TestCase):
         html = server.resolve_static("/")[0].decode()
         javascript = server.resolve_static("/app.js")[0].decode()
         negotiation_javascript = server.resolve_static("/negotiation-diagnostics.js")[0].decode()
+        failure_guidance_javascript = server.resolve_static("/failure-guidance.js")[0].decode()
         catalog = server.resolve_static("/i18n.js")[0].decode()
         guidance = (server.STATIC_ROOT.parent / "README.md").read_text()
         self.assertIn("Enable voice assistant", html)
         self.assertIn('/negotiation-diagnostics.js', html)
+        self.assertIn('/failure-guidance.js', html)
         self.assertIn("buildNegotiationDiagnostic", negotiation_javascript)
+        self.assertIn("credit_balance_exhausted", failure_guidance_javascript)
+        self.assertIn("OpenAI API Platform Billing", failure_guidance_javascript)
         self.assertIn("只需启用一次语音助手，之后即可用语音唤醒 Jarvis。", catalog)
         self.assertNotIn("只需启用一次免手持音频，之后即可用语音唤醒 Jarvis。", catalog)
         self.assertIn('data-ui-state="ready"', html)
@@ -1324,6 +1328,11 @@ class RealtimeHostTests(unittest.TestCase):
         ):
             self.assertIn(text, javascript)
         self.assertIn("webrtc_negotiation_failed", negotiation_javascript)
+        self.assertIn('await stop("error","error",diagnostic)', javascript)
+        self.assertIn("preserveDuringAvailability(currentUiState", javascript)
+        self.assertIn('sessionId=command.session_id;activeCueLocale=command.cue_locale;setUiState("connecting")', javascript)
+        for forbidden in ("provider_error_message", "response_body", "request_id", "OPENAI_API_KEY"):
+            self.assertNotIn(forbidden, failure_guidance_javascript)
         self.assertLess(
             javascript.index("track.enabled=false;inputTrack=track"),
             javascript.index("pc.addTrack(track,stream)"),

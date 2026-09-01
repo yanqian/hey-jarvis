@@ -27,7 +27,7 @@ let sessionExpiryWarningUrls={},sessionExpiryWarningPending=false,sessionExpiryW
 const hostId=crypto.randomUUID().replaceAll("-","");
 const $=id=>document.getElementById(id);
 
-let appLanguage="en",appTheme="night",currentUiState="ready",currentUiDetail=null;
+let appLanguage="en",appTheme="night",currentUiState="ready",currentUiDetail=null,currentUiDiagnostic=null;
 
 function applyAppTheme(theme){
   appTheme=theme==="day"?"day":"night";
@@ -35,21 +35,22 @@ function applyAppTheme(theme){
   document.documentElement.style.colorScheme=appTheme==="day"?"light":"dark";
 }
 
-function setUiState(state,detail=null){
-  currentUiState=state;currentUiDetail=detail;
+function setUiState(state,detail=null,diagnostic=null){
+  currentUiState=state;currentUiDetail=detail;currentUiDiagnostic=state==="error"?diagnostic:null;
   const catalog=window.HeyJarvisI18n.states[appLanguage];
   const presentation=catalog[state]||catalog.error;
+  const guidance=state==="error"&&diagnostic?window.HeyJarvisFailureGuidance.guidance(appLanguage,diagnostic):null;
   document.body.dataset.uiState=state in catalog?state:"error";
   $("status-label").textContent=presentation.label;
-  $("status-title").textContent=presentation.title;
-  $("status-detail").textContent=detail?window.HeyJarvisI18n.detail(appLanguage,detail):presentation.detail;
+  $("status-title").textContent=guidance?.title||presentation.title;
+  $("status-detail").textContent=guidance?.detail||(detail?window.HeyJarvisI18n.detail(appLanguage,detail):presentation.detail);
 }
 
 async function refreshAppLanguage(){
   try{
     const response=await fetch("/api/app-language",{cache:"no-store"}),payload=await response.json();
     if(!response.ok)return;const next=window.HeyJarvisI18n.locale(payload.app_language),previousTheme=appTheme;
-    applyAppTheme(payload.app_theme);if(next===appLanguage&&previousTheme===appTheme)return;appLanguage=next;window.HeyJarvisI18n.apply(appLanguage);setUiState(currentUiState,currentUiDetail);
+    applyAppTheme(payload.app_theme);if(next===appLanguage&&previousTheme===appTheme)return;appLanguage=next;window.HeyJarvisI18n.apply(appLanguage);setUiState(currentUiState,currentUiDetail,currentUiDiagnostic);
   }catch{}
 }
 function configuredOutputVolume(){return Number.isFinite(sessionConfig?.output_volume)?sessionConfig.output_volume:REMOTE_AUDIO_VOLUME;}
@@ -528,7 +529,7 @@ async function enableInput(command){
   setUiState("listening");log("input_ready");
 }
 
-async function stop(reason="command",finalState="wake-ready"){
+async function stop(reason="command",finalState="wake-ready",diagnostic=null){
   const endingSession=sessionId;if(!endingSession)return;stopInputLevels();sessionId=null;
   if(acknowledgementCapture){acknowledgementCapture.abort();acknowledgementCapture=null;}
   resetCachedAcknowledgementPlayback();
@@ -550,7 +551,7 @@ async function stop(reason="command",finalState="wake-ready"){
   realtimeAcknowledgement=false;acknowledgementStarted=false;acknowledgementResponseActive=false;acknowledgementCaptureLabel=null;acknowledgementTranscript=null;remoteStream=null;activeCueLocale=null;
   log("stopped",{reason});
   sessionId=endingSession;await hostEvent("stopped",{reason}).catch(()=>{});sessionId=null;
-  setUiState(finalState);
+  setUiState(finalState,null,diagnostic);
 }
 
 async function openAppSettings(){
@@ -576,7 +577,7 @@ async function refreshAvailability(){
     if(!response.ok)throw new Error(data.error||"availability_unavailable");
     if(data.availability==="resume_required"){failClosedAvailability();return;}
     if(data.availability==="ready"&&!armed&&!sessionId&&!RESUME_FLOW)setUiState("ready");
-    if(data.availability==="wake_listening"&&armed&&!sessionId)setUiState("wake-ready");
+    if(data.availability==="wake_listening"&&armed&&!sessionId&&!window.HeyJarvisFailureGuidance.preserveDuringAvailability(currentUiState,data.availability,armed,Boolean(sessionId),currentUiDiagnostic))setUiState("wake-ready");
   }catch{failClosedAvailability();}
 }
 
@@ -589,7 +590,7 @@ async function sendFixtureAudio(command){
   log("fixture_audio_sent",{name:String(command.fixture_name||"unknown")});
 }
 
-async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="session_expiry_warning"&&command.session_id===sessionId)startSessionExpiryWarning(command).catch(async()=>{if(sessionId===command.session_id){await hostEvent("error",{reason:"session_expiry_warning_failed"}).catch(()=>{});await stop("session_expiry_warning_failed","error");}});if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error","error");}}await new Promise(resolve=>setTimeout(resolve,250));}}
+async function poll(){while(armed){try{const data=await fetch(`/api/command?after=${lastCommand}&host_id=${hostId}`,{cache:"no-store"}).then(response=>response.json());const command=data.command;if(command){lastCommand=command.command_id;if(command.type==="start")await start(command);if(command.type==="enable_input")await enableInput(command);if(command.type==="session_expiry_warning"&&command.session_id===sessionId)startSessionExpiryWarning(command).catch(async()=>{if(sessionId===command.session_id){await hostEvent("error",{reason:"session_expiry_warning_failed"}).catch(()=>{});await stop("session_expiry_warning_failed","error");}});if(command.type==="long_answer"&&command.session_id===sessionId)longAnswer();if(command.type==="fixture_audio")await sendFixtureAudio(command);if(command.type==="tool_result"&&command.session_id===sessionId&&dc?.readyState==="open"){dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"function_call_output",call_id:command.call_id,output:command.output}}));dc.send(JSON.stringify({type:"response.create"}));}if(command.type==="stop"&&command.session_id===sessionId)await stop("python_stop");}}catch(error){log("command_error",{message:String(error.message).slice(0,120)});if(sessionId){const diagnostic=error&&typeof error==="object"&&error.safeDiagnostic?error.safeDiagnostic:{reason:"host_command_failure"};await hostEvent("error",diagnostic).catch(()=>{});await stop("error","error",diagnostic);}}await new Promise(resolve=>setTimeout(resolve,250));}}
 function longAnswer(){if(!dc||dc.readyState!=="open")return;dc.send(JSON.stringify({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:"Count slowly from one to one hundred, saying every number clearly. Do not abbreviate or skip any number."}]}}));dc.send(JSON.stringify({type:"response.create"}));}
 
 $("arm").addEventListener("click",()=>{$("arm").disabled=true;arm();});$("stop").addEventListener("click",()=>{setUiState("stopping");$("stop").disabled=true;post("/api/stop").catch(error=>setUiState("error",appLanguage==="zh-CN"?`无法结束对话：${error.message}`:`Could not end the conversation: ${error.message}`));});$("app-settings").addEventListener("click",openAppSettings);

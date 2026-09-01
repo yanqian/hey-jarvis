@@ -2,6 +2,19 @@
 
 ## Current System Status
 
+F136 is evaluator-approved. A packaged pure JavaScript catalog maps only F134's
+sanitized tuple to fixed bilingual quota, authentication, access/configuration,
+rate-limit, and transient-service guidance. Unknown or hostile values retain
+the generic page and cannot enter rendered copy. Actionable guidance survives
+truthful `wake_listening` availability polling, while the next wake clears it
+through the existing connecting state. The frozen sidecar contains the new
+asset; focused tests, Debug and Release builds, and final recovery pass 502
+project tests, 14 frontend tests, 20 sidecar tests, 38 Rust tests, and all smoke
+paths. Coding evidence is in
+`.agent-harness/runs/20260901T075642Z-F136-fast-coding.md`.
+Separate cold-start approval is recorded in
+`.agent-harness/runs/20260901T075933Z-F136-evaluation-pass.md`.
+
 F135 is evaluator-approved. The packaged sidecar now persists F134's already-sanitized
 Realtime negotiation failure summary in `diagnostics/realtime.jsonl`, with only
 local/upstream HTTP status and bounded error type/code. Coordinator validation

@@ -20,6 +20,7 @@ required_static = [
     REALTIME_STATIC / "app.js",
     REALTIME_STATIC / "i18n.js",
     REALTIME_STATIC / "negotiation-diagnostics.js",
+    REALTIME_STATIC / "failure-guidance.js",
     REALTIME_STATIC / "styles.css",
 ]
 missing.extend(str(path) for path in required_static if not path.is_file())

@@ -3108,3 +3108,72 @@ Decomposition decision: F135 is intentionally one feature because the optional
 sanitized sink and its bounded product persistence form one independently
 verifiable diagnostic capability. Fixing the provider rejection that it reveals
 remains separate.
+
+### Show Actionable Realtime Failure Guidance
+
+Feature mapping: F136.
+
+Goal: replace the generic installed Realtime negotiation failure presentation
+with a specific, safe, bilingual explanation and recovery action whenever the
+F134 diagnostic tuple identifies a known provider failure class.
+
+Included scope: map only validated local/upstream HTTP status and bounded
+provider error type/code to fixed product-owned English and Simplified Chinese
+titles and details; explicitly identify exhausted API credit, invalid or
+unauthorized API credentials, access/configuration rejection, rate limiting,
+and transient provider failure; keep the chosen guidance visible while local
+wake listening safely recovers; and return to normal connecting/listening UI on
+the next wake attempt.
+
+Excluded scope: rendering provider messages or arbitrary diagnostic strings,
+changing API credentials or billing, opening external billing pages, automatic
+retry or paid preflight, changing Realtime model/session parameters, changing
+wake recognition or cached acknowledgement behavior, and adding telemetry.
+
+Core flows: a wake starts normally and may play the cached acknowledgement. If
+Realtime negotiation then fails, the browser retains F134's sanitized tuple,
+reports it through the existing host event, performs the existing exactly-once
+media cleanup, and selects fixed localized guidance. For
+`credit_balance_exhausted` / `insufficient_quota`, the visible page says that
+the OpenAI API balance is exhausted, directs the user to API Platform Billing,
+and explains that they can say Hey Jarvis again after adding credit. Known auth,
+access/configuration, rate-limit, and 5xx classes receive similarly bounded
+actions. Unknown or malformed input keeps the current generic recovery copy.
+
+Constraints: UI content comes only from a closed product-owned catalog; upstream
+text, response bodies, headers, credentials, request identifiers, capability
+cookies, SDP/ICE, audio, transcripts, answers, and tool arguments never reach
+the DOM. Error presentation must not imply conversation input is active, must
+not suppress truthful wake recovery, and must survive periodic availability
+polling until a new wake attempt or explicit navigation changes state.
+
+Ambiguities or assumptions: the live F135 evidence proves that API balance
+exhaustion arrives as upstream 429 with type `insufficient_quota` and code
+`credit_balance_exhausted`. The requirement is interpreted as in-page guidance,
+not an external-link action, because the existing Settings escape hatch and a
+named API Platform Billing destination provide an actionable result without
+expanding navigation privileges.
+
+Required capabilities: F134's browser-side sanitizer, the existing bilingual
+host UI and state machine, deterministic JavaScript fixtures for known and
+malformed tuples, packaging asset checks, Realtime cleanup/wake-recovery tests,
+Debug and Release builds, final project recovery, provider-native fast coding
+evidence, and a separate cold-start Evaluator Agent.
+
+Implementation paths: `src/realtime_host/static/` product UI modules and catalog,
+`packaging/macos-sidecar/hey_jarvis_sidecar.spec`, focused Node/Python tests under
+`app/tests/` and `tests/`, operator documentation where useful, and F136
+state/evidence under `.agent-harness/`.
+
+Verification surface: deterministic bilingual mapping tests cover quota, auth,
+403/configuration, non-quota 429, 5xx, and generic fallback; integration tests
+prove only sanitized fixed copy reaches the DOM, availability polling does not
+erase a visible failure, a new wake clears it, and cleanup still restores wake
+listening. Packaging checks, JavaScript syntax, focused Realtime tests, Realtime
+fake smoke, Debug and Release builds, final `./init.sh`, fast coding evidence,
+and separate evaluator approval pass run without live network, credentials,
+microphone, speaker, or paid API use.
+
+Decomposition decision: F136 is one feature because safe classification,
+bilingual presentation, and persistence across wake recovery form one atomic
+user-visible error-guidance behavior with a shared privacy and test boundary.

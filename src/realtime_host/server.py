@@ -53,6 +53,7 @@ STATIC_FILES = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/i18n.js": ("i18n.js", "text/javascript; charset=utf-8"),
     "/negotiation-diagnostics.js": ("negotiation-diagnostics.js", "text/javascript; charset=utf-8"),
+    "/failure-guidance.js": ("failure-guidance.js", "text/javascript; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
 }
 
